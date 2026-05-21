@@ -1,0 +1,659 @@
+nano-banana接口
+POST
+https://{base_url}/v1/api/generate
+基础节点：
+https://grsaiapi.com (全球节点)
+https://grsai.dakka.com.cn (国内节点)
+例子：
+https://grsaiapi.com/v1/api/generate
+https://grsai.dakka.com.cn/v1/api/generate
+请求参数
+Path 参数
+base_url
+string 
+必需
+Header 参数
+Authorization
+string 
+可选
+请前往以下页面获取APIKEY：https://grsai.ai/zh/dashboard/api-keys
+示例:
+Bearer sk-xxxxxxxxxxx
+Body 参数
+application/json
+必填
+model
+string 
+模型名称
+必需
+支持以下模型
+nano-banana
+nano-banana-fast
+nano-banana-2
+nano-banana-2-cl
+nano-banana-2-4k-cl
+nano-banana-pro
+nano-banana-pro-cl
+nano-banana-pro-vip
+nano-banana-pro-4k-vip
+prompt
+string 
+提示词
+必需
+images
+array[string]
+参考图
+可选
+支持base64与url链接
+aspectRatio
+string 
+比例
+可选
+图像比例支持的参数:
+auto
+1:1
+16:9
+9:16
+4:3
+3:4
+3:2
+2:3
+5:4
+4:5
+21:9
+nano-banana-2系列额外支持比例
+1:4
+4:1
+1:8
+8:1
+imageSize
+string 
+分辨率
+可选
+1K、2K、4K
+replyType
+string 
+回复类型
+可选
+支持参数
+json（返回json）
+stream（返回stream）
+async（异步轮询）
+异步生成结果查询接口：https://qmy27nhsd9.apifox.cn/452409577e0
+示例
+{
+    "model": "nano-banana-2",
+    "prompt": "生成一张边牧与古牧正在抖音直播间直播带货截图",
+    "images": [],
+    "aspectRatio": "1:1",
+    "imageSize":"1K",
+    "replyType": "json"
+}
+请求示例代码
+Fetch
+Axios
+jQuery
+XHR
+Native
+Request
+Unirest
+const myHeaders = new Headers();
+myHeaders.append("Authorization", "Bearer sk-xxxxxxxxxxx");
+myHeaders.append("Content-Type", "application/json");
+
+const raw = JSON.stringify({
+   "model": "nano-banana-2",
+   "prompt": "生成一张边牧与古牧正在抖音直播间直播带货截图",
+   "images": [],
+   "aspectRatio": "1:1",
+   "imageSize": "1K",
+   "replyType": "json"
+});
+
+const requestOptions = {
+   method: "POST",
+   headers: myHeaders,
+   body: raw,
+   redirect: "follow"
+};
+
+fetch("https://v1/api/generate", requestOptions)
+   .then((response) => response.text())
+   .then((result) => console.log(result))
+   .catch((error) => console.error(error));
+返回响应
+🟢200
+成功
+application/json
+id
+string 
+任务id
+必需
+status
+string 
+状态
+必需
+任务状态
+running (进行中)
+violation (违规)
+succeeded (生成成功)
+failed (任务失败)
+progress
+integer 
+进度
+可选
+0~100
+results
+array [object] 
+可选
+url
+string 
+图片/视频链接
+可选
+error
+string 
+报错信息
+可选
+示例
+{
+    "id": "14-5f3cf761-a4bb-486a-8016-77f490998f80",
+    "status": "succeeded",
+    "results": [
+        {
+            "url": "https://file1.aitohumanize.com/file/fcdd2d07449d438d9d69d450f5626976.png"
+        }
+    ]
+}
+application/json
+id
+string 
+任务id
+必需
+通过该id调用异步结果查询接口
+接口文档：https://qmy27nhsd9.apifox.cn/452409577e0
+status
+string 
+状态
+必需
+示例
+{
+    "id": "6-f671fc51-d5d7-4eff-a1c7-26e612fe08ab",
+    "status": "running"
+}
+application/json
+id
+string 
+必需
+status
+string 
+状态
+必需
+状态
+violation（违规）
+failed（失败）
+error
+string 
+报错信息
+必需
+示例
+{
+    "id": "12-1f771fbf-f23a-4b89-a7d0-a98ba9862edb",
+    "status": "failed",
+    "error": "generate failed"
+}
+
+
+GPT-Image2：
+gpt-image-2接口
+POST
+https://{base_url}/v1/api/generate
+基础节点：
+https://grsaiapi.com (全球节点)
+https://grsai.dakka.com.cn (国内节点)
+例子：
+https://grsaiapi.com/v1/api/generate
+https://grsai.dakka.com.cn/v1/api/generate
+请求参数
+Path 参数
+base_url
+string 
+必需
+Header 参数
+Authorization
+string 
+可选
+请前往以下页面获取APIKEY：https://grsai.ai/zh/dashboard/api-keys
+示例:
+Bearer sk-xxxxxxxxxxx
+Body 参数
+application/json
+必填
+model
+string 
+模型名称
+必需
+支持以下模型
+gpt-image-2
+gpt-image-2-vip
+prompt
+string 
+提示词
+必需
+images
+array[string]
+参考图
+可选
+支持base64与url链接
+aspectRatio
+string 
+比例
+可选
+分辨率参数说明
+gpt-image-2：支持比例（如 "16:9"）或1K像素值（如 "1024x1024"）
+gpt-image-2-vip：支持1-4K像素值（如 "1024x1024"、"2048x2048"），不支持比例
+自定义像素值约束（仅限 vip 模型）
+最大边长必须小于或等于3840px
+两条边都必须是16的倍数
+长边与短边之比不得超过 3:1
+总像素数必须至少为 655,360且不得超过 8,294,400
+gpt-image-2-vip比例参考（1K、2K、4K）：
+1:1：1024x1024、2048x2048、2880x2880
+16:9：1280x720、2048x1152、3840x2160
+9:16：720x1280、1152x2048、2160x3840
+4:3：1152x864、2304x1728、3264x2448
+3:4：864x1152、1728x2304、2448x3264
+3:2：1536x1024、2048x1360、3504x2336
+2:3：1024x1536、1360x2048、2336x3504
+5:4：1120x896、2240x1792、3200x2560
+4:5：896x1120、1792x2240、2560x3200
+21:9：1456x624、2912x1248、3840x1648
+9:21：624x1456、1248x2912、1648x3840
+1:3：688x2048、1280x3840
+3:1：2048x688、3840x1280
+2:1：1536x768、3072x1536、3840x1920
+1:2：768x1536、1536x3072、1920x3840
+gpt-image-2比例参考：
+1:1：1024x1024
+16:9：1672 x941
+9:16：941x1672 
+4:3：1443x1090
+3:4：1090x1443
+3:2：1536x1024
+2:3：1024x1536
+5:4：1408x1120
+4:5：1120x1408
+21:9：1920x832
+9:21：832x1920
+1:2：896x1792
+2:1：1792x896
+replyType
+string 
+回复类型
+可选
+支持参数
+json（返回json）
+stream（返回stream）
+async（异步轮询）
+异步生成结果查询接口：https://qmy27nhsd9.apifox.cn/452409577e0
+示例
+{
+    "model": "gpt-image-2",
+    "prompt": "生成一张边牧与古牧正在抖音直播间直播带货截图",
+    "images": [],
+    "aspectRatio": "1024x1024",
+    "replyType": "json"
+}
+请求示例代码
+Fetch
+Axios
+jQuery
+XHR
+Native
+Request
+Unirest
+const myHeaders = new Headers();
+myHeaders.append("Authorization", "Bearer sk-xxxxxxxxxxx");
+myHeaders.append("Content-Type", "application/json");
+
+const raw = JSON.stringify({
+   "model": "gpt-image-2",
+   "prompt": "生成一张边牧与古牧正在抖音直播间直播带货截图",
+   "images": [],
+   "aspectRatio": "1024x1024",
+   "replyType": "json"
+});
+
+const requestOptions = {
+   method: "POST",
+   headers: myHeaders,
+   body: raw,
+   redirect: "follow"
+};
+
+fetch("https://v1/api/generate", requestOptions)
+   .then((response) => response.text())
+   .then((result) => console.log(result))
+   .catch((error) => console.error(error));
+返回响应
+🟢200
+成功
+application/json
+id
+string 
+任务id
+必需
+status
+string 
+状态
+必需
+任务状态
+running (进行中)
+violation (违规)
+succeeded (生成成功)
+failed (任务失败)
+progress
+integer 
+进度
+可选
+0~100
+results
+array [object] 
+可选
+url
+string 
+图片/视频链接
+可选
+error
+string 
+报错信息
+可选
+示例
+{
+    "id": "14-5f3cf761-a4bb-486a-8016-77f490998f80",
+    "status": "succeeded",
+    "results": [
+        {
+            "url": "https://file1.aitohumanize.com/file/fcdd2d07449d438d9d69d450f5626976.png"
+        }
+    ]
+}application/json
+id
+string 
+任务id
+必需
+通过该id调用异步结果查询接口
+接口文档：https://qmy27nhsd9.apifox.cn/452409577e0
+status
+string 
+状态
+必需
+示例
+{
+    "id": "6-f671fc51-d5d7-4eff-a1c7-26e612fe08ab",
+    "status": "running"
+}
+application/json
+id
+string 
+必需
+status
+string 
+状态
+必需
+状态
+violation（违规）
+failed（失败）
+error
+string 
+报错信息
+必需
+示例
+{
+    "id": "12-1f771fbf-f23a-4b89-a7d0-a98ba9862edb",
+    "status": "failed",
+    "error": "generate failed"
+}
+
+
+seedance2.0调用：
+
+豆包 Seedance 2.0 多模态视频生成 API 完整官方调用文档
+对接官方文档：https://www.volcengine.com/docs/82379/1399009全功能全覆盖：文生视频、图生视频、图文混合、视频参考生视频、视频续写，包含比例 / 分辨率 / 时长 / 帧率 / 动态强度 / 负面词等全部参数
+一、基础接口信息
+1. 基础地址
+plaintext
+基础域名：https://ark.cn-beijing.volces.com/api/v3
+2. 接口路由
+表格
+功能	请求方式	接口地址
+创建视频生成任务	POST	/contents/generations/tasks
+查询任务结果	GET	/contents/generations/tasks/{task_id}
+取消任务	POST	/contents/generations/tasks/{task_id}/cancel
+3. 认证方式
+请求头固定携带
+plaintext
+Authorization: Bearer 你的ARK_API_KEY
+Content-Type: application/json
+4. 固定模型标识
+plaintext
+model: doubao-seedance-2-0-260128
+5. 支持全部生成能力
+文本生成视频
+图片生成视频
+文本 + 图片 多模态混合生成
+参考视频生成新视频
+视频续写、画面风格复刻
+自定义运镜、动态强度、画质、画幅
+二、创建任务 完整请求参数（最全版）
+顶层请求体结构
+json
+{
+    "model": "doubao-seedance-2-0-260128",
+    "content": [],
+    "negative_prompt": "",
+    "ratio": "16:9",
+    "duration": 5,
+    "resolution": "1080p",
+    "frame_rate": 30,
+    "motion_strength": 5,
+    "watermark": false,
+    "seed": 0,
+    "service_tier": "flex",
+    "execution_expires_after": 172800
+}
+全参数详细释义
+表格
+参数名	类型	必填	取值范围 & 说明
+model	string	是	固定填 doubao-seedance-2-0-260128
+content	array	是	多模态核心，支持文本 / 图片 / 视频三种类型
+negative_prompt	string	否	负面提示词，过滤丑陋、模糊、变形画面
+ratio	string	是	画幅比例：16:9横屏 / 9:16竖屏 / 1:1方形 / adaptive自适应
+duration	int	是	视频时长，单位秒，支持：3/5/7/10 秒
+resolution	string	否	分辨率：720p / 1080p
+frame_rate	int	否	帧率：24 / 30
+motion_strength	int	否	画面动态强度 1-10，数值越大动作越强
+watermark	bool	否	是否加水印，默认false
+seed	int	否	随机种子，固定种子可复刻相同视频
+service_tier	string	否	档位：flex标准版 / pro极速版
+execution_expires_after	int	否	任务过期时间，单位秒，默认 48 小时
+content 多模态类型（全部支持）
+1）文本类型（文生视频）
+json
+{"type":"text","text":"高清城市夜景，车流穿梭，氛围感拉满"}
+2）图片类型（图生视频）
+json
+{"type":"image_url","image_url":{"url":"https://xxx.png"}}
+3）视频类型（参考视频生视频 / 续写）
+json
+{"type":"video_url","video_url":{"url":"https://xxx.mp4"}}
+三、五大常用场景 完整请求 JSON
+场景 1：纯文本生成视频
+json
+{
+    "model":"doubao-seedance-2-0-260128",
+    "content":[{"type":"text","text":"海边日落，海浪缓缓拍打沙滩，治愈慢镜头"}],
+    "negative_prompt":"模糊，扭曲，水印，低画质",
+    "ratio":"16:9",
+    "duration":5,
+    "resolution":"1080p",
+    "frame_rate":30,
+    "motion_strength":4,
+    "watermark":false
+}
+场景 2：单张图片生成视频
+json
+{
+    "model":"doubao-seedance-2-0-260128",
+    "content":[{"type":"image_url","image_url":{"url":"https://img.test.jpg"}}],
+    "ratio":"9:16",
+    "duration":5,
+    "resolution":"1080p"
+}
+场景 3：文本 + 图片 多模态联合生成（最强用法）
+json
+{
+    "model":"doubao-seedance-2-0-260128",
+    "content":[
+        {"type":"text","text":"人物缓慢转身，温柔氛围感，柔和光影"},
+        {"type":"image_url","image_url":{"url":"https://ref.jpg"}}
+    ],
+    "ratio":"9:16",
+    "duration":7,
+    "motion_strength":3
+}
+场景 4：参考视频生成新视频
+json
+{
+    "model":"doubao-seedance-2-0-260128",
+    "content":[
+        {"type":"video_url","video_url":{"url":"https://source.mp4"}},
+        {"type":"text","text":"延续原视频运镜，更换场景为春日花海"}
+    ],
+    "ratio":"16:9",
+    "duration":10
+}
+场景 5：1:1 方形短视频
+json
+{
+    "model":"doubao-seedance-2-0-260128",
+    "content":[{"type":"text","text":"可爱猫咪玩耍，治愈日常"}],
+    "ratio":"1:1",
+    "duration":3,
+    "resolution":"720p"
+}
+四、接口返回数据规范
+1. 创建任务成功返回
+json
+{
+    "id": "task_xxxxxx",
+    "status": "queued",
+    "created_at": 1747890000,
+    "model": "doubao-seedance-2-0-260128"
+}
+id = 任务 ID，用于轮询查询
+2. 查询任务 成功结果返回
+json
+{
+    "id": "task_xxxxxx",
+    "status": "succeeded",
+    "video_url": "https://xxx.mp4",
+    "cover_image_url": "https://xxx.jpg",
+    "duration": 5,
+    "resolution": "1080p",
+    "ratio": "16:9",
+    "frame_rate": 30,
+    "seed": 123456
+}
+3. 任务状态枚举
+queued：排队中
+running：生成中
+succeeded：生成成功
+failed：生成失败
+cancelled：已取消
+expired：任务过期
+4. 失败返回结构
+json
+{
+    "status":"failed",
+    "error":{
+        "code":"",
+        "message":"图片链接无效/提示词违规/额度不足"
+    }
+}
+五、完整 CURL 调用示例
+提交生成任务
+bash
+运行
+curl -X POST https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks \
+-H "Authorization: Bearer 替换为你的ARK_API_KEY" \
+-H "Content-Type: application/json" \
+-d '{
+    "model":"doubao-seedance-2-0-260128",
+    "content":[{"type":"text","text":"山间云海流动，唯美自然风光"}],
+    "ratio":"16:9",
+    "duration":5,
+    "resolution":"1080p",
+    "watermark":false
+}'
+查询任务结果
+bash
+运行
+curl -X GET https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks/替换任务ID \
+-H "Authorization: Bearer 替换为你的ARK_API_KEY"
+六、Python 完整可运行 SDK 代码
+python
+运行
+import time
+from volcenginesdkarkruntime import Ark
+
+# 初始化客户端
+client = Ark(
+    base_url="https://ark.cn-beijing.volces.com/api/v3",
+    api_key="你的ARK_API_KEY"
+)
+
+def create_seedance_video():
+    # 提交多模态视频任务
+    task = client.content_generation.tasks.create(
+        model="doubao-seedance-2-0-260128",
+        content=[
+            {"type":"text","text":"唯美晚霞，湖边微风轻轻吹动"},
+            # 开启图生视频取消下面注释
+            # {"type":"image_url","image_url":{"url":"https://xxx.jpg"}}
+        ],
+        ratio="16:9",
+        duration=5,
+        resolution="1080p",
+        motion_strength=5,
+        watermark=False
+    )
+    task_id = task.id
+    print("任务ID：", task_id)
+
+    # 轮询结果
+    while True:
+        res = client.content_generation.tasks.get(task_id=task_id)
+        if res.status == "succeeded":
+            print("视频地址：", res.video_url)
+            print("封面地址：", res.cover_image_url)
+            break
+        elif res.status == "failed":
+            print("生成失败：", res.error)
+            break
+        time.sleep(8)
+
+if __name__ == "__main__":
+    create_seedance_video()
+七、调用限制 & 输入规范
+图片 / 视频必须是公网可直接访问 HTTP/HTTPS 链接，本地文件不可直接传入
+单任务最多支持：1 文本 + 1 图片 + 1 视频组合
+最长支持 10 秒视频，最短 3 秒
+1080p 生成耗时约 30-90 秒
+禁止违规、色情、暴力、敏感内容提示词
+接口有账号级 QPS、调用频次限制
+八、常见错误码
+401：API Key 错误或未授权
+403：未开通 Seedance2.0 模型权限
+400：请求参数错误、content 格式错误
+429：调用频次超限
+500：服务内部生成异常
