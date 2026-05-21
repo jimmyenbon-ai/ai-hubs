@@ -4,6 +4,7 @@ const { notifyWorkflowStep } = require('../utils/websocket');
 const { intelligentSearch, isMultimedia, isImageContent, isVideoContent, isAudioContent, getTextContent, getImageUrl, getVideoUrl, getAudioUrl } = require('./knowledgeSearch');
 const { ensurePublicImageUrl } = require('../utils/imageUtils');
 const { saveImage: saveImageLocal, saveVideo: saveVideoLocal, saveText: saveTextLocal } = require('../utils/localStorage');
+const { appConfig } = require('../utils/appConfig');
 
 // 获取节点实际使用的 LLM 配置：优先读数据库中的默认配置，fallback 到硬编码默认值
 async function getNodeLLMConfig(node) {
@@ -14,7 +15,7 @@ async function getNodeLLMConfig(node) {
   // 无论节点配置是 'default' / 'custom' / undefined，都尝试读数据库默认
   try {
     const dbConfig = await LLMConfig.findDefault();
-    if (dbConfig) {
+    if (dbConfig && dbConfig.api_key) {
       console.log('[getNodeLLMConfig] 使用数据库默认配置:', dbConfig.model);
       return {
         provider: dbConfig.provider,
@@ -23,9 +24,26 @@ async function getNodeLLMConfig(node) {
         model: dbConfig.model,
       };
     }
+    if (dbConfig && !dbConfig.api_key) {
+      console.log('[getNodeLLMConfig] 数据库配置缺少 api_key，尝试从设置面板获取');
+    }
   } catch (e) {
     console.warn('[getNodeLLMConfig] 读取数据库配置失败:', e.message);
   }
+
+  // Fallback: 从设置面板（appConfig）读取 DeepSeek API Key
+  const dsKey = appConfig.deepseek_api_key;
+  if (dsKey) {
+    console.log('[getNodeLLMConfig] 使用设置面板的 DeepSeek 配置');
+    return {
+      provider: 'deepseek',
+      api_url: appConfig.deepseek_api_url || 'https://api.deepseek.com',
+      api_key: dsKey,
+      model: appConfig.deepseek_model || 'deepseek-chat',
+    };
+  }
+
+  console.warn('[getNodeLLMConfig] 未找到任何 LLM API Key，LLM 调用将失败！请在设置面板填写 DeepSeek API Key');
   return llmService.getDefaultConfig();
 }
 

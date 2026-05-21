@@ -15,6 +15,9 @@ const CONFIG_FILE = path.join(CONFIG_DIR, 'app_config.json');
 // 内存中的配置存储
 const store = {
   // === API 密钥 ===
+  deepseek_api_key: process.env.DEEPSEEK_API_KEY || '',
+  deepseek_api_url: process.env.DEEPSEEK_API_URL || 'https://api.deepseek.com',
+  deepseek_model: process.env.DEEPSEEK_MODEL || 'deepseek-chat',
   grsai_api_key: process.env.GRSAI_API_KEY || '',
   grsai_api_host: process.env.GRSAI_API_HOST || 'https://grsai.dakka.com.cn',
   seedance_api_key: process.env.SEEDANCE_API_KEY || '',
@@ -82,6 +85,9 @@ loadFromDisk();
  */
 function getConfigKeys() {
   return [
+    { key: 'deepseek_api_key', label: 'DeepSeek API 密钥', type: 'password', group: 'LLM 文案' },
+    { key: 'deepseek_api_url', label: 'DeepSeek API 地址', type: 'text', group: 'LLM 文案' },
+    { key: 'deepseek_model', label: 'DeepSeek 模型', type: 'text', group: 'LLM 文案' },
     { key: 'grsai_api_key', label: 'GRSai API 密钥', type: 'password', group: '图片生成' },
     { key: 'grsai_api_host', label: 'GRSai API 地址', type: 'text', group: '图片生成' },
     { key: 'seedance_api_key', label: 'Seedance API 密钥', type: 'password', group: '视频生成' },

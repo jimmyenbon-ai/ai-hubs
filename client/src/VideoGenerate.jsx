@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import './App.css'
+import HistoryFilterBar from './HistoryFilterBar'
 
 // 生成模式常量
 const GENERATION_MODE = {
@@ -56,6 +57,13 @@ function VideoGenerate() {
   const [error, setError] = useState('')
   const [history, setHistory] = useState([])
   const [loadingHistory, setLoadingHistory] = useState(false)
+  const [historyPage, setHistoryPage] = useState(1)
+  const [historyPageSize, setHistoryPageSize] = useState(20)
+  const [historyTotal, setHistoryTotal] = useState(0)
+  const [historyTotalPages, setHistoryTotalPages] = useState(0)
+  const [historySearch, setHistorySearch] = useState('')
+  const [historyDateFrom, setHistoryDateFrom] = useState('')
+  const [historyDateTo, setHistoryDateTo] = useState('')
   const [activeTasks, setActiveTasks] = useState([])
   const [nextTaskId, setNextTaskId] = useState(1)
   const [playingVideo, setPlayingVideo] = useState(null)
@@ -90,12 +98,21 @@ function VideoGenerate() {
     }
   }, [])
 
-  function debounceFetchVideoHistory() {
+  function debounceFetchVideoHistory(pageOverride) {
     if (historyFetchDebounceRef.current) clearTimeout(historyFetchDebounceRef.current)
     historyFetchDebounceRef.current = setTimeout(() => {
-      fetchVideoHistory()
+      fetchVideoHistory(pageOverride)
     }, 800)
   }
+
+  // 筛选条件变化时重新加载
+  useEffect(() => {
+    fetchVideoHistory(1)
+  }, [historySearch, historyDateFrom, historyDateTo, historyPageSize])
+
+  useEffect(() => {
+    if (historyPage > 1) fetchVideoHistory(historyPage)
+  }, [historyPage])
 
   async function queryVideoTaskOnce(taskId) {
     const resp = await fetch(`/api/video/query/${taskId}`, {
@@ -462,16 +479,26 @@ function VideoGenerate() {
     return content
   }
 
-  async function fetchVideoHistory() {
+  async function fetchVideoHistory(pageOverride) {
     setLoadingHistory(true)
     try {
-      const resp = await fetch('/api/video/history?limit=30')
+      const p = pageOverride || historyPage
+      const params = new URLSearchParams({
+        page: String(p),
+        pageSize: String(historyPageSize),
+      })
+      if (historySearch) params.set('search', historySearch)
+      if (historyDateFrom) params.set('dateFrom', historyDateFrom)
+      if (historyDateTo) params.set('dateTo', historyDateTo)
+      const resp = await fetch(`/api/video/history?${params}`)
       const data = await resp.json()
       if (!data.success) {
         throw new Error(data.message || '获取历史记录失败')
       }
       const historyItems = data.data || []
       setHistory(historyItems)
+      setHistoryTotal(data.pagination?.total || 0)
+      setHistoryTotalPages(data.pagination?.totalPages || 0)
 
       historyItems.forEach((item) => {
         if (item.task_id && (item.status === 'queued' || item.status === 'running')) {
@@ -958,6 +985,21 @@ function VideoGenerate() {
         <div className="tabs">
           <div className="tab active">我的作品</div>
         </div>
+
+        <HistoryFilterBar
+          search={historySearch}
+          onSearchChange={(v) => { setHistorySearch(v); setHistoryPage(1); }}
+          dateFrom={historyDateFrom}
+          onDateFromChange={(v) => { setHistoryDateFrom(v); setHistoryPage(1); }}
+          dateTo={historyDateTo}
+          onDateToChange={(v) => { setHistoryDateTo(v); setHistoryPage(1); }}
+          page={historyPage}
+          totalPages={historyTotalPages}
+          onPageChange={(p) => { setHistoryPage(p); }}
+          pageSize={historyPageSize}
+          onPageSizeChange={(s) => { setHistoryPageSize(s); setHistoryPage(1); }}
+          total={historyTotal}
+        />
 
         {activeTasks.map((task) => (
           <div

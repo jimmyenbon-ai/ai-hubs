@@ -1,5 +1,6 @@
 const https = require('https');
 const http = require('http');
+const { appConfig } = require('../utils/appConfig');
 
 class LLMService {
   constructor() {
@@ -189,6 +190,16 @@ class LLMService {
 
   // 获取默认配置
   getDefaultConfig() {
+    // 优先使用设置面板中配置的 DeepSeek Key
+    const dsKey = appConfig.deepseek_api_key;
+    if (dsKey) {
+      return {
+        provider: 'deepseek',
+        api_url: appConfig.deepseek_api_url || 'https://api.deepseek.com',
+        api_key: dsKey,
+        model: appConfig.deepseek_model || 'deepseek-chat',
+      };
+    }
     return {
       provider: 'deepseek',
       api_url: 'https://api.deepseek.com',

@@ -117,7 +117,21 @@ export default function LLMConfigPanel({ onBack }) {
   async function handleSetDefault(id) {
     const config = configs.find(c => c.id === id);
     if (!config) return;
-    await handleEdit({ ...config, is_default: true });
+    try {
+      const resp = await fetch(`/api/llm-config/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...config, is_default: true, api_key: config.api_key || '' }),
+      });
+      const data = await resp.json();
+      if (data.success) {
+        fetchConfigs();
+      } else {
+        alert(data.message || '设置失败');
+      }
+    } catch (err) {
+      alert('设置失败: ' + err.message);
+    }
   }
 
   async function handleTest() {
@@ -298,6 +312,11 @@ export default function LLMConfigPanel({ onBack }) {
                 onChange={e => setForm(f => ({ ...f, api_key: e.target.value }))}
                 placeholder={form.provider === 'ollama' ? '本地部署无需填写' : 'sk-...'}
               />
+              {form.provider === 'deepseek' && !form.api_key && (
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
+                  提示：也可在侧边栏「设置」→「LLM 文案」中统一配置 DeepSeek API Key，此处无需重复填写
+                </div>
+              )}
 
               <div className="section-label" style={{ marginTop: 16 }}>模型 *</div>
               <input

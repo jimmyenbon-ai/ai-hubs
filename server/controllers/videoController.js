@@ -387,18 +387,50 @@ async function handleCancelVideoTask(req, res, next) {
  */
 async function handleVideoHistory(req, res, next) {
   try {
-    const limit = parseInt(req.query.limit || '30', 10);
-    const offset = parseInt(req.query.offset || '0', 10);
+    const {
+      page: qPage,
+      pageSize: qPageSize,
+      dateFrom,
+      dateTo,
+      search,
+    } = req.query;
 
-    const records = await VideoGeneration.findAll({
+    const page = Math.max(1, parseInt(qPage, 10) || 1);
+    const pageSize = Math.min(100, Math.max(1, parseInt(qPageSize, 10) || 20));
+
+    let records = await VideoGeneration.findAll({
       order: [['createdAt', 'DESC']],
-      limit,
       attributes: ['id', 'task_id', 'model', 'mode', 'prompt', 'status', 'videoUrl', 'lastFrameUrl', 'createdAt', 'updatedAt', 'resolution', 'ratio', 'duration', 'error'],
     });
 
+    // 日期筛选
+    if (dateFrom) {
+      const from = new Date(dateFrom).getTime();
+      records = records.filter(r => new Date(r.createdAt).getTime() >= from);
+    }
+    if (dateTo) {
+      const to = new Date(dateTo + 'T23:59:59.999').getTime();
+      records = records.filter(r => new Date(r.createdAt).getTime() <= to);
+    }
+    // 关键词搜索
+    if (search && search.trim()) {
+      const kw = search.trim().toLowerCase();
+      records = records.filter(r =>
+        (r.prompt || '').toLowerCase().includes(kw) ||
+        (r.model || '').toLowerCase().includes(kw) ||
+        (r.mode || '').toLowerCase().includes(kw)
+      );
+    }
+
+    const total = records.length;
+    const totalPages = Math.ceil(total / pageSize);
+    const offset = (page - 1) * pageSize;
+    const paged = records.slice(offset, offset + pageSize);
+
     res.json({
       success: true,
-      data: records,
+      data: paged,
+      pagination: { page, pageSize, total, totalPages },
     });
   } catch (err) {
     next(err);

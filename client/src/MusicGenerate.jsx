@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import './App.css'
+import HistoryFilterBar from './HistoryFilterBar'
 
 function MusicGenerate() {
   const [gptDescriptionPrompt, setGptDescriptionPrompt] = useState('')
@@ -30,6 +31,13 @@ function MusicGenerate() {
   const [error, setError] = useState('')
   const [history, setHistory] = useState([])
   const [loadingHistory, setLoadingHistory] = useState(false)
+  const [historyPage, setHistoryPage] = useState(1)
+  const [historyPageSize, setHistoryPageSize] = useState(20)
+  const [historyTotal, setHistoryTotal] = useState(0)
+  const [historyTotalPages, setHistoryTotalPages] = useState(0)
+  const [historySearch, setHistorySearch] = useState('')
+  const [historyDateFrom, setHistoryDateFrom] = useState('')
+  const [historyDateTo, setHistoryDateTo] = useState('')
   const [activeTasks, setActiveTasks] = useState([])
   const [nextTaskId, setNextTaskId] = useState(1)
   const [playingAudio, setPlayingAudio] = useState(null)
@@ -81,12 +89,21 @@ function MusicGenerate() {
     return data.data || {}
   }
 
-  function debounceFetchMusicHistory() {
+  function debounceFetchMusicHistory(pageOverride) {
     if (historyFetchDebounceRef.current) clearTimeout(historyFetchDebounceRef.current)
     historyFetchDebounceRef.current = setTimeout(() => {
-      fetchMusicHistory()
+      fetchMusicHistory(pageOverride)
     }, 800)
   }
+
+  // 筛选条件变化时重新加载
+  useEffect(() => {
+    fetchMusicHistory(1)
+  }, [historySearch, historyDateFrom, historyDateTo, historyPageSize])
+
+  useEffect(() => {
+    if (historyPage > 1) fetchMusicHistory(historyPage)
+  }, [historyPage])
 
   function pickAudioUrls(result) {
     // 后端会返回 audioUrls/audioUrl；也兼容 raw 里不同字段名
@@ -294,17 +311,27 @@ function MusicGenerate() {
     clearProgressTimer(taskId)
   }
 
-  async function fetchMusicHistory() {
+  async function fetchMusicHistory(pageOverride) {
     setLoadingHistory(true)
     try {
-      const resp = await fetch('/api/music/history?limit=30')
+      const p = pageOverride || historyPage
+      const params = new URLSearchParams({
+        page: String(p),
+        pageSize: String(historyPageSize),
+      })
+      if (historySearch) params.set('search', historySearch)
+      if (historyDateFrom) params.set('dateFrom', historyDateFrom)
+      if (historyDateTo) params.set('dateTo', historyDateTo)
+      const resp = await fetch(`/api/music/history?${params}`)
       const data = await resp.json()
       if (!data.success) {
         throw new Error(data.message || '获取历史记录失败')
       }
       const historyItems = data.data || []
       setHistory(historyItems)
-      
+      setHistoryTotal(data.pagination?.total || 0)
+      setHistoryTotalPages(data.pagination?.totalPages || 0)
+
       // 自动查询有 task_ids 但没有 audioUrl 的记录
       historyItems.forEach((item) => {
         if (Array.isArray(item.task_ids) && item.task_ids.length > 0 && !item.audioUrl) {
@@ -668,6 +695,21 @@ function MusicGenerate() {
         <div className="tabs">
           <div className="tab active">我的作品</div>
         </div>
+
+        <HistoryFilterBar
+          search={historySearch}
+          onSearchChange={(v) => { setHistorySearch(v); setHistoryPage(1); }}
+          dateFrom={historyDateFrom}
+          onDateFromChange={(v) => { setHistoryDateFrom(v); setHistoryPage(1); }}
+          dateTo={historyDateTo}
+          onDateToChange={(v) => { setHistoryDateTo(v); setHistoryPage(1); }}
+          page={historyPage}
+          totalPages={historyTotalPages}
+          onPageChange={(p) => { setHistoryPage(p); }}
+          pageSize={historyPageSize}
+          onPageSizeChange={(s) => { setHistoryPageSize(s); setHistoryPage(1); }}
+          total={historyTotal}
+        />
 
         {activeTasks.map((task) => (
           <div

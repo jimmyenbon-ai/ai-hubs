@@ -476,6 +476,11 @@ export default function WorkflowPanel({ onBack }) {
   // ========== 键盘快捷键 ==========
   useEffect(() => {
     const handleKeyDown = (e) => {
+      // 当焦点在输入框中时，不拦截 Ctrl+C/V（允许正常文本复制粘贴）
+      const tag = (e.target.tagName || '').toLowerCase();
+      const isInput = tag === 'input' || tag === 'textarea' || tag === 'select' || e.target.isContentEditable;
+      if (isInput) return;
+
       const isMac = navigator.platform.toUpperCase().includes('MAC');
       const ctrlKey = isMac ? e.metaKey : e.ctrlKey;
 
@@ -483,8 +488,8 @@ export default function WorkflowPanel({ onBack }) {
         const selected = nodes.filter(n => n.selected);
         if (selected.length > 0) {
           clipboardRef.current = selected.map(n => ({ type: n.type, position: n.position, data: { ...n.data } }));
+          e.preventDefault();
         }
-        e.preventDefault();
       }
 
       if (ctrlKey && e.key === 'v') {
@@ -496,8 +501,8 @@ export default function WorkflowPanel({ onBack }) {
             data: { ...n.data }, selected: false,
           }));
           setNodes((nds) => [...nds, ...newNodes]);
+          e.preventDefault();
         }
-        e.preventDefault();
       }
 
       if (ctrlKey && e.key === 'z' && !e.shiftKey) {

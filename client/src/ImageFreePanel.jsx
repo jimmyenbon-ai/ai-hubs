@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import PromptQuickLibrary from './components/PromptQuickLibrary'
+import HistoryFilterBar from './HistoryFilterBar'
 
 export const NANO_IMAGE_SIZES = [
   { value: '1K', label: '1K' },
@@ -117,10 +118,14 @@ function ImageFreePanel({ injectedTemplate, onInjectedConsumed }) {
   const [showPromptLibrary, setShowPromptLibrary] = useState(false) // 提示词快捷库
 
   // 历史记录状态
-  const [historyOffset, setHistoryOffset] = useState(0)
-  const [hasMoreHistory, setHasMoreHistory] = useState(false)
+  const [historyPage, setHistoryPage] = useState(1)
+  const [historyPageSize, setHistoryPageSize] = useState(20)
+  const [historyTotal, setHistoryTotal] = useState(0)
+  const [historyTotalPages, setHistoryTotalPages] = useState(0)
   const [historyView, setHistoryView] = useState('list') // 'list' | 'grid'
   const [historySearch, setHistorySearch] = useState('')
+  const [historyDateFrom, setHistoryDateFrom] = useState('')
+  const [historyDateTo, setHistoryDateTo] = useState('')
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false) // 只显示收藏
 
   useEffect(() => {
@@ -288,35 +293,42 @@ function ImageFreePanel({ injectedTemplate, onInjectedConsumed }) {
     return { apiPrompt: enhanced, referenceImages: imageUrls }
   }
 
-  async function fetchHistory(Reset = false) {
-    if (Reset) {
+  async function fetchHistory(reset = false) {
+    if (reset) {
       setLoadingHistory(true)
-      setHistoryOffset(0)
+      setHistoryPage(1)
     }
     try {
-      const offset = Reset ? 0 : historyOffset
-      const params = new URLSearchParams({ limit: PAGE_SIZE, offset })
+      const params = new URLSearchParams({
+        page: reset ? 1 : historyPage,
+        pageSize: historyPageSize,
+      })
       if (showFavoritesOnly) params.set('favorite', 'true')
+      if (historySearch) params.set('search', historySearch)
+      if (historyDateFrom) params.set('dateFrom', historyDateFrom)
+      if (historyDateTo) params.set('dateTo', historyDateTo)
       const resp = await fetch(`/api/history?${params}`)
       const data = await resp.json()
       if (data.success) {
         const newItems = data.data || []
-        if (Reset) {
-          setHistory(newItems)
-        } else {
-          setHistory((prev) => [...prev, ...newItems])
-        }
-        setHasMoreHistory(newItems.length === PAGE_SIZE)
-        setHistoryOffset(offset + newItems.length)
+        setHistory(newItems)
+        setHistoryTotal(data.pagination?.total || 0)
+        setHistoryTotalPages(data.pagination?.totalPages || 0)
+        if (reset) setHistoryPage(1)
       }
     } catch (_) {}
-    if (Reset) setLoadingHistory(false)
+    if (reset) setLoadingHistory(false)
   }
 
-  // 监听收藏筛选变化，重新加载
+  // 监听筛选条件变化
   useEffect(() => {
     fetchHistory(true)
-  }, [showFavoritesOnly])
+  }, [showFavoritesOnly, historySearch, historyDateFrom, historyDateTo, historyPageSize])
+
+  // 翻页时重新加载
+  useEffect(() => {
+    if (historyPage > 1) fetchHistory(false)
+  }, [historyPage])
 
   async function handleDeleteHistory(id) {
     if (!confirm('确定要删除这条记录吗？')) return
@@ -438,13 +450,6 @@ function ImageFreePanel({ injectedTemplate, onInjectedConsumed }) {
 
   const isGptImage2 = selectedModel === 'gpt-image-2' || selectedModel === 'gpt-image-2-vip'
   const aspectRatios = isGptImage2 ? GPT_ASPECT_RATIOS : NANO_ASPECT_RATIOS
-
-  // 过滤历史记录（前端搜索）
-  const filteredHistory = historySearch.trim()
-    ? history.filter((h) =>
-        (h.originalPrompt || '').toLowerCase().includes(historySearch.toLowerCase()),
-      )
-    : history
 
   return (
     <>
@@ -622,46 +627,56 @@ function ImageFreePanel({ injectedTemplate, onInjectedConsumed }) {
         {/* 历史记录工具条 */}
         {activeTab === 'mine' && (
           <div className="history-toolbar">
-            <input
-              className="history-search-box"
-              placeholder="搜索历史作品..."
-              value={historySearch}
-              onChange={(e) => setHistorySearch(e.target.value)}
+            <HistoryFilterBar
+              search={historySearch}
+              onSearchChange={setHistorySearch}
+              dateFrom={historyDateFrom}
+              onDateFromChange={setHistoryDateFrom}
+              dateTo={historyDateTo}
+              onDateToChange={setHistoryDateTo}
+              page={historyPage}
+              totalPages={historyTotalPages}
+              onPageChange={setHistoryPage}
+              pageSize={historyPageSize}
+              onPageSizeChange={(s) => { setHistoryPageSize(s); setHistoryPage(1); }}
+              total={historyTotal}
             />
-            <button
-              type="button"
-              className={`history-view-btn ${showFavoritesOnly ? 'active' : ''}`}
-              onClick={() => setShowFavoritesOnly(!showFavoritesOnly)}
-              title={showFavoritesOnly ? "显示全部" : "只看收藏"}
-              style={showFavoritesOnly ? { background: 'var(--primary-glow)', color: 'var(--primary-color)' } : {}}
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill={showFavoritesOnly ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2">
-                <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
-              </svg>
-            </button>
-            <div className="history-view-toggle">
+            <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
               <button
                 type="button"
-                className={`history-view-btn ${historyView === 'list' ? 'active' : ''}`}
-                onClick={() => setHistoryView('list')}
-                title="列表视图"
+                className={`history-view-btn ${showFavoritesOnly ? 'active' : ''}`}
+                onClick={() => setShowFavoritesOnly(!showFavoritesOnly)}
+                title={showFavoritesOnly ? "显示全部" : "只看收藏"}
+                style={showFavoritesOnly ? { background: 'var(--primary-glow)', color: 'var(--primary-color)' } : {}}
               >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/>
-                  <line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill={showFavoritesOnly ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2">
+                  <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
                 </svg>
               </button>
-              <button
-                type="button"
-                className={`history-view-btn ${historyView === 'grid' ? 'active' : ''}`}
-                onClick={() => setHistoryView('grid')}
-                title="网格视图"
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
-                  <rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
-                </svg>
-              </button>
+              <div className="history-view-toggle">
+                <button
+                  type="button"
+                  className={`history-view-btn ${historyView === 'list' ? 'active' : ''}`}
+                  onClick={() => setHistoryView('list')}
+                  title="列表视图"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/>
+                    <line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
+                  </svg>
+                </button>
+                <button
+                  type="button"
+                  className={`history-view-btn ${historyView === 'grid' ? 'active' : ''}`}
+                  onClick={() => setHistoryView('grid')}
+                  title="网格视图"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
+                    <rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
+                  </svg>
+                </button>
+              </div>
             </div>
           </div>
         )}
@@ -713,12 +728,12 @@ function ImageFreePanel({ injectedTemplate, onInjectedConsumed }) {
             ))}
 
             {loadingHistory && <div className="result-card"><p className="prompt-text">正在加载历史作品...</p></div>}
-            {!loadingHistory && !filteredHistory.length && activeTasks.length === 0 && (
+            {!loadingHistory && !history.length && activeTasks.length === 0 && (
               <div className="result-card"><p className="prompt-text">暂无生成记录，试着先生成一张图像吧。</p></div>
             )}
 
             {/* 列表视图 */}
-            {historyView === 'list' && !!filteredHistory.length && filteredHistory.map((item) => (
+            {historyView === 'list' && !!history.length && history.map((item) => (
               <div className="result-card" key={item.id}>
                 <div className="card-header">
                   <span className="tag">{item.modelName || 'GRSai'}</span>
@@ -753,9 +768,9 @@ function ImageFreePanel({ injectedTemplate, onInjectedConsumed }) {
             ))}
 
             {/* 网格视图 */}
-            {historyView === 'grid' && !!filteredHistory.length && (
+            {historyView === 'grid' && !!history.length && (
               <div className="history-grid">
-                {filteredHistory.map((item) => (
+                {history.map((item) => (
                   <div
                     key={item.id}
                     className="history-grid-item"
@@ -779,19 +794,6 @@ function ImageFreePanel({ injectedTemplate, onInjectedConsumed }) {
               </div>
             )}
 
-            {/* 加载更多 */}
-            {hasMoreHistory && !historySearch && (
-              <div className="history-load-more">
-                <button
-                  type="button"
-                  className="history-load-more-btn"
-                  onClick={() => fetchHistory(false)}
-                  disabled={loadingHistory}
-                >
-                  {loadingHistory ? '加载中...' : '加载更多'}
-                </button>
-              </div>
-            )}
           </>
         )}
 
