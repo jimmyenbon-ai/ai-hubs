@@ -1,0 +1,37 @@
+新电脑部署步骤
+================================
+
+:: === 如果 sqlite3 安装报错，先装构建工具（否则跳过）===
+:: 以管理员身份打开 PowerShell 运行：
+::   npm install --global windows-build-tools
+:: 或者去 https://visualstudio.microsoft.com/downloads/ 下载 Visual Studio Build Tools
+
+:: 1. 拉取代码
+git clone https://github.com/jimmyenbon-ai/ai-hubs.git
+cd ai-hubs
+
+:: 2. 安装依赖
+npm install && cd server && npm install && cd .. && cd client && npm install && cd ..
+
+:: 3. 从旧电脑复制这两个到 ai-hubs 根目录（U盘或局域网）
+::     旧电脑 E:\node\ai-hubs\ai-hub-main\
+::        server\.env    →  新电脑 ai-hubs\server\.env
+::        cache\         →  新电脑 ai-hubs\cache\
+::         （右键复制文件夹，到新电脑 ai-hubs 目录粘贴即可）
+
+:: 4. 启动后端（终端1）
+cd server
+node server.js
+:: 看到 "AIHub服务器启动成功，监听端口: 3007" = 成功
+
+:: 5. 启动前端（终端2）
+cd client
+npx vite --port 3005
+:: 看到 "http://localhost:3005/" = 成功
+
+:: 6. 浏览器打开 http://localhost:3005
+
+================================
+如果只在内网用，第5步换成：
+  cd client && npx vite --port 3005 --host 0.0.0.0
+这样局域网其他电脑也能用 http://新电脑IP:3005 访问

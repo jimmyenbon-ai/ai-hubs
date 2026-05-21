@@ -15,6 +15,7 @@
   --bg-panel: #1a1a2e;
   --bg-card: #1e1e32;
   --bg-hover: #252540;
+  --bg-input: #12121f;
   --primary-color: #6c5ce7;
   --text-primary: #e8e8f0;
   --primary-hover: #5a4bd1;
@@ -53,6 +54,7 @@
   --bg-panel: #ffffff;
   --bg-card: #f5f6fa;
   --bg-hover: #ececf0;
+  --bg-input: #f0f1f5;
   --primary-color: #6c5ce7;
   --primary-hover: #5a4bd1;
   --text-primary: #1a1a2e;
@@ -78,6 +80,7 @@
   --bg-panel: #1f2937;
   --bg-card: #283548;
   --bg-hover: #374151;
+  --bg-input: #0d1018;
   --primary-color: #6366f1;
   --text-primary: #f3f4f6;
   --primary-hover: #4f46e5;
@@ -102,6 +105,7 @@
   --bg-panel: #112240;
   --bg-card: #1a3456;
   --bg-hover: #1e4070;
+  --bg-input: #0a1628;
   --primary-color: #60a5fa;
   --text-primary: #e0eaff;
   --primary-hover: #3b82f6;
@@ -3678,7 +3682,7 @@ code {
    系统设置面板
    ======================== */
 .settings-panel {
-  max-width: 640px;
+  max-width: 720px;
   margin: 0 auto;
   padding: 20px 0;
 }
@@ -3743,6 +3747,36 @@ code {
   color: var(--text-main);
   font-size: 14px;
   font-family: inherit;
+}
+.settings-input-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.settings-input-row .settings-input {
+  flex: 1;
+  min-width: 0;
+  font-family: 'Consolas', 'Menlo', 'Monaco', monospace;
+  font-size: 13px;
+}
+.settings-icon-btn {
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-dark);
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+}
+.settings-icon-btn:hover {
+  color: var(--text-main);
+  border-color: var(--primary-color);
+  background: var(--bg-hover);
 }
 .settings-save-msg {
   text-align: center;
