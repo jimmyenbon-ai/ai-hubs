@@ -6,7 +6,7 @@ const { deductPoints, confirmDeduct } = require('../utils/pointsService')
 const { appConfig } = require('../utils/appConfig')
 const logger = require('../utils/logger')
 const cache = require('../utils/cache')
-const { saveImage: saveImageLocal } = require('../utils/localStorage')
+const { saveImage: saveImageLocal, localPathToUrl } = require('../utils/localStorage')
 
 // GRSai 支持的模型列表（用于判断是否走 GRSai）
 const GRSAI_MODELS = [
@@ -166,12 +166,20 @@ async function handleGenerate(req, res, next) {
       throw err
     }
 
+    // 先下载到本地永久保存（避免远程 URL 过期后图片裂开）
+    const localPath = await saveImageLocal(imageUrl, {
+      model: selectedModel,
+      provider: apiProvider,
+      prompt: originalPrompt,
+    })
+    const displayUrl = localPathToUrl(localPath) || imageUrl
+
     const record = await Generation.create({
       originalPrompt,
       apiPrompt,
       aspectRatio,
       imageSize: imageSize || null,
-      resultImageUrl: imageUrl,
+      resultImageUrl: displayUrl,
       referenceImages: refs,
       apiProvider,
       modelName: selectedModel,
@@ -181,14 +189,6 @@ async function handleGenerate(req, res, next) {
 
     // 生成成功：确认积分消耗
     await confirmDeduct(beforeBalance, pointsCost, `图片自由生成|模型:${selectedModel}`)
-
-    // 本地存档（不阻塞响应）
-    saveImageLocal(imageUrl, {
-      id: record.id,
-      model: selectedModel,
-      provider: apiProvider,
-      prompt: originalPrompt,
-    })
 
     // 清除历史记录缓存
     const allKeys = cache.keys ? cache.keys() : []
@@ -202,7 +202,7 @@ async function handleGenerate(req, res, next) {
       message: `生成成功，余额充足`,
       data: {
         id: record.id,
-        imageUrl,
+        imageUrl: displayUrl,
         model: selectedModel,
         provider: apiProvider,
         pointsCost,

@@ -1440,16 +1440,8 @@ async function handleImageGenerate(node, inputs, context) {
 
     const data = await response.json();
     if (data.success) {
-      const generatedUrl = data.data?.imageUrl;
-      // 本地存档（不阻塞流程）
-      if (generatedUrl) {
-        saveImageLocal(generatedUrl, {
-          model,
-          provider: 'grsai',
-          prompt: userPrompt,
-        });
-      }
-      return { imageUrl: generatedUrl, model, resolution };
+      // generateController 已自动保存到本地并返回本地 URL
+      return { imageUrl: data.data?.imageUrl, model, resolution };
     } else {
       return { imageUrl: null, error: data.message };
     }

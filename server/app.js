@@ -57,6 +57,9 @@ app.use('/api', generalLimiter);
 const uploadDir = process.env.UPLOAD_DIR || 'uploads';
 app.use('/uploads', express.static(path.join(__dirname, uploadDir)));
 
+// 本地存档目录（AI 生成内容永久保存，避免远程 URL 过期）
+app.use('/local_storage', express.static(path.join(__dirname, 'local_storage')));
+
 // API routes
 app.use('/api/upload', uploadRoutes);
 app.use('/api/generate', generateRoutes);

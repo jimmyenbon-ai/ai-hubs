@@ -17,6 +17,17 @@ const logger = require('./logger');
 
 const ROOT = path.join(__dirname, '..', 'local_storage');
 
+/** 将本地绝对路径转为可访问的 URL（/local_storage/...） */
+function localPathToUrl(filePath) {
+  if (!filePath) return null;
+  const normalized = filePath.replace(/\\/g, '/');
+  const rootNormalized = ROOT.replace(/\\/g, '/');
+  const relative = normalized.startsWith(rootNormalized)
+    ? normalized.slice(rootNormalized.length)
+    : '/' + path.basename(filePath);
+  return '/local_storage' + (relative.startsWith('/') ? relative : '/' + relative);
+}
+
 function dateDir() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -195,4 +206,4 @@ async function saveAudio(audioUrl, meta = {}) {
   }
 }
 
-module.exports = { saveImage, saveVideo, saveText, saveAudio };
+module.exports = { saveImage, saveVideo, saveText, saveAudio, localPathToUrl };
