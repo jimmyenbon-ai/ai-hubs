@@ -366,6 +366,17 @@ const KnowledgeBase = {
     await enqueuePersist();
     return 1;
   },
+
+  async destroyMany(ids) {
+    await ensureLoaded();
+    if (!Array.isArray(ids) || ids.length === 0) return 0;
+    const idSet = new Set(ids);
+    const before = memoryStore.knowledge.length;
+    memoryStore.knowledge = memoryStore.knowledge.filter(k => !idSet.has(k.id));
+    const removed = before - memoryStore.knowledge.length;
+    if (removed > 0) await enqueuePersist();
+    return removed;
+  },
 };
 
 // 初始化数据库（兼容 app.js）

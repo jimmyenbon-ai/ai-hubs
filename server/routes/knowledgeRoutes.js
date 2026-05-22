@@ -236,6 +236,20 @@ router.post('/move', async (req, res) => {
   }
 });
 
+// 批量删除知识条目
+router.post('/batch-delete', async (req, res) => {
+  try {
+    const { ids } = req.body;
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ success: false, message: '请提供要删除的知识条目ID列表' });
+    }
+    const count = await KnowledgeBase.destroyMany(ids);
+    res.json({ success: true, data: { count }, message: `成功删除 ${count} 条知识` });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
 // 获取所有知识（支持文件夹过滤）
 router.get('/', async (req, res) => {
   try {

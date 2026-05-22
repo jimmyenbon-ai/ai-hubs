@@ -1259,10 +1259,17 @@ function TextGenerateFields({ selectedNode, updateNodeData }) {
 }
 
 function ImageGenerateFields({ selectedNode, updateNodeData }) {
+  const model = selectedNode.data.model || 'gpt-image-2-vip';
+  const isGptVip = model === 'gpt-image-2-vip';
+  const isNanoBanana = model.startsWith('nano-banana');
+  const supports4K = isGptVip || model === 'nano-banana-2-4k-cl' || model === 'nano-banana-pro-4k-vip';
+  const supports2K = supports4K || model === 'nano-banana-2-cl' || model === 'nano-banana-pro-cl' ||
+    model === 'nano-banana-pro-vip' || model === 'nano-banana-2' || model === 'nano-banana-pro';
+
   return (
     <>
       <div className="section-label" style={{ marginTop: 12 }}>模型</div>
-      <select className="input-field" value={selectedNode.data.model || 'gpt-image-2-vip'}
+      <select className="input-field" value={model}
         onChange={(e) => updateNodeData(selectedNode.id, { model: e.target.value })}>
         <option value="gpt-image-2">GPT-Image 2</option>
         <option value="gpt-image-2-vip">GPT-Image 2 VIP</option>
@@ -1277,21 +1284,13 @@ function ImageGenerateFields({ selectedNode, updateNodeData }) {
         <option value="nano-banana-pro-4k-vip">Nano Banana Pro 4K VIP</option>
       </select>
 
-      {(selectedNode.data.model === 'gpt-image-2-vip' || selectedNode.data.model?.startsWith('nano-banana-pro') ||
-        selectedNode.data.model === 'nano-banana-2' || selectedNode.data.model?.includes('vip') ||
-        selectedNode.data.model === 'nano-banana-2-4k-cl') && (
-        <>
-          <div className="section-label" style={{ marginTop: 12 }}>分辨率</div>
-          <select className="input-field" value={selectedNode.data.resolution || '1K'}
-            onChange={(e) => updateNodeData(selectedNode.id, { resolution: e.target.value })}>
-            <option value="1K">1K</option>
-            <option value="2K">2K</option>
-            {(selectedNode.data.model === 'gpt-image-2-vip' || selectedNode.data.model === 'nano-banana-pro-4k-vip') && (
-              <option value="4K">4K</option>
-            )}
-          </select>
-        </>
-      )}
+      <div className="section-label" style={{ marginTop: 12 }}>分辨率</div>
+      <select className="input-field" value={selectedNode.data.resolution || '1K'}
+        onChange={(e) => updateNodeData(selectedNode.id, { resolution: e.target.value })}>
+        <option value="1K">1K</option>
+        {supports2K && <option value="2K">2K</option>}
+        {supports4K && <option value="4K">4K</option>}
+      </select>
 
       <div className="section-label" style={{ marginTop: 12 }}>比例</div>
       <select className="input-field" value={selectedNode.data.aspectRatio || '1:1'}

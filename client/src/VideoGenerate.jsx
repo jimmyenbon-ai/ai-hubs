@@ -52,6 +52,14 @@ function VideoGenerate() {
   const [uploadedFiles, setUploadedFiles] = useState([])
   const [loadingUpload, setLoadingUpload] = useState(false)
   const uploadInputRef = useRef(null)
+
+  // 首帧/尾帧（图生视频模式）
+  const [firstFrameUrl, setFirstFrameUrl] = useState('')
+  const [lastFrameUrl, setLastFrameUrl] = useState('')
+  const [firstFrameName, setFirstFrameName] = useState('')
+  const [lastFrameName, setLastFrameName] = useState('')
+  const firstFrameInputRef = useRef(null)
+  const lastFrameInputRef = useRef(null)
   const promptRef = useRef(null)
 
   const [error, setError] = useState('')
@@ -388,6 +396,42 @@ function VideoGenerate() {
     setUploadedFiles((prev) => prev.filter((f) => f.id !== fileId))
   }
 
+  // 上传首帧/尾帧图片（单文件，存储URL）
+  async function handleFrameUpload(file, target) {
+    if (!file) return
+    setLoadingUpload(true)
+    setError('')
+    const formData = new FormData()
+    formData.append('files', file)
+    try {
+      const resp = await fetch('/api/upload', { method: 'POST', body: formData })
+      const data = await resp.json()
+      if (data.success && data.files?.length > 0) {
+        const url = data.files[0].url
+        const name = data.files[0].filename || file.name
+        if (target === 'first') {
+          setFirstFrameUrl(url)
+          setFirstFrameName(name)
+        } else {
+          setLastFrameUrl(url)
+          setLastFrameName(name)
+        }
+      } else {
+        setError(data.message || '上传失败')
+      }
+    } catch (err) {
+      setError('上传失败: ' + err.message)
+    } finally {
+      setLoadingUpload(false)
+    }
+  }
+
+  function handleFrameChange(e, target) {
+    const file = e.target.files?.[0]
+    if (file) handleFrameUpload(file, target)
+    e.target.value = ''
+  }
+
   // 处理提示词中的 @ 引用
   function handlePromptChange(e) {
     const value = e.target.value
@@ -628,6 +672,12 @@ function VideoGenerate() {
         if (prompt.trim()) {
           body.content.push({ type: 'text', text: prompt })
         }
+        if (firstFrameUrl) {
+          body.firstFrameImage = firstFrameUrl
+        }
+        if (lastFrameUrl) {
+          body.lastFrameImage = lastFrameUrl
+        }
       }
 
       const resp = await fetch('/api/video/generate', {
@@ -686,6 +736,10 @@ function VideoGenerate() {
 
   function resetFiles() {
     setUploadedFiles([])
+    setFirstFrameUrl('')
+    setFirstFrameName('')
+    setLastFrameUrl('')
+    setLastFrameName('')
     setPrompt('')
   }
 
@@ -763,11 +817,138 @@ function VideoGenerate() {
           </button>
         </div>
 
-        {/* 统一上传区域 */}
-        {(isImageMode || isMultimodalMode) && (
+        {/* 图生视频-首帧：上传首帧图 */}
+        {generationMode === GENERATION_MODE.IMAGE_TO_VIDEO_FIRST && (
+          <>
+            <div className="section-label">首帧图片</div>
+            <div
+              className="upload-area"
+              onClick={() => firstFrameInputRef.current?.click()}
+              onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add('drag-over') }}
+              onDragLeave={(e) => { e.preventDefault(); e.currentTarget.classList.remove('drag-over') }}
+              onDrop={(e) => {
+                e.preventDefault()
+                e.currentTarget.classList.remove('drag-over')
+                const file = e.dataTransfer.files?.[0]
+                if (file && file.type.startsWith('image/')) handleFrameUpload(file, 'first')
+              }}
+            >
+              {firstFrameUrl ? (
+                <img src={firstFrameUrl} alt="首帧" style={{ maxWidth: '100%', maxHeight: 120, borderRadius: 8 }} />
+              ) : (
+                <>
+                  点击或拖拽上传首帧图片
+                  <br />
+                  <span className="upload-tip">支持 PNG、JPG，10MB 以内</span>
+                </>
+              )}
+              {loadingUpload && <div className="upload-status">正在上传...</div>}
+              <input
+                ref={firstFrameInputRef}
+                type="file"
+                accept="image/*"
+                onChange={(e) => handleFrameChange(e, 'first')}
+                style={{ display: 'none' }}
+              />
+            </div>
+            {firstFrameName && (
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: -6, marginBottom: 8 }}>
+                已上传: {firstFrameName}
+                <button type="button" onClick={() => { setFirstFrameUrl(''); setFirstFrameName(''); }}
+                  style={{ marginLeft: 8, background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: 11 }}>移除</button>
+              </div>
+            )}
+          </>
+        )}
+
+        {/* 图生视频-首尾帧：上传首帧 + 尾帧 */}
+        {generationMode === GENERATION_MODE.IMAGE_TO_VIDEO_FIRST_LAST && (
+          <>
+            <div className="section-label">首帧图片</div>
+            <div
+              className="upload-area"
+              onClick={() => firstFrameInputRef.current?.click()}
+              onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add('drag-over') }}
+              onDragLeave={(e) => { e.preventDefault(); e.currentTarget.classList.remove('drag-over') }}
+              onDrop={(e) => {
+                e.preventDefault()
+                e.currentTarget.classList.remove('drag-over')
+                const file = e.dataTransfer.files?.[0]
+                if (file && file.type.startsWith('image/')) handleFrameUpload(file, 'first')
+              }}
+            >
+              {firstFrameUrl ? (
+                <img src={firstFrameUrl} alt="首帧" style={{ maxWidth: '100%', maxHeight: 120, borderRadius: 8 }} />
+              ) : (
+                <>
+                  点击或拖拽上传首帧图片
+                  <br />
+                  <span className="upload-tip">支持 PNG、JPG，10MB 以内</span>
+                </>
+              )}
+              {loadingUpload && <div className="upload-status">正在上传...</div>}
+              <input
+                ref={firstFrameInputRef}
+                type="file"
+                accept="image/*"
+                onChange={(e) => handleFrameChange(e, 'first')}
+                style={{ display: 'none' }}
+              />
+            </div>
+            {firstFrameName && (
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: -6, marginBottom: 8 }}>
+                已上传: {firstFrameName}
+                <button type="button" onClick={() => { setFirstFrameUrl(''); setFirstFrameName(''); }}
+                  style={{ marginLeft: 8, background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: 11 }}>移除</button>
+              </div>
+            )}
+
+            <div className="section-label" style={{ marginTop: 8 }}>尾帧图片</div>
+            <div
+              className="upload-area"
+              onClick={() => lastFrameInputRef.current?.click()}
+              onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add('drag-over') }}
+              onDragLeave={(e) => { e.preventDefault(); e.currentTarget.classList.remove('drag-over') }}
+              onDrop={(e) => {
+                e.preventDefault()
+                e.currentTarget.classList.remove('drag-over')
+                const file = e.dataTransfer.files?.[0]
+                if (file && file.type.startsWith('image/')) handleFrameUpload(file, 'last')
+              }}
+            >
+              {lastFrameUrl ? (
+                <img src={lastFrameUrl} alt="尾帧" style={{ maxWidth: '100%', maxHeight: 120, borderRadius: 8 }} />
+              ) : (
+                <>
+                  点击或拖拽上传尾帧图片
+                  <br />
+                  <span className="upload-tip">支持 PNG、JPG，10MB 以内</span>
+                </>
+              )}
+              {loadingUpload && <div className="upload-status">正在上传...</div>}
+              <input
+                ref={lastFrameInputRef}
+                type="file"
+                accept="image/*"
+                onChange={(e) => handleFrameChange(e, 'last')}
+                style={{ display: 'none' }}
+              />
+            </div>
+            {lastFrameName && (
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: -6, marginBottom: 8 }}>
+                已上传: {lastFrameName}
+                <button type="button" onClick={() => { setLastFrameUrl(''); setLastFrameName(''); }}
+                  style={{ marginLeft: 8, background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: 11 }}>移除</button>
+              </div>
+            )}
+          </>
+        )}
+
+        {/* 多模态模式：统一上传区 */}
+        {generationMode === GENERATION_MODE.MULTIMODAL_REFERENCE && (
           <>
             <div className="section-label">
-              上传素材 {isMultimodalMode && <span style={{ color: '#a4b0be', fontWeight: 'normal' }}>（图片/视频/音频，在提示词中用 @1 @2 引用）</span>}
+              上传素材 <span style={{ color: '#a4b0be', fontWeight: 'normal' }}>（图片/视频/音频，在提示词中用 @1 @2 引用）</span>
             </div>
             <div
               className="upload-area"

@@ -186,6 +186,28 @@ export default function KnowledgePanel({ onBack }) {
     }
   }
 
+  async function handleBatchDelete() {
+    if (selectedItems.size === 0) return;
+    if (!confirm(`确定要删除选中的 ${selectedItems.size} 条知识吗？此操作不可恢复。`)) return;
+    try {
+      const resp = await fetch('/api/knowledge/batch-delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: [...selectedItems] }),
+      });
+      const data = await resp.json();
+      if (data.success) {
+        setSelectedItems(new Set());
+        fetchItems();
+        fetchFolders();
+      } else {
+        alert(data.message);
+      }
+    } catch (err) {
+      alert('批量删除失败: ' + err.message);
+    }
+  }
+
   function handleSelectFolder(folder) {
     setFilterFolder(folder);
     setSearchQuery('');
@@ -368,6 +390,12 @@ export default function KnowledgePanel({ onBack }) {
               <option key={f.path} value={f.path}>{f.icon} {f.name}</option>
             ))}
           </select>
+          <button
+            onClick={handleBatchDelete}
+            style={{ background: 'transparent', border: '1px solid #ef4444', color: '#ef4444', cursor: 'pointer', fontSize: 12, borderRadius: 4, padding: '4px 12px' }}
+          >
+            批量删除
+          </button>
           <button
             onClick={() => setSelectedItems(new Set())}
             style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: 12 }}
