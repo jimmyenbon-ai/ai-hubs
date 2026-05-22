@@ -387,6 +387,11 @@ async function handleCancelVideoTask(req, res, next) {
  */
 async function handleVideoHistory(req, res, next) {
   try {
+    // 禁用缓存，确保前端总是获取最新状态
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+    res.set('Pragma', 'no-cache');
+    res.set('Expires', '0');
+
     const {
       page: qPage,
       pageSize: qPageSize,

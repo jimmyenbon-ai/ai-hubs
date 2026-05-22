@@ -153,6 +153,10 @@ function VideoGenerate() {
         .filter((id) => {
           const deadlineAt = pollDeadlineRef.current[id]
           if (deadlineAt && now > deadlineAt) {
+            const handlers = pollHandlersRef.current[id] || []
+            handlers.filter(h => h.type === 'failed').forEach((h) => {
+              try { h.fn({ taskId: id, result: { status: 'failed', error: { message: '轮询超时' } }, failed: true }) } catch (_) { /* ignore */ }
+            })
             pollQueueRef.current.delete(id)
             delete pollHandlersRef.current[id]
             delete pollDeadlineRef.current[id]
@@ -173,9 +177,9 @@ function VideoGenerate() {
             const result = await queryVideoTaskOnce(taskId)
             if (result.status === 'succeeded' && result.videoUrl) {
               const handlers = pollHandlersRef.current[taskId] || []
-              handlers.forEach((fn) => {
+              handlers.filter(h => h.type === 'ready').forEach((h) => {
                 try {
-                  fn({ taskId, result })
+                  h.fn({ taskId, result })
                 } catch (_) {
                   // ignore
                 }
@@ -186,9 +190,9 @@ function VideoGenerate() {
               pollBackoffMsRef.current = 5000
             } else if (result.status === 'failed') {
               const handlers = pollHandlersRef.current[taskId] || []
-              handlers.forEach((fn) => {
+              handlers.filter(h => h.type === 'failed').forEach((h) => {
                 try {
-                  fn({ taskId, result, failed: true })
+                  h.fn({ taskId, result, failed: true })
                 } catch (_) {
                   // ignore
                 }
@@ -201,6 +205,8 @@ function VideoGenerate() {
             const msg = err?.message || ''
             if (/429|Too Many Requests/i.test(msg)) {
               pollBackoffMsRef.current = Math.min(60000, (pollBackoffMsRef.current || 5000) * 2)
+            } else {
+              console.error('[视频轮询] 查询失败:', taskId, msg)
             }
           } finally {
             pollInFlightRef.current.delete(taskId)
@@ -218,8 +224,8 @@ function VideoGenerate() {
     pollQueueRef.current.add(taskId)
     pollDeadlineRef.current[taskId] = deadlineAt
     if (!pollHandlersRef.current[taskId]) pollHandlersRef.current[taskId] = []
-    if (typeof onReady === 'function') pollHandlersRef.current[taskId].push(onReady)
-    if (typeof onFailed === 'function') pollHandlersRef.current[taskId].push((data) => onFailed(data))
+    if (typeof onReady === 'function') pollHandlersRef.current[taskId].push({ type: 'ready', fn: onReady })
+    if (typeof onFailed === 'function') pollHandlersRef.current[taskId].push({ type: 'failed', fn: (data) => onFailed(data) })
 
     schedulePollTick()
   }
