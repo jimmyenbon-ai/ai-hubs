@@ -12,9 +12,7 @@ async function handleUpload(req, res, next) {
       throw err;
     }
 
-    const baseUrl =
-      process.env.PUBLIC_BASE_URL ||
-      `${req.protocol}://${req.get('host')}`;
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
 
     const result = files.map((file, index) => {
       const relativePath = path
