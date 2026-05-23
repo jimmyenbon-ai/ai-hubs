@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const workflowExecutor = require('../services/workflowExecutor');
+const { WorkflowExecutor } = require('../services/workflowExecutor');
 const { WorkflowTemplate, WorkflowRun } = require('../models/workflowModel');
 
 // 获取所有工作流模板
@@ -88,7 +88,7 @@ router.post('/run', async (req, res) => {
     }
 
     // 异步执行，不阻塞响应
-    workflowExecutor.execute(templateId, inputs || {}).catch(err => {
+    new WorkflowExecutor().execute(templateId, inputs || {}).catch(err => {
       console.error('[Workflow] Execute error:', err);
     });
 
@@ -107,7 +107,7 @@ router.post('/run/sync', async (req, res) => {
       return res.status(400).json({ success: false, message: 'templateId is required' });
     }
 
-    const result = await workflowExecutor.execute(templateId, inputs || {});
+    const result = await new WorkflowExecutor().execute(templateId, inputs || {});
 
     if (result.success) {
       res.json({ success: true, data: result });

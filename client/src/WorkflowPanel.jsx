@@ -39,6 +39,7 @@ function WorkflowNode({ data, type, selected, dragging }) {
   return (
     <div style={{
       background: config.color,
+      border: 'none',
       borderRadius: 8,
       padding: '10px 14px',
       minWidth: 140,
@@ -66,6 +67,7 @@ function ConditionNode({ data, selected }) {
   return (
     <div style={{
       background: '#f97316',
+      border: 'none',
       borderRadius: 8,
       padding: '10px 14px',
       minWidth: 140,
@@ -95,6 +97,7 @@ function LoopNode({ data, selected }) {
   return (
     <div style={{
       background: '#ec4899',
+      border: 'none',
       borderRadius: 8,
       padding: '10px 14px',
       minWidth: 140,

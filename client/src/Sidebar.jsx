@@ -6,7 +6,7 @@ const CONTENT_TYPES = [
   { value: 'music', label: '音乐' },
 ]
 
-function Sidebar({ currentGroup, currentMode, templates = [], onNavigate, onCreateTemplate, onManageTemplates, onOpenPromptLibrary, onOpenWorkflow, onOpenSettings }) {
+function Sidebar({ currentGroup, currentMode, templates = [], onNavigate, onCreateTemplate, onManageTemplates, onOpenPromptLibrary, onOpenWorkflow, onOpenSettings, onOpenTutorial }) {
   const [expandedGroups, setExpandedGroups] = useState({
     image: true,
     video: false,
@@ -205,6 +205,24 @@ function Sidebar({ currentGroup, currentMode, templates = [], onNavigate, onCrea
             </svg>
           </span>
           <span className="nav-group-label">模板库</span>
+        </div>
+      </div>
+
+      {/* 教程入口 */}
+      <div className="nav-library-entry" style={{ padding: '8px 10px' }}>
+        <div
+          className="nav-group-header"
+          onClick={onOpenTutorial}
+          style={{ padding: '10px 12px', borderRadius: 8, cursor: 'pointer', opacity: 0.7 }}
+          title="AI 使用教程"
+        >
+          <span className="nav-group-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/>
+              <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>
+            </svg>
+          </span>
+          <span className="nav-group-label">教程</span>
         </div>
       </div>
 

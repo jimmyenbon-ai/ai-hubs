@@ -1608,4 +1608,4 @@ async function handleOutput(node, inputs, context) {
   };
 }
 
-module.exports = new WorkflowExecutor();
+module.exports = { WorkflowExecutor };

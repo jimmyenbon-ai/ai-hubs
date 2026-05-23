@@ -229,6 +229,10 @@ function App() {
             }
             setSidebarOpen(false)
           }}
+          onOpenTutorial={() => {
+            window.open('/AI文档.html', '_blank')
+            setSidebarOpen(false)
+          }}
         />
       </div>
 
