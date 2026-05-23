@@ -16,6 +16,10 @@ export default defineConfig({
         target: 'http://localhost:3007',
         changeOrigin: true,
       },
+      '/local_storage': {
+        target: 'http://localhost:3007',
+        changeOrigin: true,
+      },
       '/ws': {
         target: 'ws://localhost:3007',
         ws: true,
