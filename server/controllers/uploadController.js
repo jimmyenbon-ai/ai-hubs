@@ -12,8 +12,6 @@ async function handleUpload(req, res, next) {
       throw err;
     }
 
-    const baseUrl = `${req.protocol}://${req.get('host')}`;
-
     const result = files.map((file, index) => {
       const relativePath = path
         .join('uploads', path.basename(file.path))
@@ -21,7 +19,7 @@ async function handleUpload(req, res, next) {
 
       return {
         id: index + 1, // per-request index
-        url: `${baseUrl}/${relativePath}`,
+        url: `/${relativePath}`, // 相对路径，浏览器自动基于当前 origin 拼接
         filename: file.filename,
       };
     });
