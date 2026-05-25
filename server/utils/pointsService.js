@@ -24,7 +24,7 @@ let localRecord = {
 /**
  * 使用官方 getAPIKeyCredits 接口获取积分余额
  * 官方接口：POST /client/openapi/getAPIKeyCredits
- * 请求格式：{ "apiKey": "sk-xxxxxx" }
+ * 请求格式：{ "apikey": "sk-xxxxxx" }
  * 响应格式：{ "code": 0, "data": { "credits": 10000 }, "msg": "success" }
  */
 async function fetchBalanceFromGrsai() {
@@ -44,7 +44,7 @@ async function fetchBalanceFromGrsai() {
   try {
     const resp = await axios.post(
       `${getApiHost()}/client/openapi/getAPIKeyCredits`,
-      { apiKey: getApiKey() },
+      { apikey: getApiKey() },
       {
         timeout: 15000,
         headers: {
