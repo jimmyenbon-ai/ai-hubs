@@ -219,36 +219,115 @@ class HistoryManager {
 }
 
 // ============ 结果展示组件 ============
+function cleanMarkdown(text) {
+  if (!text || typeof text !== 'string') return text;
+  return text
+    .replace(/\*\*(.+?)\*\*/g, '$1')  // **粗体** → 粗体
+    .replace(/__([^_]+)__/g, '$1')    // __粗体__ → 粗体
+    .replace(/\*([^*]+)\*/g, '$1')    // *斜体* → 斜体
+    .replace(/_([^_]+)_/g, '$1');     // _斜体_ → 斜体
+}
+
+function downloadTextFile(content, filename) {
+  const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function downloadMediaFile(url, filename) {
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.target = '_blank';
+  a.rel = 'noopener noreferrer';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+}
+
 function ResultBlock({ label, content }) {
   const [copied, setCopied] = useState(false);
+  const cleaned = cleanMarkdown(content);
   const handleCopy = () => {
-    navigator.clipboard.writeText(content).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); });
+    navigator.clipboard.writeText(cleaned).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); });
+  };
+  const handleDownload = () => {
+    const safeLabel = label.replace(/[^\w一-鿿]/g, '_').slice(0, 20);
+    downloadTextFile(cleaned, `AI-Hub_${safeLabel}_${new Date().toISOString().slice(0, 10)}.txt`);
   };
   return (
-    <div style={{ marginBottom: 12 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-        <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{label}</div>
-        <button onClick={handleCopy} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, color: copied ? '#10b981' : 'var(--text-secondary)' }}>
-          {copied ? '✅ 已复制' : '📋 复制'}
-        </button>
+    <div style={{ marginBottom: 14 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+        <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>{label}</span>
+        <div style={{ display: 'flex', gap: 6 }}>
+          <button
+            onClick={handleCopy}
+            style={{
+              background: 'transparent', border: '1px solid var(--border-color)', borderRadius: 4,
+              cursor: 'pointer', fontSize: 11, color: copied ? '#10b981' : 'var(--text-secondary)',
+              padding: '2px 8px', display: 'flex', alignItems: 'center', gap: 4,
+            }}
+          >
+            {copied ? '✅ 已复制' : '📋 复制'}
+          </button>
+          <button
+            onClick={handleDownload}
+            style={{
+              background: 'transparent', border: '1px solid var(--border-color)', borderRadius: 4,
+              cursor: 'pointer', fontSize: 11, color: 'var(--text-secondary)',
+              padding: '2px 8px', display: 'flex', alignItems: 'center', gap: 4,
+            }}
+          >
+            📥 TXT
+          </button>
+        </div>
       </div>
-      <div style={{ background: 'var(--bg-tertiary)', padding: 10, borderRadius: 6, fontSize: 13, whiteSpace: 'pre-wrap', maxHeight: 100, overflowY: 'auto' }}>
-        {content}
+      <div style={{
+        background: 'var(--bg-tertiary)', padding: '10px 12px', borderRadius: 6,
+        fontSize: 13, whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+        maxHeight: 300, overflowY: 'auto', lineHeight: 1.6,
+        color: 'var(--text-primary)',
+      }}>
+        {cleaned}
       </div>
     </div>
   );
 }
 
 function ResultMedia({ label, type, url }) {
+  const handleDownload = () => {
+    const ext = type === 'image' ? 'png' : type === 'video' ? 'mp4' : 'mp3';
+    downloadMediaFile(url, `AI-Hub_${label.replace(/[^\w一-鿿]/g, '_').slice(0, 20)}_${Date.now()}.${ext}`);
+  };
   return (
-    <div style={{ marginBottom: 12 }}>
-      <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 4 }}>{label}</div>
+    <div style={{ marginBottom: 14 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+        <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>{label}</span>
+        <button
+          onClick={handleDownload}
+          style={{
+            background: 'transparent', border: '1px solid var(--border-color)', borderRadius: 4,
+            cursor: 'pointer', fontSize: 11, color: 'var(--text-secondary)',
+            padding: '2px 8px', display: 'flex', alignItems: 'center', gap: 4,
+          }}
+        >
+          ⬇ 下载
+        </button>
+      </div>
       {type === 'image' && (
-        <img src={url} alt="Generated" style={{ maxWidth: '100%', maxHeight: 180, borderRadius: 8, cursor: 'pointer' }}
+        <img src={url} alt="Generated"
+          style={{ width: '100%', maxHeight: 240, borderRadius: 8, cursor: 'pointer', objectFit: 'contain', background: '#000' }}
           onClick={() => window.open(url, '_blank')} />
       )}
       {type === 'video' && (
-        <video src={url} controls style={{ maxWidth: '100%', maxHeight: 180, borderRadius: 8, background: '#000', display: 'block' }} />
+        <video src={url} controls
+          style={{ width: '100%', maxHeight: 220, borderRadius: 8, background: '#000', display: 'block' }} />
       )}
       {type === 'audio' && (
         <audio src={url} controls style={{ width: '100%' }} />
@@ -929,7 +1008,7 @@ export default function WorkflowPanel({ onBack, currentRole }) {
       <div style={{ width: '1100px', minWidth: 0, position: 'relative', overflow: 'hidden' }}>
         {/* 想法输入区 */}
         <div style={{
-          position: 'absolute', top: 12, left: 12, right: selectedNode ? 276 : 12,
+          position: 'absolute', top: 12, left: 12, right: (running || runResult) ? 352 : selectedNode ? 276 : 12,
           zIndex: 10, background: 'var(--bg-secondary)', borderRadius: 10, padding: 12,
           boxShadow: '0 4px 12px rgba(0,0,0,0.25)', transition: 'right 0.2s',
         }}>
@@ -994,13 +1073,12 @@ export default function WorkflowPanel({ onBack, currentRole }) {
               </label>
             </div>
           </div>
-          {renderStepProgress()}
         </div>
 
         {/* 环检测警告 */}
         {cycleError && (
           <div style={{
-            position: 'absolute', top: 140, left: 12, right: selectedNode ? 276 : 12,
+            position: 'absolute', top: 140, left: 12, right: (running || runResult) ? 352 : selectedNode ? 276 : 12,
             zIndex: 20, background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8,
             padding: '8px 14px', color: '#dc2626', fontSize: 13,
             boxShadow: '0 4px 12px rgba(0,0,0,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -1013,7 +1091,7 @@ export default function WorkflowPanel({ onBack, currentRole }) {
         {/* 模板名称 + 角色标签 */}
         {selectedTemplate && (
           <div style={{
-            position: 'absolute', top: 12, right: selectedNode ? 276 : 12, zIndex: 10,
+            position: 'absolute', top: 12, right: (running || runResult) ? 352 : selectedNode ? 276 : 12, zIndex: 10,
             background: 'var(--bg-secondary)', padding: '6px 12px', borderRadius: 6,
             fontSize: 13, fontWeight: 500, boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
             display: 'flex', alignItems: 'center', gap: 8,
@@ -1032,70 +1110,6 @@ export default function WorkflowPanel({ onBack, currentRole }) {
               }}>{ROLE_LABELS[currentRole]}</span>
             )}
           </div>
-        )}
-
-        {/* 执行结果 */}
-        {runResult && (
-          <>
-            {/* 背景遮罩 */}
-            <div style={{
-              position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-              zIndex: 5, background: 'rgba(0,0,0,0.3)', borderRadius: 8,
-            }} onClick={() => setRunResult(null)} />
-            <div style={{
-              position: 'absolute', bottom: 12, left: 12, right: selectedNode ? 276 : 12,
-              zIndex: 10, background: '#1e1e1e', borderRadius: 10, padding: 14,
-              boxShadow: '0 4px 12px rgba(0,0,0,0.3)', maxHeight: 300, overflowY: 'auto',
-              transition: 'right 0.2s',
-              color: '#e0e0e0',
-            }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-              <span style={{ fontWeight: 600, fontSize: 14 }}>
-                {runResult.success ? '✅ 执行成功' : '❌ 执行失败'}
-              </span>
-              <button onClick={() => setRunResult(null)} style={{ background: 'transparent', border: 'none', fontSize: 18, cursor: 'pointer', color: 'var(--text-secondary)' }}>×</button>
-            </div>
-              {runResult.success ? (
-              <div>
-                {/* 调试：显示原始数据结构
-                <pre style={{fontSize:10,color:'#aaa',whiteSpace:'pre-wrap'}}>{JSON.stringify(runResult, null, 2)}</pre>
-                */}
-                {runResult.steps?.some(s => s.output?.error) && (
-                  <div style={{ marginBottom: 10, padding: '8px 12px', background: 'rgba(239,68,68,0.1)', border: '1px solid #fecaca', borderRadius: 6 }}>
-                    <div style={{ fontWeight: 600, fontSize: 13, color: '#ef4444', marginBottom: 4 }}>⚠️ 部分步骤出错</div>
-                    {runResult.steps.filter(s => s.output?.error).map((s, i) => (
-                      <div key={i} style={{ fontSize: 12, color: '#dc2626', marginBottom: 2 }}>
-                        · {s.nodeName || s.nodeType}: {s.output?.error}
-                      </div>
-                    ))}
-                  </div>
-                )}
-                {runResult.outputs?.styleAnalysis && (
-                  <ResultBlock label="🎨 风格分析" content={runResult.outputs.styleAnalysis.slice(0, 500) + (runResult.outputs.styleAnalysis.length > 500 ? '...' : '')} />
-                )}
-                {runResult.outputs?.prompt && <ResultBlock label="📝 提示词" content={runResult.outputs.prompt} />}
-                {(runResult.outputs?.copy || runResult.outputs?.text) && (
-                  <ResultBlock label="📄 文案" content={runResult.outputs.copy || runResult.outputs.text} />
-                )}
-                {runResult.outputs?.referenceImages?.length > 0 && (
-                  <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 6 }}>
-                    🖼️ 参考图: {runResult.outputs.referenceImages.length} 张
-                  </div>
-                )}
-                {runResult.outputs?.imageUrl && <ResultMedia label="🖼️ 图片" type="image" url={runResult.outputs.imageUrl} />}
-                {runResult.outputs?.videoUrl && <ResultMedia label="🎬 视频" type="video" url={runResult.outputs.videoUrl} />}
-                {runResult.outputs?.audioUrl && <ResultMedia label="🎵 音频" type="audio" url={runResult.outputs.audioUrl} />}
-                {!runResult.outputs?.prompt && !runResult.outputs?.copy && !runResult.outputs?.text && !runResult.outputs?.imageUrl && !runResult.outputs?.videoUrl && !runResult.outputs?.audioUrl && (
-                  <div style={{ color: '#f59e0b', fontSize: 12, marginTop: 4 }}>
-                    ⚠️ 执行完成但未捕获到输出（请检查上方错误信息，或检查 LLM 调用配置是否正确）
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div style={{ color: '#ef4444', fontSize: 13 }}>{runResult.error || runResult.message}</div>
-            )}
-          </div>
-          </>
         )}
 
         {/* ReactFlow 画布 */}
@@ -1135,8 +1149,131 @@ export default function WorkflowPanel({ onBack, currentRole }) {
         </ReactFlow>
       </div>
 
-      {/* 右侧属性面板 */}
-      {selectedNode && (
+      {/* 右侧面板：执行结果 或 节点属性 */}
+      {(running || runResult) ? (
+        <div style={{
+          width: 340,
+          background: 'var(--bg-secondary)',
+          borderLeft: '1px solid var(--border-color)',
+          overflowY: 'auto',
+          flexShrink: 0,
+          display: 'flex',
+          flexDirection: 'column',
+        }}>
+          {/* 头部 */}
+          <div style={{
+            padding: '12px 14px',
+            borderBottom: '1px solid var(--border-color)',
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+            flexShrink: 0,
+          }}>
+            <span style={{ fontWeight: 600, fontSize: 14 }}>
+              {running ? '⏳ 执行中...' : runResult?.success ? '✅ 执行成功' : '❌ 执行失败'}
+            </span>
+            {!running && (
+              <button
+                onClick={() => { setRunResult(null); setRunningSteps([]); }}
+                style={{ background: 'transparent', border: 'none', fontSize: 16, cursor: 'pointer', color: 'var(--text-secondary)' }}
+              >×</button>
+            )}
+          </div>
+
+          {/* 内容区 */}
+          <div style={{ padding: 14, flex: 1, overflowY: 'auto' }}>
+            {/* 执行中步骤 */}
+            {running && runningSteps.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 16 }}>
+                {runningSteps.map((s, i) => (
+                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
+                    <span style={{
+                      width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
+                      background: s.status === 'done' ? '#10b981' : s.status === 'error' ? '#ef4444' : '#3b82f6',
+                      animation: s.status === 'running' ? 'pulse 1s infinite' : 'none',
+                    }} />
+                    <span style={{ color: s.status === 'error' ? '#ef4444' : 'var(--text-primary)' }}>{s.label}</span>
+                    {s.duration && <span style={{ marginLeft: 'auto', color: 'var(--text-secondary)', fontSize: 11 }}>{s.duration}ms</span>}
+                  </div>
+                ))}
+              </div>
+            )}
+            {running && runningSteps.length === 0 && (
+              <div style={{ color: '#3b82f6', fontSize: 13, marginBottom: 16 }}>正在启动工作流...</div>
+            )}
+
+            {/* 已完成步骤摘要 */}
+            {!running && runResult?.steps?.length > 0 && (
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 8 }}>📋 执行步骤</div>
+                {runResult.steps.map((step, i) => {
+                  const icon = step.output?.error ? '❌' : '✅';
+                  const detail = step.output?.error
+                    ? step.output.error
+                    : step.output?.imageUrl ? `图片生成成功 ${step.output.resolution || ''}`
+                    : step.output?.videoUrl ? '视频生成成功'
+                    : step.output?.audioUrl ? '音频生成成功'
+                    : step.output?.referenceImages?.length > 0 ? `输出提示词 + ${step.output.referenceImages.length}张参考图`
+                    : step.output?.text ? cleanMarkdown(step.output.text).slice(0, 80) + (step.output.text.length > 80 ? '...' : '')
+                    : step.output?.styleAnalysis ? '设计风格分析完成'
+                    : step.output?.analysis ? '分析完成'
+                    : step.output?.knowledge?.length > 0 ? `检索到 ${step.output.knowledge.length} 条知识`
+                    : '完成';
+                  return (
+                    <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 12, marginBottom: 6 }}>
+                      <span style={{ width: 6, height: 6, borderRadius: '50%', flexShrink: 0, marginTop: 4, background: step.output?.error ? '#ef4444' : '#10b981' }} />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ color: 'var(--text-primary)', fontWeight: 500 }}>{icon} {getNodeStepLabel(step.nodeName, step.nodeType)}</div>
+                        {detail && <div style={{ color: 'var(--text-secondary)', marginTop: 2, fontSize: 11, wordBreak: 'break-all' }}>{detail}</div>}
+                      </div>
+                      <span style={{ marginLeft: 'auto', flexShrink: 0, fontSize: 11, color: 'var(--text-secondary)' }}>{step.duration}ms</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* 执行结果输出 */}
+            {!running && runResult && (
+              runResult.success ? (
+                <div>
+                  {runResult.steps?.some(s => s.output?.error) && (
+                    <div style={{ marginBottom: 12, padding: '10px 12px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 6 }}>
+                      <div style={{ fontWeight: 600, fontSize: 13, color: '#ef4444', marginBottom: 4 }}>⚠️ 部分步骤出错</div>
+                      {runResult.steps.filter(s => s.output?.error).map((s, i) => (
+                        <div key={i} style={{ fontSize: 12, color: '#dc2626', marginBottom: 2 }}>
+                          · {s.nodeName || s.nodeType}: {s.output?.error}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {runResult.outputs?.styleAnalysis && (
+                    <ResultBlock label="🎨 风格分析" content={runResult.outputs.styleAnalysis} />
+                  )}
+                  {runResult.outputs?.prompt && <ResultBlock label="📝 提示词" content={runResult.outputs.prompt} />}
+                  {(runResult.outputs?.copy || runResult.outputs?.text) && (
+                    <ResultBlock label="📄 文案" content={runResult.outputs.copy || runResult.outputs.text} />
+                  )}
+                  {runResult.outputs?.referenceImages?.length > 0 && (
+                    <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 8 }}>
+                      🖼️ 参考图: {runResult.outputs.referenceImages.length} 张
+                    </div>
+                  )}
+                  {runResult.outputs?.imageUrl && <ResultMedia label="🖼️ 图片" type="image" url={runResult.outputs.imageUrl} />}
+                  {runResult.outputs?.videoUrl && <ResultMedia label="🎬 视频" type="video" url={runResult.outputs.videoUrl} />}
+                  {runResult.outputs?.audioUrl && <ResultMedia label="🎵 音频" type="audio" url={runResult.outputs.audioUrl} />}
+                  {!runResult.outputs?.prompt && !runResult.outputs?.copy && !runResult.outputs?.text && !runResult.outputs?.imageUrl && !runResult.outputs?.videoUrl && !runResult.outputs?.audioUrl && (
+                    <div style={{ color: '#f59e0b', fontSize: 12, marginTop: 4 }}>
+                      ⚠️ 执行完成但未捕获到输出（请检查上方错误信息，或检查 LLM 调用配置是否正确）
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div style={{ color: '#ef4444', fontSize: 13, whiteSpace: 'pre-wrap' }}>{runResult.error || runResult.message}</div>
+              )
+            )}
+          </div>
+        </div>
+      ) : selectedNode ? (
         <div style={{
           width: 260,
           background: 'var(--bg-secondary)',
@@ -1152,7 +1289,7 @@ export default function WorkflowPanel({ onBack, currentRole }) {
             copyNode={copyNode}
           />
         </div>
-      )}
+      ) : null}
     </div>
   );
 }
