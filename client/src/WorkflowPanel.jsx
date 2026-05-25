@@ -21,6 +21,7 @@ import WorkflowHistoryPanel from './WorkflowHistoryPanel';
 import WorkflowListPanel from './WorkflowListPanel';
 
 const NODE_TYPES_CONFIG = {
+  input: { label: '用户输入', color: '#3b82f6', icon: '📥' },
   llmAnalyze: { label: 'LLM 分析', color: '#6366f1', icon: '🧠' },
   llmGenerate: { label: 'LLM 生成', color: '#8b5cf6', icon: '✍️' },
   textGenerate: { label: '文案生成', color: '#f97316', icon: '📝' },
@@ -58,6 +59,43 @@ function WorkflowNode({ data, type, selected, dragging }) {
       </div>
       {data.model && <div style={{ fontSize: 10, opacity: 0.8, marginTop: 4 }}>{data.model}</div>}
       <Handle type="source" position={Position.Right} style={{ background: '#fff', width: 8, height: 8 }} />
+    </div>
+  );
+}
+
+// ============ 用户输入节点 ============
+function InputNode({ data, selected }) {
+  const color = '#3b82f6';
+  const preview = data.text ? (data.text.length > 50 ? data.text.slice(0, 50) + '...' : data.text) : '双击编辑输入内容...';
+  const imgCount = data.referenceImages?.length || 0;
+  return (
+    <div style={{
+      background: color,
+      border: 'none',
+      borderRadius: 8,
+      padding: '10px 14px',
+      minWidth: 160,
+      maxWidth: 220,
+      boxShadow: selected
+        ? `0 0 0 2px #fff, 0 0 0 4px ${color}, 0 4px 16px rgba(0,0,0,0.4)`
+        : '0 2px 8px rgba(0,0,0,0.3)',
+      color: '#fff',
+      fontSize: 13,
+      fontWeight: 500,
+      transition: 'box-shadow 0.15s',
+    }}>
+      <Handle type="source" position={Position.Right} id="text" style={{ background: '#fff', width: 8, height: 8, top: '50%' }} />
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: data.text ? 6 : 0 }}>
+        <span style={{ fontSize: 16 }}>📥</span>
+        <span>{data.label || '用户输入'}</span>
+      </div>
+      <div style={{ fontSize: 11, opacity: 0.75, lineHeight: 1.4, wordBreak: 'break-word' }}>
+        {preview}
+      </div>
+      {imgCount > 0 && (
+        <div style={{ fontSize: 10, opacity: 0.7, marginTop: 4 }}>🖼️ {imgCount} 张参考图</div>
+      )}
+      <Handle type="source" position={Position.Right} id="images" style={{ background: '#f59e0b', width: 8, height: 8, top: '75%' }} />
     </div>
   );
 }
@@ -123,6 +161,7 @@ function LoopNode({ data, selected }) {
 }
 
 const nodeTypes = {
+  input: InputNode,
   llmAnalyze: WorkflowNode,
   llmGenerate: WorkflowNode,
   textGenerate: WorkflowNode,
@@ -137,6 +176,7 @@ const nodeTypes = {
 
 // ============ 节点类型按钮（带悬停预览）===========
 const NODE_TYPE_HELP = {
+  input: { inputs: '用户填写', outputs: '文本 + 参考图', desc: '工作流的起点，输入想法和参考图，可添加多个' },
   llmAnalyze: { inputs: '文本输入', outputs: '分析结果 (JSON)', desc: '使用 LLM 分析用户输入，提取结构化信息' },
   llmGenerate: { inputs: '文本/分析结果/知识库', outputs: '提示词/文案 + 参考图URL', desc: '生成提示词或营销文案，智能透传参考图给生图节点' },
   textGenerate: { inputs: '文本/分析结果/知识库', outputs: '营销文案 + 参考图URL', desc: '专注生成吸引人的营销推广文案，透传参考图' },
@@ -779,12 +819,49 @@ export default function WorkflowPanel({ onBack, currentRole }) {
   // ========== 执行 ==========
   const handleRun = useCallback(async () => {
     if (nodes.length === 0) { alert('请先添加节点'); return; }
-    if (!userIdea.trim()) { alert('请在上方输入你的想法'); return; }
+
+    // 收集画布上的 input 节点数据
+    const inputNodes = nodes.filter(n => n.type === 'input');
+    const hasInputNodes = inputNodes.length > 0;
+
+    if (!hasInputNodes && !userIdea.trim()) {
+      alert('请在画布上添加「用户输入」节点，或在上方输入你的想法');
+      return;
+    }
 
     setRunning(true);
     setRunResult(null);
     setRunningSteps([]);
     currentRunIdRef.current = null; // 重置
+
+    // 构建运行参数
+    let runInputs;
+    if (hasInputNodes) {
+      // 使用 input 节点的数据
+      runInputs = {
+        idea: inputNodes.map(n => n.data.text || '').filter(Boolean).join('\n\n') || userIdea,
+        context: '',
+        result: '',
+        referenceImages: [
+          ...refImages.map(r => r.url),
+          ...inputNodes.flatMap(n => n.data.referenceImages || []),
+        ],
+        // 传递每个 input 节点的结构化数据
+        inputNodes: inputNodes.map(n => ({
+          nodeId: n.id,
+          label: n.data.label || '用户输入',
+          text: n.data.text || '',
+          referenceImages: n.data.referenceImages || [],
+        })),
+      };
+    } else {
+      runInputs = {
+        idea: userIdea,
+        context: '',
+        result: '',
+        referenceImages: refImages.map(r => r.url),
+      };
+    }
 
     try {
       const saveResp = await fetch('/api/workflow/templates', {
@@ -798,6 +875,7 @@ export default function WorkflowPanel({ onBack, currentRole }) {
             { name: 'idea', label: '想法', type: 'text', required: true },
             { name: 'context', label: '上下文', type: 'text' },
             { name: 'result', label: '结果', type: 'text' },
+            { name: 'inputNodes', label: '输入节点', type: 'json' },
           ],
         }),
       });
@@ -810,7 +888,7 @@ export default function WorkflowPanel({ onBack, currentRole }) {
       const runResp = await fetch('/api/workflow/run/sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ templateId: saveData.data.id, inputs: { idea: userIdea, context: '', result: '', referenceImages: refImages.map(r => r.url) } }),
+        body: JSON.stringify({ templateId: saveData.data.id, inputs: runInputs }),
       });
       const runData = await runResp.json();
       // 后端返回结构: { success: true/false, data: { success, runId, outputs, steps, error } }
@@ -868,6 +946,7 @@ export default function WorkflowPanel({ onBack, currentRole }) {
   // ========== 进度展示 ==========
   const getNodeStepLabel = (nodeName, nodeType) => {
     const map = {
+      input: `📥 ${nodeName}`,
       llmAnalyze: `🔍 ${nodeName}`,
       llmGenerate: `✍️ ${nodeName}`,
       textGenerate: `📝 ${nodeName}`,
@@ -1013,7 +1092,9 @@ export default function WorkflowPanel({ onBack, currentRole }) {
           boxShadow: '0 4px 12px rgba(0,0,0,0.25)', transition: 'right 0.2s',
         }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-            <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>💡 输入你的想法</div>
+            <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>
+              💡 快捷输入 {nodes.some(n => n.type === 'input') && <span style={{ fontSize: 10, opacity: 0.5 }}>(画布上有输入节点时会合并)</span>}
+            </div>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
               {refImages.length > 0 && <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>🖼️ {refImages.length}张参考图</span>}
               {running && <div style={{ fontSize: 11, color: '#3b82f6' }}>⏳ 执行中...</div>}
@@ -1179,10 +1260,10 @@ export default function WorkflowPanel({ onBack, currentRole }) {
           </div>
 
           {/* 内容区 */}
-          <div style={{ padding: 14, flex: 1, overflowY: 'auto' }}>
+          <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
             {/* 执行中步骤 */}
             {running && runningSteps.length > 0 && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 16 }}>
+              <div style={{ padding: '10px 14px', display: 'flex', flexDirection: 'column', gap: 6 }}>
                 {runningSteps.map((s, i) => (
                   <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
                     <span style={{
@@ -1197,13 +1278,21 @@ export default function WorkflowPanel({ onBack, currentRole }) {
               </div>
             )}
             {running && runningSteps.length === 0 && (
-              <div style={{ color: '#3b82f6', fontSize: 13, marginBottom: 16 }}>正在启动工作流...</div>
+              <div style={{ padding: '10px 14px', color: '#3b82f6', fontSize: 13 }}>正在启动工作流...</div>
             )}
 
-            {/* 已完成步骤摘要 */}
+            {/* 已完成步骤摘要 — 暗色背景 */}
             {!running && runResult?.steps?.length > 0 && (
-              <div style={{ marginBottom: 16 }}>
-                <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 8 }}>📋 执行步骤</div>
+              <div style={{
+                margin: '0 10px 0 10px',
+                background: 'rgba(255,255,255,0.03)',
+                border: '1px solid rgba(255,255,255,0.06)',
+                borderRadius: 8,
+                padding: '10px 12px',
+              }}>
+                <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 1 }}>
+                  📋 执行步骤
+                </div>
                 {runResult.steps.map((step, i) => {
                   const icon = step.output?.error ? '❌' : '✅';
                   const detail = step.output?.error
@@ -1218,25 +1307,32 @@ export default function WorkflowPanel({ onBack, currentRole }) {
                     : step.output?.knowledge?.length > 0 ? `检索到 ${step.output.knowledge.length} 条知识`
                     : '完成';
                   return (
-                    <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 12, marginBottom: 6 }}>
-                      <span style={{ width: 6, height: 6, borderRadius: '50%', flexShrink: 0, marginTop: 4, background: step.output?.error ? '#ef4444' : '#10b981' }} />
+                    <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 11, marginBottom: 5 }}>
+                      <span style={{ width: 6, height: 6, borderRadius: '50%', flexShrink: 0, marginTop: 3, background: step.output?.error ? '#ef4444' : '#10b981' }} />
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ color: 'var(--text-primary)', fontWeight: 500 }}>{icon} {getNodeStepLabel(step.nodeName, step.nodeType)}</div>
-                        {detail && <div style={{ color: 'var(--text-secondary)', marginTop: 2, fontSize: 11, wordBreak: 'break-all' }}>{detail}</div>}
+                        {detail && <div style={{ color: '#888', marginTop: 1, fontSize: 10, wordBreak: 'break-all' }}>{detail}</div>}
                       </div>
-                      <span style={{ marginLeft: 'auto', flexShrink: 0, fontSize: 11, color: 'var(--text-secondary)' }}>{step.duration}ms</span>
+                      {step.duration != null && <span style={{ marginLeft: 'auto', flexShrink: 0, fontSize: 10, color: '#666' }}>{step.duration}ms</span>}
                     </div>
                   );
                 })}
               </div>
             )}
 
-            {/* 执行结果输出 */}
+            {/* 输出结果 — 亮色背景区 */}
             {!running && runResult && (
               runResult.success ? (
-                <div>
+                <div style={{ padding: '10px 14px 14px' }}>
+                  <div style={{
+                    fontSize: 11, fontWeight: 600, color: 'var(--text-muted)',
+                    marginBottom: 10, textTransform: 'uppercase', letterSpacing: 1,
+                  }}>
+                    📤 输出结果
+                  </div>
+
                   {runResult.steps?.some(s => s.output?.error) && (
-                    <div style={{ marginBottom: 12, padding: '10px 12px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 6 }}>
+                    <div style={{ marginBottom: 12, padding: '10px 12px', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', borderRadius: 6 }}>
                       <div style={{ fontWeight: 600, fontSize: 13, color: '#ef4444', marginBottom: 4 }}>⚠️ 部分步骤出错</div>
                       {runResult.steps.filter(s => s.output?.error).map((s, i) => (
                         <div key={i} style={{ fontSize: 12, color: '#dc2626', marginBottom: 2 }}>
@@ -1268,7 +1364,7 @@ export default function WorkflowPanel({ onBack, currentRole }) {
                   )}
                 </div>
               ) : (
-                <div style={{ color: '#ef4444', fontSize: 13, whiteSpace: 'pre-wrap' }}>{runResult.error || runResult.message}</div>
+                <div style={{ padding: '10px 14px', color: '#ef4444', fontSize: 13, whiteSpace: 'pre-wrap' }}>{runResult.error || runResult.message}</div>
               )
             )}
           </div>
@@ -1344,9 +1440,75 @@ function NodeProperties({ selectedNode, updateNodeData, deleteNode, copyNode }) 
       {selectedNode.type === 'imageGenerate' && <ImageGenerateFields selectedNode={selectedNode} updateNodeData={updateNodeData} />}
       {selectedNode.type === 'videoGenerate' && <VideoGenerateFields selectedNode={selectedNode} updateNodeData={updateNodeData} />}
       {selectedNode.type === 'knowledgeQuery' && <KnowledgeQueryFields selectedNode={selectedNode} updateNodeData={updateNodeData} />}
+      {selectedNode.type === 'input' && <InputNodeFields selectedNode={selectedNode} updateNodeData={updateNodeData} />}
       {selectedNode.type === 'condition' && <ConditionFields selectedNode={selectedNode} updateNodeData={updateNodeData} />}
       {selectedNode.type === 'loop' && <LoopFields selectedNode={selectedNode} updateNodeData={updateNodeData} />}
     </div>
+  );
+}
+
+function InputNodeFields({ selectedNode, updateNodeData }) {
+  const fileRef = useRef(null);
+  const [uploading, setUploading] = useState(false);
+  const refImages = selectedNode.data.referenceImages || [];
+
+  async function handleUpload(e) {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    setUploading(true);
+    try {
+      const fd = new FormData();
+      files.forEach(f => fd.append('files', f));
+      const resp = await fetch('/api/upload', { method: 'POST', body: fd });
+      const d = await resp.json();
+      if (d.success) {
+        const newUrls = (d.files || []).map(f => f.url);
+        updateNodeData(selectedNode.id, { referenceImages: [...refImages, ...newUrls] });
+      }
+    } catch (_) {}
+    setUploading(false);
+    e.target.value = '';
+  }
+
+  function removeRefImage(idx) {
+    const updated = refImages.filter((_, i) => i !== idx);
+    updateNodeData(selectedNode.id, { referenceImages: updated });
+  }
+
+  return (
+    <>
+      <div className="section-label" style={{ marginTop: 12 }}>输入内容</div>
+      <textarea className="input-field" style={{ minHeight: 100, resize: 'vertical' }}
+        value={selectedNode.data.text || ''}
+        onChange={(e) => updateNodeData(selectedNode.id, { text: e.target.value })}
+        placeholder="输入你的想法、需求描述..." />
+      <div className="section-label" style={{ marginTop: 12 }}>参考图 ({refImages.length})</div>
+      <div style={{
+        border: '1px dashed var(--border-color)', borderRadius: 8, padding: 12,
+        textAlign: 'center', cursor: 'pointer', marginBottom: 8,
+        background: 'var(--bg-tertiary)', fontSize: 12, color: 'var(--text-secondary)',
+      }} onClick={() => fileRef.current?.click()}>
+        {uploading ? '⏳ 上传中...' : '📷 点击上传参考图'}
+      </div>
+      <input ref={fileRef} type="file" accept="image/*" multiple
+        style={{ display: 'none' }} onChange={handleUpload} disabled={uploading} />
+      {refImages.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+          {refImages.map((url, i) => (
+            <div key={i} style={{ position: 'relative', width: 56, height: 56, borderRadius: 6, overflow: 'hidden', border: '1px solid var(--border-color)' }}>
+              <img src={url} alt={`ref-${i}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                onError={e => { e.target.style.display = 'none'; }} />
+              <span onClick={() => removeRefImage(i)} style={{
+                position: 'absolute', top: 0, right: 0, width: 16, height: 16,
+                background: 'rgba(0,0,0,0.6)', color: '#fff', fontSize: 10,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                cursor: 'pointer', borderRadius: '0 0 0 4',
+              }}>×</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </>
   );
 }
 

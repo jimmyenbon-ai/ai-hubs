@@ -119,6 +119,7 @@ function pickReferenceImages(candidates, directives = {}) {
 
 // 节点类型处理器映射
 const nodeHandlers = {
+  input: handleInput,
   llmAnalyze: handleLLMAnalyze,
   llmGenerate: handleLLMGenerate,
   textGenerate: handleTextGenerate,
@@ -582,6 +583,17 @@ class WorkflowExecutor {
   async executeSync(templateId, userInputs) {
     return this.execute(templateId, userInputs);
   }
+}
+
+// ============ 用户输入节点 ============
+async function handleInput(node, inputs, context) {
+  const text = node.data?.text || '';
+  const referenceImages = node.data?.referenceImages || [];
+  console.log(`[输入节点] ${node.data?.label || node.id}: text=${text.slice(0, 80)}, refs=${referenceImages.length}`);
+  return {
+    text,
+    referenceImages: referenceImages.length > 0 ? referenceImages : null,
+  };
 }
 
 // ============ 条件分支处理器 ============
