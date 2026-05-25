@@ -10,11 +10,13 @@ const TYPE_TABS = [
 
 export default function PromptTemplateLibrary({ onUseTemplate, currentGroup, currentMode, onNavigate }) {
   const [activeType, setActiveType] = useState('image')
+  const [showRecommended, setShowRecommended] = useState(false)
   const [templates, setTemplates] = useState([])
   const [categories, setCategories] = useState([])
   const [loading, setLoading] = useState(false)
   const [search, setSearch] = useState('')
   const [selectedCategory, setSelectedCategory] = useState('')
+  const [suggestions, setSuggestions] = useState([])
 
   // 弹窗状态
   const [showModal, setShowModal] = useState(false)
@@ -48,9 +50,34 @@ export default function PromptTemplateLibrary({ onUseTemplate, currentGroup, cur
   }
 
   useEffect(() => {
-    fetchTemplates()
-    fetchCategories()
-  }, [activeType])
+    if (showRecommended) {
+      fetchSuggestions()
+    } else {
+      fetchTemplates()
+      fetchCategories()
+    }
+  }, [activeType, showRecommended])
+
+  async function fetchSuggestions() {
+    setLoading(true)
+    try {
+      const resp = await fetch('/api/feedback/suggestions')
+      const data = await resp.json()
+      if (data.success) setSuggestions(data.data || [])
+    } catch (_) {}
+    setLoading(false)
+  }
+
+  async function handleConvertSuggestion(pattern) {
+    try {
+      const resp = await fetch(`/api/feedback/suggestions/${encodeURIComponent(pattern)}/convert`, { method: 'POST' })
+      const data = await resp.json()
+      if (data.success) {
+        alert('已转为提示词模板！')
+        fetchSuggestions()
+      }
+    } catch (_) {}
+  }
 
   // 防抖搜索
   useEffect(() => {
@@ -151,12 +178,19 @@ export default function PromptTemplateLibrary({ onUseTemplate, currentGroup, cur
             {TYPE_TABS.map((tab) => (
               <button
                 key={tab.value}
-                className={`prompt-library-type-tab ${activeType === tab.value ? 'active' : ''}`}
-                onClick={() => handleTypeChange(tab.value)}
+                className={`prompt-library-type-tab ${!showRecommended && activeType === tab.value ? 'active' : ''}`}
+                onClick={() => { setShowRecommended(false); handleTypeChange(tab.value); }}
               >
                 {tab.label}
               </button>
             ))}
+            <button
+              className={`prompt-library-type-tab ${showRecommended ? 'active' : ''}`}
+              onClick={() => setShowRecommended(true)}
+              style={showRecommended ? { background: '#10b981', color: '#fff' } : {}}
+            >
+              ⭐ 推荐
+            </button>
           </div>
         </div>
 
@@ -197,7 +231,36 @@ export default function PromptTemplateLibrary({ onUseTemplate, currentGroup, cur
 
       {/* 模板卡片网格 */}
       <div className="prompt-library-body">
-        {loading ? (
+        {showRecommended ? (
+          loading ? (
+            <div className="prompt-library-empty"><div className="spinner" style={{ margin: '0 auto 12px' }} /><p>加载中…</p></div>
+          ) : suggestions.length === 0 ? (
+            <div className="prompt-library-empty">
+              <div className="prompt-library-empty-icon">📋</div>
+              <p>暂无推荐</p>
+              <p style={{ fontSize: 12, opacity: 0.6 }}>对生成结果点赞后，高频好评的 Prompt 模式会出现在这里</p>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {suggestions.map((s, i) => (
+                <div key={i} style={{
+                  background: 'var(--bg-secondary)', borderRadius: 12, padding: 16,
+                  border: '1px solid var(--border-color)', display: 'flex',
+                  justifyContent: 'space-between', alignItems: 'center',
+                }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 4 }}>{s.suggestedName}</div>
+                    <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>👍 {s.likeCount} 次好评 · 关键词: {s.pattern}</div>
+                  </div>
+                  <button className="generate-btn" style={{ fontSize: 12, padding: '6px 14px' }}
+                    onClick={() => handleConvertSuggestion(s.pattern)}>
+                    转为模板
+                  </button>
+                </div>
+              ))}
+            </div>
+          )
+        ) : loading ? (
           <div className="prompt-library-empty">
             <div className="spinner" style={{ margin: '0 auto 12px' }} />
             <p>加载中…</p>

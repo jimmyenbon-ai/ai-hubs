@@ -8,7 +8,15 @@ const CATEGORY_ICONS = {
   general: '⚙️',
 };
 
-export default function WorkflowListPanel({ onBack, onSelectWorkflow, onCreateWorkflow }) {
+const ROLE_LABELS = {
+  'role-graphic-design': '🎨 平面设计',
+  'role-copywriting': '✍️ 文案策划',
+  'role-video': '🎬 视频制作',
+  'role-3d': '🧊 3D建模',
+  'role-general': '🏠 通用',
+};
+
+export default function WorkflowListPanel({ onBack, onSelectWorkflow, onCreateWorkflow, currentRole }) {
   const [templates, setTemplates] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filterCategory, setFilterCategory] = useState('all');
@@ -35,10 +43,33 @@ export default function WorkflowListPanel({ onBack, onSelectWorkflow, onCreateWo
   async function handleDelete(id) {
     if (!confirm('确定删除这个工作流？')) return;
     try {
-      await fetch(`/api/workflow/templates/${id}`, { method: 'DELETE' });
+      const resp = await fetch(`/api/workflow/templates/${id}`, { method: 'DELETE' });
+      const data = await resp.json();
+      if (!data.success) {
+        alert(data.message || '删除失败');
+        return;
+      }
       fetchTemplates();
     } catch (err) {
       alert('删除失败');
+    }
+  }
+
+  async function handleClone(id, name) {
+    try {
+      const resp = await fetch(`/api/workflow/templates/${id}/clone`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: `${name} (副本)` }),
+      });
+      const data = await resp.json();
+      if (data.success) {
+        fetchTemplates();
+      } else {
+        alert(data.message || '复制失败');
+      }
+    } catch (err) {
+      alert('复制失败');
     }
   }
 
@@ -47,7 +78,8 @@ export default function WorkflowListPanel({ onBack, onSelectWorkflow, onCreateWo
     const matchSearch = !searchQuery ||
       t.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (t.description || '').toLowerCase().includes(searchQuery.toLowerCase());
-    return matchCategory && matchSearch;
+    const matchRole = !currentRole || currentRole === 'role-general' || t.roleId === currentRole || !t.roleId || t.roleId === 'role-general';
+    return matchCategory && matchSearch && matchRole;
   });
 
   const categories = [...new Set(templates.map(t => t.category).filter(Boolean))];
@@ -140,19 +172,41 @@ export default function WorkflowListPanel({ onBack, onSelectWorkflow, onCreateWo
               >
                 {/* 头部 */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                     <span style={{ fontSize: 24 }}>
                       {CATEGORY_ICONS[tpl.category] || '⚙️'}
                     </span>
                     <span style={{ fontWeight: 600, fontSize: 15 }}>{tpl.name}</span>
+                    {tpl.isPreset && (
+                      <span style={{
+                        background: '#6366f1', color: '#fff', fontSize: 10,
+                        padding: '1px 6px', borderRadius: 4, fontWeight: 500,
+                      }}>预设</span>
+                    )}
+                    {tpl.roleId && ROLE_LABELS[tpl.roleId] && (
+                      <span style={{
+                        background: 'var(--bg-tertiary)', color: 'var(--text-secondary)',
+                        fontSize: 10, padding: '1px 6px', borderRadius: 4,
+                      }}>{ROLE_LABELS[tpl.roleId]}</span>
+                    )}
                   </div>
-                  <button
-                    className="btn-outline"
-                    style={{ padding: '4px 8px', fontSize: 11, color: '#ef4444' }}
-                    onClick={e => { e.stopPropagation(); handleDelete(tpl.id); }}
-                  >
-                    🗑️
-                  </button>
+                  <div style={{ display: 'flex', gap: 4 }}>
+                    {tpl.isPreset && (
+                      <button
+                        className="btn-outline"
+                        style={{ padding: '4px 8px', fontSize: 11 }}
+                        onClick={e => { e.stopPropagation(); handleClone(tpl.id, tpl.name); }}
+                        title="复制副本后编辑"
+                      >📋</button>
+                    )}
+                    {!tpl.isPreset && (
+                      <button
+                        className="btn-outline"
+                        style={{ padding: '4px 8px', fontSize: 11, color: '#ef4444' }}
+                        onClick={e => { e.stopPropagation(); handleDelete(tpl.id); }}
+                      >🗑️</button>
+                    )}
+                  </div>
                 </div>
 
                 {/* 描述 */}

@@ -6,7 +6,10 @@ const { WorkflowTemplate, WorkflowRun } = require('../models/workflowModel');
 // 获取所有工作流模板
 router.get('/templates', async (req, res) => {
   try {
-    const templates = await WorkflowTemplate.findAll();
+    const where = {};
+    if (req.query.roleId) where.roleId = req.query.roleId;
+    if (req.query.category) where.category = req.query.category;
+    const templates = await WorkflowTemplate.findAll({ where });
     res.json({ success: true, data: templates });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
@@ -68,11 +71,42 @@ router.put('/templates/:id', async (req, res) => {
 // 删除工作流模板
 router.delete('/templates/:id', async (req, res) => {
   try {
+    const template = await WorkflowTemplate.findByPk(req.params.id);
+    if (!template) {
+      return res.status(404).json({ success: false, message: 'Template not found' });
+    }
+    if (template.isPreset) {
+      return res.status(403).json({ success: false, message: '预设工作流不可删除，请先复制副本再修改' });
+    }
     const result = await WorkflowTemplate.destroy(req.params.id);
     if (result === 0) {
       return res.status(404).json({ success: false, message: 'Template not found' });
     }
     res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// 复制工作流模板（用于复制预设工作流）
+router.post('/templates/:id/clone', async (req, res) => {
+  try {
+    const source = await WorkflowTemplate.findByPk(req.params.id);
+    if (!source) {
+      return res.status(404).json({ success: false, message: 'Template not found' });
+    }
+    const clone = await WorkflowTemplate.create({
+      name: req.body.name || `${source.name} (副本)`,
+      description: source.description,
+      category: source.category,
+      nodes: source.nodes,
+      edges: source.edges,
+      variables: source.variables,
+      roleId: source.roleId,
+      isPreset: false,
+      tags: [...(source.tags || [])],
+    });
+    res.json({ success: true, data: clone });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }

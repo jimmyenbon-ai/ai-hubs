@@ -25,6 +25,10 @@ const llmConfigRoutes = require('./routes/llmConfigRoutes');
 const knowledgeRoutes = require('./routes/knowledgeRoutes');
 const batchRoutes = require('./routes/batchRoutes');
 const settingsRoutes = require('./routes/settingsRoutes');
+const roleRoutes = require('./routes/roleRoutes');
+const styleProfileRoutes = require('./routes/styleProfileRoutes');
+const feedbackRoutes = require('./routes/feedbackRoutes');
+const userPrefsRoutes = require('./routes/userPrefsRoutes');
 const errorHandler = require('./middleware/errorHandler');
 const { generalLimiter } = require('./middleware/rateLimiter');
 
@@ -76,6 +80,10 @@ app.use('/api/llm-config', llmConfigRoutes);
 app.use('/api/knowledge', knowledgeRoutes);
 app.use('/api/batch', batchRoutes);
 app.use('/api/settings', settingsRoutes);
+app.use('/api/roles', roleRoutes);
+app.use('/api/style-profiles', styleProfileRoutes);
+app.use('/api/feedback', feedbackRoutes);
+app.use('/api/prefs', userPrefsRoutes);
 
 // 健康检查（包含详细状态）
 app.get('/api/health', (req, res) => {
@@ -128,6 +136,9 @@ async function initDatabase() {
     await Template.sync();
     // eslint-disable-next-line no-console
     console.log('Database synced');
+    // 初始化预设角色
+    const { initPresetRoles } = require('./models/roleModel');
+    await initPresetRoles();
     // 初始化预设工作流
     const { initPresetWorkflows } = require('./initWorkflows');
     await initPresetWorkflows();

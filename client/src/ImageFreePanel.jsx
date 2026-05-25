@@ -90,7 +90,7 @@ function loadDraft() {
   }
 }
 
-function ImageFreePanel({ injectedTemplate, onInjectedConsumed }) {
+function ImageFreePanel({ injectedTemplate, onInjectedConsumed, userId, currentRole }) {
   const [files, setFiles] = useState([])
   const [prompt, setPrompt] = useState(() => loadDraft()?.prompt ?? '')
   const [selectedModel, setSelectedModel] = useState(() => loadDraft()?.model ?? 'gpt-image-2')
@@ -116,6 +116,10 @@ function ImageFreePanel({ injectedTemplate, onInjectedConsumed }) {
   const [activeStyleTags, setActiveStyleTags] = useState([])
   const [activeQualityTags, setActiveQualityTags] = useState([])
   const [showPromptLibrary, setShowPromptLibrary] = useState(false) // 提示词快捷库
+  const [styleProfileId, setStyleProfileId] = useState('')
+  const [styleProfiles, setStyleProfiles] = useState([])
+  // 保存风格画像弹窗
+  const [styleModal, setStyleModal] = useState({ show: false, item: null, name: '', tags: '' })
 
   // 历史记录状态
   const [historyPage, setHistoryPage] = useState(1)
@@ -130,7 +134,48 @@ function ImageFreePanel({ injectedTemplate, onInjectedConsumed }) {
 
   useEffect(() => {
     fetchHistory(true)
+    fetchStyleProfiles()
+    if (userId) loadPreferences()
   }, [])
+
+  async function fetchStyleProfiles() {
+    try {
+      const resp = await fetch('/api/style-profiles')
+      const data = await resp.json()
+      if (data.success) setStyleProfiles(data.data)
+    } catch (_) {}
+  }
+
+  async function loadPreferences() {
+    try {
+      const resp = await fetch(`/api/prefs/${userId}`)
+      const data = await resp.json()
+      if (data.success && data.data) {
+        const prefs = data.data
+        if (prefs.defaultAspectRatio && prefs.defaultAspectRatio !== 'auto') setAspectRatio(prefs.defaultAspectRatio)
+        if (prefs.defaultImageSize) setImageSize(prefs.defaultImageSize)
+        if (prefs.recentModels && prefs.recentModels.length > 0) setSelectedModel(prefs.recentModels[0])
+        if (prefs.recentStyleProfileIds && prefs.recentStyleProfileIds.length > 0) {
+          setStyleProfileId(prefs.recentStyleProfileIds[0])
+        }
+      }
+    } catch (_) {}
+  }
+
+  async function recordPreferences(model, aspect, size, styleId) {
+    if (!userId) return
+    try {
+      await fetch(`/api/prefs/${userId}/record`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model, aspectRatio: aspect, imageSize: size,
+          styleProfileId: styleId,
+          promptPattern: prompt.slice(0, 60),
+        }),
+      })
+    } catch (_) {}
+  }
 
   useEffect(() => {
     try {
@@ -358,6 +403,61 @@ function ImageFreePanel({ injectedTemplate, onInjectedConsumed }) {
     }
   }
 
+  // 提交反馈
+  async function handleFeedback(id, feedback) {
+    try {
+      const resp = await fetch(`/api/history/${id}/feedback`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ feedback }),
+      })
+      const data = await resp.json()
+      if (data.success) {
+        setHistory((prev) =>
+          prev.map((h) => h.id === id ? { ...h, feedback: data.data.feedback } : h)
+        )
+      }
+    } catch (err) {
+      console.error('反馈失败:', err)
+    }
+  }
+
+  // 保存为风格画像 — 打开自定义弹窗
+  function handleSaveAsStyle(item) {
+    setStyleModal({
+      show: true,
+      item,
+      name: item.originalPrompt?.slice(0, 30) || '未命名风格',
+      tags: '',
+    })
+  }
+
+  async function confirmSaveStyle() {
+    const { item, name, tags } = styleModal
+    if (!name.trim()) return
+    try {
+      const resp = await fetch('/api/style-profiles', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          historyId: item.id,
+          name: name.trim(),
+          description: `从 ${item.modelName || 'AI'} 生成记录创建`,
+          tags: tags.split(/[,，]/).map(t => t.trim()).filter(Boolean),
+        }),
+      })
+      const data = await resp.json()
+      if (data.success) {
+        setStyleModal({ show: false, item: null, name: '', tags: '' })
+        fetchStyleProfiles()
+      } else {
+        alert('保存失败: ' + data.message)
+      }
+    } catch (err) {
+      alert('保存失败: ' + err.message)
+    }
+  }
+
   function startProgress(taskId) {
     if (progressTimersRef.current[taskId]) clearInterval(progressTimersRef.current[taskId])
     setActiveTasks((prev) => prev.map((t) => t.id === taskId ? { ...t, progress: 0 } : t))
@@ -409,7 +509,7 @@ function ImageFreePanel({ injectedTemplate, onInjectedConsumed }) {
       const resp = await fetch('/api/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ originalPrompt: prompt, apiPrompt, model: selectedModel, aspectRatio, imageSize, images: referenceImages }),
+        body: JSON.stringify({ originalPrompt: prompt, apiPrompt, model: selectedModel, aspectRatio, imageSize, images: referenceImages, styleProfileId: styleProfileId || undefined }),
         signal: controller.signal,
       })
       if (!resp.ok) {
@@ -428,6 +528,7 @@ function ImageFreePanel({ injectedTemplate, onInjectedConsumed }) {
       completedResultUrlsRef.current[taskId] = imageUrl
       setResultImage(imageUrl)
       stopProgress(taskId, true)
+      recordPreferences(selectedModel, aspectRatio, imageSize, styleProfileId)
       // 生成成功后，从 activeTasks 移除（它已经在历史记录里了，避免重复显示）
       setActiveTasks((prev) => prev.filter((t) => t.id !== taskId))
       await fetchHistory(true)
@@ -476,6 +577,18 @@ function ImageFreePanel({ injectedTemplate, onInjectedConsumed }) {
             Nano Banana 2<br /><span className="model-sub">进阶绘图</span>
           </div>
         </div>
+
+        {styleProfiles.length > 0 && (
+          <>
+            <div className="section-label">风格画像 (可选)</div>
+            <select className="input-field" value={styleProfileId} onChange={e => setStyleProfileId(e.target.value)}>
+              <option value="">不使用风格画像</option>
+              {styleProfiles.map(sp => (
+                <option key={sp.id} value={sp.id}>{sp.name} (使用 {sp.usageCount || 0} 次)</option>
+              ))}
+            </select>
+          </>
+        )}
 
         <div className="section-label">绘画描述 (Prompt)</div>
 
@@ -749,6 +862,11 @@ function ImageFreePanel({ injectedTemplate, onInjectedConsumed }) {
                     </button>
                     <button className="btn-outline" type="button" onClick={() => handleDownload(item.resultImageUrl)}>⬇ 下载</button>
                     <button className="btn-outline" type="button" onClick={() => { setSelectedItem(item); setResultImage(item.resultImageUrl || '') }}>查看大图</button>
+                    <button className="btn-outline" type="button" onClick={() => handleSaveAsStyle(item)} title="保存为风格画像">🎨 存风格</button>
+                    <button className="btn-outline" type="button" onClick={() => handleFeedback(item.id, 'like')}
+                      style={item.feedback === 'like' ? { color: '#10b981', borderColor: '#10b981' } : {}}>👍</button>
+                    <button className="btn-outline" type="button" onClick={() => handleFeedback(item.id, 'dislike')}
+                      style={item.feedback === 'dislike' ? { color: '#ef4444', borderColor: '#ef4444' } : {}}>👎</button>
                     <button className="btn-outline" type="button" onClick={() => handleDeleteHistory(item.id)} style={{ color: '#ef4444', borderColor: '#ef4444' }}>🗑 删除</button>
                   </div>
                 </div>
@@ -828,6 +946,77 @@ function ImageFreePanel({ injectedTemplate, onInjectedConsumed }) {
             {selectedItem.resultImageUrl && (
               <div className="modal-image"><img src={selectedItem.resultImageUrl} alt={selectedItem.originalPrompt} /></div>
             )}
+          </div>
+        </div>
+      )}
+
+      {styleModal.show && (
+        <div className="modal-backdrop" onClick={() => setStyleModal({ show: false, item: null, name: '', tags: '' })}>
+          <div className="modal-content save-style-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <span style={{ fontWeight: 600, fontSize: 15 }}>保存为风格画像</span>
+              <button
+                className="btn-outline small"
+                type="button"
+                onClick={() => setStyleModal({ show: false, item: null, name: '', tags: '' })}
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+              </button>
+            </div>
+
+            {styleModal.item?.resultImageUrl && (
+              <div style={{ marginBottom: 16, borderRadius: 8, overflow: 'hidden', maxHeight: 200 }}>
+                <img
+                  src={styleModal.item.resultImageUrl}
+                  alt="风格参考"
+                  style={{ width: '100%', height: 'auto', objectFit: 'cover', objectPosition: 'center' }}
+                />
+              </div>
+            )}
+
+            <div className="section-label">风格名称 *</div>
+            <input
+              className="input-field"
+              value={styleModal.name}
+              onChange={(e) => setStyleModal((prev) => ({ ...prev, name: e.target.value }))}
+              placeholder="例如：2025春季新品海报风"
+              autoFocus
+              onKeyDown={(e) => { if (e.key === 'Enter') confirmSaveStyle() }}
+            />
+
+            <div className="section-label">标签（逗号分隔）</div>
+            <input
+              className="input-field"
+              value={styleModal.tags}
+              onChange={(e) => setStyleModal((prev) => ({ ...prev, tags: e.target.value }))}
+              placeholder="例如：海报, 春季, 产品"
+            />
+
+            {styleModal.item && (
+              <div style={{ marginTop: 12, fontSize: 12, color: 'var(--text-secondary)', background: 'var(--bg-secondary)', padding: '8px 12px', borderRadius: 6, maxHeight: 80, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                <span style={{ fontWeight: 500, color: 'var(--text-muted)' }}>原始 Prompt：</span>
+                {styleModal.item.originalPrompt?.slice(0, 200) || '无'}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
+              <button
+                className="btn-outline"
+                style={{ flex: 1 }}
+                onClick={() => setStyleModal({ show: false, item: null, name: '', tags: '' })}
+              >
+                取消
+              </button>
+              <button
+                className="generate-btn"
+                style={{ flex: 1 }}
+                onClick={confirmSaveStyle}
+              >
+                保存风格
+              </button>
+            </div>
           </div>
         </div>
       )}

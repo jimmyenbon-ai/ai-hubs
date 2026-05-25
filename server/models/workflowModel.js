@@ -94,6 +94,15 @@ const WorkflowTemplate = {
     if (where?.category) {
       list = list.filter(t => t.category === where.category);
     }
+    if (where?.roleId) {
+      list = list.filter(t => t.roleId === where.roleId);
+    }
+    if (where?.isPreset !== undefined) {
+      list = list.filter(t => t.isPreset === where.isPreset);
+    }
+    if (where?.tag) {
+      list = list.filter(t => t.tags && t.tags.includes(where.tag));
+    }
     return list.sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at));
   },
 
@@ -112,6 +121,9 @@ const WorkflowTemplate = {
       nodes: attrs.nodes || [],
       edges: attrs.edges || [],
       variables: attrs.variables || [],
+      roleId: attrs.roleId || null,
+      isPreset: attrs.isPreset || false,
+      tags: attrs.tags || [],
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };

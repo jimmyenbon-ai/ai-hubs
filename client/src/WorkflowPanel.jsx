@@ -258,7 +258,15 @@ function ResultMedia({ label, type, url }) {
 }
 
 // ============ 主面板 ============
-export default function WorkflowPanel({ onBack }) {
+const ROLE_LABELS = {
+  'role-graphic-design': '平面设计',
+  'role-copywriting': '文案策划',
+  'role-video': '视频制作',
+  'role-3d': '3D建模',
+  'role-general': '通用',
+};
+
+export default function WorkflowPanel({ onBack, currentRole }) {
   const [view, setView] = useState('editor');
   const [selectedTemplate, setSelectedTemplate] = useState(null);
   const [selectedNode, setSelectedNode] = useState(null);
@@ -642,6 +650,9 @@ export default function WorkflowPanel({ onBack }) {
         name,
         description: description || '',
         category: selectedTemplate?.category || 'general',
+        roleId: selectedTemplate?.roleId || currentRole || null,
+        isPreset: false,
+        tags: selectedTemplate?.tags || [],
         nodes: nodes.map((n) => ({ id: n.id, type: n.type, position: n.position, data: n.data })),
         edges: edges.map((e) => ({ id: e.id, source: e.source, target: e.target, sourceHandle: e.sourceHandle })),
         variables: [{ name: 'idea', label: '想法', type: 'text', required: true }],
@@ -848,6 +859,7 @@ export default function WorkflowPanel({ onBack }) {
         onBack={onBack}
         onSelectWorkflow={loadTemplate}
         onCreateWorkflow={handleNewWorkflow}
+        currentRole={currentRole}
       />
     );
   }
@@ -998,14 +1010,27 @@ export default function WorkflowPanel({ onBack }) {
           </div>
         )}
 
-        {/* 模板名称 */}
+        {/* 模板名称 + 角色标签 */}
         {selectedTemplate && (
           <div style={{
             position: 'absolute', top: 12, right: selectedNode ? 276 : 12, zIndex: 10,
             background: 'var(--bg-secondary)', padding: '6px 12px', borderRadius: 6,
             fontSize: 13, fontWeight: 500, boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
+            display: 'flex', alignItems: 'center', gap: 8,
           }}>
             {selectedTemplate.name}
+            {selectedTemplate.isPreset && (
+              <span style={{
+                background: '#6366f1', color: '#fff', fontSize: 10,
+                padding: '1px 6px', borderRadius: 4,
+              }}>预设</span>
+            )}
+            {currentRole && currentRole !== 'role-general' && ROLE_LABELS[currentRole] && (
+              <span style={{
+                background: 'var(--bg-tertiary)', color: 'var(--text-secondary)',
+                fontSize: 10, padding: '1px 6px', borderRadius: 4,
+              }}>{ROLE_LABELS[currentRole]}</span>
+            )}
           </div>
         )}
 

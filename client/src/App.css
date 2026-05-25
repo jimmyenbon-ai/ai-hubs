@@ -3446,6 +3446,18 @@ code {
   opacity: 0.35 !important;
 }
 
+/* 输出节点：去掉 ReactFlow 默认白色背景 */
+.react-flow__node-output {
+  background: transparent !important;
+  border: none !important;
+  padding: 0 !important;
+}
+/* 输出节点 Handle 居中 + 与节点边缘对齐 */
+.react-flow__node-output .react-flow__handle {
+  top: 50% !important;
+  transform: translateY(-50%) !important;
+}
+
 /* ========================
    批量生成面板
    ======================== */

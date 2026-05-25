@@ -1,5 +1,6 @@
 const { Generation } = require('../models')
 const cache = require('../utils/cache');
+const { recordFeedback, getStats, getSuggestions, convertToTemplate } = require('../services/feedbackAnalyzer');
 
 function clearHistoryCache() {
   const keys = cache.keys ? cache.keys() : [];
@@ -136,9 +137,66 @@ async function toggleFavorite(req, res, next) {
   }
 }
 
+// POST /api/history/:id/feedback - 提交反馈
+async function submitFeedback(req, res, next) {
+  try {
+    const { id } = req.params;
+    const { feedback, comment } = req.body || {};
+    if (!feedback || !['like', 'dislike'].includes(feedback)) {
+      const err = new Error('feedback 必须是 like 或 dislike');
+      err.status = 400;
+      throw err;
+    }
+    const result = await recordFeedback(id, feedback, comment);
+    if (!result) {
+      const err = new Error('记录不存在');
+      err.status = 404;
+      throw err;
+    }
+    res.json({ success: true, data: { id: Number(id), feedback, comment: comment || null } });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// GET /api/feedback/stats - 获取反馈统计
+async function getFeedbackStats(req, res, next) {
+  try {
+    const data = await getStats();
+    res.json({ success: true, data });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// GET /api/feedback/suggestions - 获取自动推荐
+async function getFeedbackSuggestions(req, res, next) {
+  try {
+    const data = await getSuggestions();
+    res.json({ success: true, data });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// POST /api/feedback/suggestions/:pattern/convert - 将推荐转为模板
+async function convertSuggestion(req, res, next) {
+  try {
+    const { pattern } = req.params;
+    const template = await convertToTemplate(decodeURIComponent(pattern));
+    res.json({ success: true, data: template });
+  } catch (err) {
+    next(err);
+  }
+}
+
 module.exports = {
   listHistory,
   getHistoryById,
   deleteHistory,
   toggleFavorite,
+  submitFeedback,
+  getFeedbackStats,
+  getFeedbackSuggestions,
+  convertSuggestion,
 };

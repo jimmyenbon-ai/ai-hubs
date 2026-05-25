@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import RoleSelector from './RoleSelector'
 
 const CONTENT_TYPES = [
   { value: 'image', label: '图片' },
@@ -6,7 +7,7 @@ const CONTENT_TYPES = [
   { value: 'music', label: '音乐' },
 ]
 
-function Sidebar({ currentGroup, currentMode, templates = [], onNavigate, onCreateTemplate, onManageTemplates, onOpenPromptLibrary, onOpenWorkflow, onOpenSettings, onOpenTutorial }) {
+function Sidebar({ currentGroup, currentMode, currentRole, onRoleChange, templates = [], onNavigate, onCreateTemplate, onManageTemplates, onOpenPromptLibrary, onOpenWorkflow, onOpenStyleManager, onOpenSettings, onOpenTutorial }) {
   const [expandedGroups, setExpandedGroups] = useState({
     image: true,
     video: false,
@@ -74,6 +75,7 @@ function Sidebar({ currentGroup, currentMode, templates = [], onNavigate, onCrea
       </div>
       <div className="logo-name">Enbon AI</div>
       <div className="logo-subtitle">设计工作台</div>
+      <RoleSelector currentRole={currentRole} onRoleChange={onRoleChange} />
       <nav className="nav-menu">
         {groups.map((group) => {
           const groupTemplates = templatesByGroup[group.id] || []
@@ -205,6 +207,23 @@ function Sidebar({ currentGroup, currentMode, templates = [], onNavigate, onCrea
             </svg>
           </span>
           <span className="nav-group-label">模板库</span>
+        </div>
+      </div>
+
+      {/* 风格管理入口 */}
+      <div className="nav-library-entry" style={{ padding: '8px 10px' }}>
+        <div
+          className="nav-group-header"
+          onClick={onOpenStyleManager}
+          style={{ padding: '10px 12px', borderRadius: 8, cursor: 'pointer', opacity: 0.7 }}
+          title="风格画像管理"
+        >
+          <span className="nav-group-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/>
+            </svg>
+          </span>
+          <span className="nav-group-label">风格管理</span>
         </div>
       </div>
 

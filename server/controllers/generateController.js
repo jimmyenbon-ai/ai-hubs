@@ -7,6 +7,8 @@ const { appConfig } = require('../utils/appConfig')
 const logger = require('../utils/logger')
 const cache = require('../utils/cache')
 const { saveImage: saveImageLocal, localPathToUrl } = require('../utils/localStorage')
+const { StyleProfile } = require('../models/styleProfileModel')
+const { extractStyleIntent, matchStyleProfile, buildStyleAwarePrompt } = require('../services/styleMatcher')
 
 // GRSai 支持的模型列表（用于判断是否走 GRSai）
 const GRSAI_MODELS = [
@@ -54,6 +56,7 @@ async function handleGenerate(req, res, next) {
       imageSize,
       referenceImages,
       images,
+      styleProfileId,
     } = req.body || {}
 
     // 兼容旧字段名 referenceImages 和新字段名 images
@@ -69,6 +72,19 @@ async function handleGenerate(req, res, next) {
     pointsCost = MODEL_POINTS[selectedModel] || 1
     const isGrsaiModel = GRSAI_MODELS.includes(selectedModel)
 
+    // 风格画像注入：如果指定了 styleProfileId，注入风格 Prompt
+    let styleProfile = null;
+    if (styleProfileId) {
+      styleProfile = await StyleProfile.findById(styleProfileId);
+      if (styleProfile) {
+        const intent = await extractStyleIntent(originalPrompt);
+        const styleAwarePrompt = buildStyleAwarePrompt(intent, styleProfile, originalPrompt, apiPrompt);
+        logger.info('风格画像注入', { profileName: styleProfile.name, profileId: styleProfileId });
+        apiPrompt = styleAwarePrompt;
+        await StyleProfile.incrementUsage(styleProfileId);
+      }
+    }
+
     logger.info('收到图片生成请求', {
       originalPromptLength: originalPrompt?.length,
       apiPromptLength: apiPrompt?.length,
@@ -77,6 +93,7 @@ async function handleGenerate(req, res, next) {
       isGrsai: isGrsaiModel,
       aspectRatio,
       imageSize,
+      styleProfileId,
       apiPromptPreview: apiPrompt?.slice(0, 100),
     })
 
@@ -185,6 +202,9 @@ async function handleGenerate(req, res, next) {
       modelName: selectedModel,
       userId: null,
       pointsCost,
+      styleProfileId: styleProfileId || null,
+      rating: null,
+      feedback: null,
     })
 
     // 生成成功：确认积分消耗

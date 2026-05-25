@@ -10,10 +10,12 @@ import PromptTemplateLibrary from './PromptTemplateLibrary'
 import WorkflowPanel from './WorkflowPanel'
 import BatchGeneratePanel from './BatchGeneratePanel'
 import SettingsPanel from './SettingsPanel'
+import StyleProfileManager from './StyleProfileManager'
 
 function App() {
   const [currentGroup, setCurrentGroup] = useState('image')
   const [currentMode, setCurrentMode] = useState('free')
+  const [currentRole, setCurrentRole] = useState(() => localStorage.getItem('aihub_current_role') || 'role-general')
   const [templates, setTemplates] = useState([])
   const [points, setPoints] = useState(null) // null = not yet loaded
   const [pointsError, setPointsError] = useState(false)
@@ -28,6 +30,8 @@ function App() {
   const [injectedTemplate, setInjectedTemplate] = useState(null)
   const [showWorkflow, setShowWorkflow] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
+  const [showStyleManager, setShowStyleManager] = useState(false)
+  const [userId, setUserId] = useState(() => localStorage.getItem('aihub_user_id') || null)
 
   // 切换主题
   function handleThemeChange(newTheme) {
@@ -78,13 +82,32 @@ function App() {
     document.documentElement.dataset.theme = theme
     fetchPoints()
     fetchTemplates()
+    initUserId()
     const interval = setInterval(fetchPoints, 30000)
     return () => clearInterval(interval)
   }, [])
 
+  async function initUserId() {
+    if (userId) return
+    try {
+      const resp = await fetch('/api/prefs/init')
+      const data = await resp.json()
+      if (data.success) {
+        const newUserId = data.data.userId
+        setUserId(newUserId)
+        localStorage.setItem('aihub_user_id', newUserId)
+      }
+    } catch (_) {}
+  }
+
   function handleNavigate(group, mode) {
     setCurrentGroup(group)
     setCurrentMode(mode)
+  }
+
+  function handleRoleChange(roleId) {
+    setCurrentRole(roleId)
+    localStorage.setItem('aihub_current_role', roleId)
   }
 
   // 保存模板配置（编辑后调用）
@@ -161,7 +184,7 @@ function App() {
       )
     }
     if (currentMode === 'free') {
-      return <ImageFreePanel injectedTemplate={injectedTemplate} onInjectedConsumed={() => setInjectedTemplate(null)} />
+      return <ImageFreePanel injectedTemplate={injectedTemplate} onInjectedConsumed={() => setInjectedTemplate(null)} userId={userId} currentRole={currentRole} />
     }
     if (currentMode === 'batch') {
       return <BatchGeneratePanel />
@@ -203,6 +226,8 @@ function App() {
         <Sidebar
           currentGroup={currentGroup}
           currentMode={currentMode}
+          currentRole={currentRole}
+          onRoleChange={handleRoleChange}
           templates={templates}
           onNavigate={(g, m) => { handleNavigate(g, m); setSidebarOpen(false) }}
           onCreateTemplate={() => setShowTemplateCreate(true)}
@@ -217,6 +242,13 @@ function App() {
           }}
           onOpenWorkflow={() => {
             setShowWorkflow(true)
+            setSidebarOpen(false)
+          }}
+          onOpenStyleManager={() => {
+            setShowStyleManager(true)
+            setShowWorkflow(false)
+            setShowSettings(false)
+            setShowPromptLibrary(false)
             setSidebarOpen(false)
           }}
           onOpenSettings={() => {
@@ -317,8 +349,9 @@ function App() {
           {!showWorkflow && !showPromptLibrary && currentGroup === 'image' && renderImageWorkspace()}
           {!showWorkflow && !showPromptLibrary && currentGroup === 'video' && <VideoGenerate />}
           {!showWorkflow && !showPromptLibrary && currentGroup === 'music' && <MusicGenerate />}
-          {showWorkflow && <WorkflowPanel onBack={() => setShowWorkflow(false)} />}
+          {showWorkflow && <WorkflowPanel onBack={() => setShowWorkflow(false)} currentRole={currentRole} />}
           {showSettings && <SettingsPanel onBack={() => setShowSettings(false)} />}
+          {showStyleManager && <StyleProfileManager onBack={() => setShowStyleManager(false)} onSelectProfile={(profile) => { setShowStyleManager(false); setCurrentGroup('image'); setCurrentMode('free'); setInjectedTemplate({ prompt: profile.promptTemplate, model: profile.parameters?.model, aspectRatio: profile.parameters?.aspectRatio, imageSize: profile.parameters?.imageSize }); }} />}
         </div>
       </div>
 
