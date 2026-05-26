@@ -9,7 +9,7 @@ const { Generation } = require('../models');
 const { generateImage } = require('../utils/grsaiClient');
 const { parseDocument } = require('../utils/documentParser');
 const { deductPoints, confirmDeduct } = require('../utils/pointsService');
-const { saveImage: saveImageLocal } = require('../utils/localStorage');
+const { saveImage: saveImageLocal, localPathToUrl } = require('../utils/localStorage');
 const logger = require('../utils/logger');
 
 const uploadDir = process.env.UPLOAD_DIR || path.join(__dirname, '..', 'uploads');
@@ -157,7 +157,6 @@ async function handleBatchDownload(req, res, next) {
 
     for (const item of completedItems) {
       const ext = '.jpg';
-      // try to get it from url, default to jpg
       let fileExt = ext;
       try {
         const urlExt = path.extname(new URL(item.resultImageUrl).pathname).toLowerCase();
@@ -170,11 +169,23 @@ async function handleBatchDownload(req, res, next) {
       const dlPath = path.join(tmpDir, filename);
 
       try {
-        const resp = await axios.get(item.resultImageUrl, {
-          responseType: 'arraybuffer',
-          timeout: 30000,
-        });
-        await fsp.writeFile(dlPath, Buffer.from(resp.data));
+        const url = item.resultImageUrl;
+        let buffer;
+
+        if (url.startsWith('/local_storage/')) {
+          // 本地存档：直接从磁盘读取
+          const localPath = path.join(__dirname, '..', url);
+          buffer = await fsp.readFile(localPath);
+        } else {
+          // 远程 URL：通过 HTTP 下载
+          const resp = await axios.get(url, {
+            responseType: 'arraybuffer',
+            timeout: 30000,
+          });
+          buffer = Buffer.from(resp.data);
+        }
+
+        await fsp.writeFile(dlPath, buffer);
         zip.addLocalFile(dlPath);
       } catch (dlErr) {
         logger.warn('批量下载：单张图片下载失败', { index: item.index, url: item.resultImageUrl, error: dlErr.message });
@@ -351,13 +362,20 @@ async function processBatchJob(jobId) {
           recordId: record.id,
         });
 
-        // 本地存档（不阻塞队列）
-        saveImageLocal(imageUrl, {
+        // 本地存档（等待完成以确保后续下载可用）
+        const localPath = await saveImageLocal(imageUrl, {
           id: record.id,
           model,
           provider: 'grsai',
           prompt: item.prompt,
         });
+
+        // 将 resultImageUrl 替换为本地永久 URL，防止 AI 临时 URL 过期
+        if (localPath) {
+          const localUrl = localPathToUrl(localPath);
+          await Generation.updateById(record.id, { resultImageUrl: localUrl });
+          await BatchJob.updateItem(jobId, item.index, { resultImageUrl: localUrl });
+        }
 
         logger.info('批量生成：完成', { jobId, index: item.index });
       } catch (err) {

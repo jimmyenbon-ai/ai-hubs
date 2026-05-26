@@ -484,14 +484,22 @@ function ImageFreePanel({ injectedTemplate, onInjectedConsumed, userId, currentR
     }))
   }
 
-  function handleDownload(url) {
+  async function handleDownload(url) {
     if (!url) return
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `aihub-${new Date().toISOString().replace(/[:.]/g, '-')}.png`
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
+    try {
+      const resp = await fetch(url)
+      const blob = await resp.blob()
+      const blobUrl = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = blobUrl
+      a.download = `aihub-${new Date().toISOString().replace(/[:.]/g, '-')}.png`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(blobUrl)
+    } catch {
+      window.open(url, '_blank')
+    }
   }
 
   async function handleGenerate() {

@@ -240,12 +240,31 @@ function BatchGeneratePanel() {
   // Download zip
   function handleDownload() {
     if (!jobId) return
-    window.open(`/api/batch/download/${jobId}`, '_blank')
+    const a = document.createElement('a')
+    a.href = `/api/batch/download/${jobId}`
+    a.download = ''
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
   }
 
   // Download single image
-  function handleDownloadSingle(url) {
-    window.open(url, '_blank')
+  async function handleDownloadSingle(url) {
+    if (!url) return
+    try {
+      const resp = await fetch(url)
+      const blob = await resp.blob()
+      const blobUrl = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = blobUrl
+      a.download = `aihub-image-${Date.now()}.png`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(blobUrl)
+    } catch {
+      window.open(url, '_blank')
+    }
   }
 
   // Reset
