@@ -109,6 +109,7 @@ function ImageFreePanel({ injectedTemplate, onInjectedConsumed, userId, currentR
   const [nextTaskId, setNextTaskId] = useState(1)
   const promptRef = useRef(null)
   const uploadInputRef = useRef(null)
+  const pageInitRef = useRef(true)
   const progressTimersRef = useRef({})
   const completedResultUrlsRef = useRef({})
 
@@ -370,9 +371,13 @@ function ImageFreePanel({ injectedTemplate, onInjectedConsumed, userId, currentR
     fetchHistory(true)
   }, [showFavoritesOnly, historySearch, historyDateFrom, historyDateTo, historyPageSize])
 
-  // 翻页时重新加载
+  // 翻页时重新加载（跳过初始挂载，避免和 fetchHistory(true) 重复）
   useEffect(() => {
-    if (historyPage > 1) fetchHistory(false)
+    if (pageInitRef.current) {
+      pageInitRef.current = false
+      return
+    }
+    fetchHistory(false)
   }, [historyPage])
 
   async function handleDeleteHistory(id) {
