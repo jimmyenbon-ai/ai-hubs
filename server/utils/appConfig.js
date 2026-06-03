@@ -23,6 +23,9 @@ const store = {
   seedance_api_key: process.env.SEEDANCE_API_KEY || '',
   seedance_api_url: process.env.SEEDANCE_API_URL || 'https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks',
   seedance_default_model: process.env.SEEDANCE_DEFAULT_MODEL || 'doubao-seedance-2-0-260128',
+  agnes_api_key: process.env.AGNES_API_KEY || '',
+  agnes_api_url: process.env.AGNES_API_URL || 'https://apihub.agnes-ai.com/v1/videos',
+  agnes_default_model: process.env.AGNES_DEFAULT_MODEL || 'agnes-video-v2.0',
   imgb_api_key: process.env.IMGBB_API_KEY || '',
   mx_api_key: process.env.MX_API_KEY || '',
   music_api_key: process.env.MUSIC_API_KEY || '',
@@ -32,6 +35,7 @@ const store = {
   ref_image_upload_timeout_ms: Number(process.env.REF_IMAGE_UPLOAD_TIMEOUT_MS || 120000),
 
   // === 设置面板密码（简单密码，内部使用） ===
+  default_video_provider: 'seedance',
   config_password: 'enbon123',
 };
 
@@ -93,9 +97,13 @@ function getConfigKeys() {
     { key: 'seedance_api_key', label: 'Seedance API 密钥', type: 'password', group: '视频生成' },
     { key: 'seedance_api_url', label: 'Seedance API 地址', type: 'text', group: '视频生成' },
     { key: 'seedance_default_model', label: '默认视频模型', type: 'text', group: '视频生成' },
+    { key: 'agnes_api_key', label: 'Agnes Video API 密钥', type: 'password', group: '视频生成' },
+    { key: 'agnes_api_url', label: 'Agnes Video API 地址', type: 'text', group: '视频生成' },
+    { key: 'agnes_default_model', label: '默认Agnes模型', type: 'text', group: '视频生成' },
     { key: 'imgb_api_key', label: 'ImgBB API 密钥', type: 'password', group: '图床上传' },
     { key: 'mx_api_key', label: 'MXAPI 密钥（备用）', type: 'password', group: '图片生成' },
     { key: 'music_api_key', label: '音乐生成 API 密钥', type: 'password', group: '音乐生成' },
+    { key: 'default_video_provider', label: '默认视频引擎', type: 'select', options: ['seedance', 'agnes'], group: '视频生成' },
     { key: 'ref_image_upload_method', label: '图床上传方式', type: 'select', options: ['auto', 'axios', 'curl'], group: '图床上传' },
     { key: 'ref_image_upload_timeout_ms', label: '图床上传超时(ms)', type: 'number', group: '图床上传' },
     { key: 'config_password', label: '设置面板密码', type: 'password', group: '系统' },

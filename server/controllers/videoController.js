@@ -1,8 +1,9 @@
 const { VideoGeneration } = require('../models');
 const { createVideoTask, queryVideoTask, deleteVideoTask, formatTextContent, formatImageUrl, formatVideoUrl, formatAudioUrl } = require('../utils/seedanceApiClient');
+const { createAgnesVideoTask, queryAgnesVideoTask } = require('../utils/agnesVideoClient');
 const { deductPoints } = require('../utils/pointsService');
 const cache = require('../utils/cache');
-const { saveVideo: saveVideoLocal } = require('../utils/localStorage');
+const { saveVideo: saveVideoLocal, localPathToUrl } = require('../utils/localStorage');
 
 // 生成模式常量
 const GENERATION_MODE = {
@@ -19,6 +20,7 @@ const VIDEO_MODEL_POINTS = {
   'doubao-seedance-1-5-pro-251215': 6,
   'doubao-seedance-1-0-pro-250123': 4,
   default: 8,
+  'agnes-video-v2.0': 10,
 };
 
 // 默认配置
@@ -95,6 +97,8 @@ function buildContent(mode, params) {
  * POST /api/video/generate
  * 创建视频生成任务
  */
+function isAgnesModel(model) { return model && model.startsWith('agnes-'); }
+
 async function handleVideoGenerate(req, res, next) {
   try {
     const {
@@ -164,8 +168,29 @@ async function handleVideoGenerate(req, res, next) {
       return res.status(402).json({ success: false, message: deductResult.message });
     }
 
-    // 调用 API 创建任务
-    const result = await createVideoTask({
+    // 路由到 Agnes 或 Seedance API
+    const useAgnes = isAgnesModel(model);
+    let result;
+    if (useAgnes) {
+      // 构建 Agnes API 参数（接受前端直接传参或映射旧参数）
+      const agnesParam = { model, prompt };
+      // 优先使用前端传来的 Agnes 参数
+      if (req.body.height) agnesParam.height = parseInt(req.body.height, 10) || 768;
+      else agnesParam.height = resolution === '1080p' ? 1080 : resolution === '480p' ? 480 : 768;
+      if (req.body.width) agnesParam.width = parseInt(req.body.width, 10) || 1152;
+      else agnesParam.width = ratio === '9:16' ? 576 : ratio === '1:1' ? 768 : ratio === '21:9' ? 1792 : 1152;
+      if (req.body.num_frames) agnesParam.num_frames = parseInt(req.body.num_frames, 10);
+      if (req.body.frame_rate) agnesParam.frame_rate = parseInt(req.body.frame_rate, 10);
+      if (req.body.negative_prompt && req.body.negative_prompt.trim()) agnesParam.negative_prompt = req.body.negative_prompt.trim();
+      if (seed >= 0) agnesParam.seed = seed;
+      if (firstFrameImage) agnesParam.image = firstFrameImage;
+      if (referenceImages && referenceImages.length > 0) {
+        agnesParam.extra_body = { image: referenceImages };
+        if (mode === 'keyframes') agnesParam.extra_body.mode = 'keyframes';
+      }
+      result = await createAgnesVideoTask(agnesParam);
+    } else {
+      result = await createVideoTask({
       model,
       content: requestContent,
       resolution,
@@ -179,6 +204,8 @@ async function handleVideoGenerate(req, res, next) {
       execution_expires_after,
       tools,
     });
+
+    }
 
     // 保存到本地记录
     const record = await VideoGeneration.create({
@@ -242,9 +269,18 @@ async function handleQueryVideoTask(req, res, next) {
     res.set('Pragma', 'no-cache');
     res.set('Expires', '0');
 
+    // 从本地记录判断是 Agnes 还是 Seedance 任务
+    const allRecords = await VideoGeneration.findAll({ limit: 100 });
+    const localRecord = allRecords.find(r => r.task_id === taskId);
+    const isAgnesTask = localRecord && localRecord.model && localRecord.model.startsWith('agnes-');
+
     let result;
     try {
-      result = await queryVideoTask(taskId);
+      if (isAgnesTask) {
+        result = await queryAgnesVideoTask(taskId);
+      } else {
+        result = await queryVideoTask(taskId);
+      }
     } catch (err) {
       // 任务不存在或未就绪时返回 pending 状态
       if (err && (err.status === 404 || err.statusCode === 404)) {
@@ -266,23 +302,26 @@ async function handleQueryVideoTask(req, res, next) {
     const coverUrl = result.cover_image_url || result.content?.last_frame_url || null;
 
     // 如果任务成功，自动更新本地记录
-    if (result.status === 'succeeded' && videoUrl) {
+    if ((((result.status === 'succeeded' || result.status === 'completed') || result.status === 'completed') || result.status === 'completed') && videoUrl) {
+      // 先保存到本地，然后使用本地 URL
+      const localPath = await saveVideoLocal(videoUrl, {
+        taskId,
+        model: result.model,
+        duration: result.duration,
+        resolution: result.resolution,
+        prompt: result.prompt,
+      });
+      // 如果本地保存成功，使用本地 URL；否则使用云端 URL
+      const savedVideoUrl = localPath ? localPathToUrl(localPath) : videoUrl;
+      
       await VideoGeneration.updateByTaskId(taskId, {
         status: 'succeeded',
-        videoUrl,
+        videoUrl: savedVideoUrl,
         lastFrameUrl: coverUrl,
         duration: result.duration,
         resolution: result.resolution,
         ratio: result.ratio,
         usage: result.usage,
-      });
-
-      // 本地存档（不阻塞响应）
-      saveVideoLocal(videoUrl, {
-        taskId,
-        model: result.model,
-        duration: result.duration,
-        resolution: result.resolution,
       });
 
       cache.delete('video_history_list_30');
@@ -298,7 +337,7 @@ async function handleQueryVideoTask(req, res, next) {
 
     res.json({
       success: true,
-      message: result.status === 'succeeded' ? '视频生成成功' : '任务处理中',
+      message: (((result.status === 'succeeded' || result.status === 'completed') || result.status === 'completed') || result.status === 'completed') ? '视频生成成功' : '任务处理中',
       data: {
         taskId: result.id,
         model: result.model,
@@ -480,12 +519,12 @@ async function handleVideoModels(req, res, next) {
         maxAudios: 0,
       },
       {
-        id: 'doubao-seedance-1-0-pro-250123',
-        name: 'Seedance 1.0 pro',
-        description: '基础视频生成模型',
-        features: ['文生视频', '图生视频-首帧', '图生视频-首尾帧'],
-        maxDuration: 12,
-        maxImages: 2,
+        id: 'agnes-video-v2.0',
+        name: 'Agnes Video V2.0',
+        description: 'Agnes AI 电影级视频生成模型，支持文生视频、图生视频、多图视频、关键帧动画',
+        features: ['文生视频', '图生视频', '多图视频生成', '关键帧动画', '电影级画质', '异步任务'],
+        maxDuration: 30,
+        maxImages: 10,
         maxVideos: 0,
         maxAudios: 0,
       },
@@ -515,7 +554,10 @@ async function handleVideoConfig(req, res, next) {
         defaultDuration: DEFAULT_CONFIG.duration,
         defaultGenerateAudio: DEFAULT_CONFIG.generate_audio,
         defaultWatermark: DEFAULT_CONFIG.watermark,
+        defaultVideoProvider: require('../utils/appConfig').appConfig.default_video_provider || 'seedance',
         defaultReturnLastFrame: DEFAULT_CONFIG.return_last_frame,
+        defaultAgnesModel: 'agnes-video-v2.0',
+        defaultAgnesApiUrl: 'https://apihub.agnes-ai.com/v1/videos',
       },
     });
   } catch (err) {

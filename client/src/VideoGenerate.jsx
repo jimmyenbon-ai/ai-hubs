@@ -2,6 +2,12 @@ import { useEffect, useRef, useState } from 'react'
 import './App.css'
 import HistoryFilterBar from './HistoryFilterBar'
 
+// 视频提供商常量
+const VIDEO_PROVIDER = {
+  SEEDANCE: 'seedance',
+  AGNES: 'agnes',
+}
+
 // 生成模式常量
 const GENERATION_MODE = {
   TEXT_TO_VIDEO: 'text_to_video',
@@ -10,11 +16,26 @@ const GENERATION_MODE = {
   MULTIMODAL_REFERENCE: 'multimodal_reference',
 }
 
+// Agnes 视频生成模式（与 Seedance 不同）
+const AGNES_GENERATION_MODE = {
+  TEXT_TO_VIDEO: 'text_to_video',
+  IMAGE_TO_VIDEO: 'ti2vid',
+  MULTI_IMAGE_VIDEO: 'multi_image',
+  KEYFRAME_ANIMATION: 'keyframes',
+}
+
 const MODE_LABELS = {
   [GENERATION_MODE.TEXT_TO_VIDEO]: '文生视频',
   [GENERATION_MODE.IMAGE_TO_VIDEO_FIRST]: '图生视频-首帧',
   [GENERATION_MODE.IMAGE_TO_VIDEO_FIRST_LAST]: '图生视频-首尾帧',
   [GENERATION_MODE.MULTIMODAL_REFERENCE]: '多模态参考',
+}
+
+const AGNES_MODE_LABELS = {
+  [AGNES_GENERATION_MODE.TEXT_TO_VIDEO]: '文生视频',
+  [AGNES_GENERATION_MODE.IMAGE_TO_VIDEO]: '图生视频',
+  [AGNES_GENERATION_MODE.MULTI_IMAGE_VIDEO]: '多图视频',
+  [AGNES_GENERATION_MODE.KEYFRAME_ANIMATION]: '关键帧动画',
 }
 
 const MODE_DESCRIPTIONS = {
@@ -38,8 +59,13 @@ const MEDIA_TYPE_LABELS = {
 }
 
 function VideoGenerate() {
+  // 视频提供商状态
+  const [videoProvider, setVideoProvider] = useState(VIDEO_PROVIDER.SEEDANCE)
+  
   const [generationMode, setGenerationMode] = useState(GENERATION_MODE.TEXT_TO_VIDEO)
+  const [agnesMode, setAgnesMode] = useState(AGNES_GENERATION_MODE.TEXT_TO_VIDEO)
   const [selectedModel, setSelectedModel] = useState('doubao-seedance-2-0-260128')
+  const [provider, setProvider] = useState('seedance')
   const [prompt, setPrompt] = useState('')
   const [resolution, setResolution] = useState('720p')
   const [ratio, setRatio] = useState('16:9')
@@ -47,6 +73,17 @@ function VideoGenerate() {
   const [seed, setSeed] = useState(-1)
   const [generateAudio, setGenerateAudio] = useState(true)
   const [watermark, setWatermark] = useState(false)
+  
+  // Agnes 专用参数
+  const [agnesHeight, setAgnesHeight] = useState(768)
+  const [agnesWidth, setAgnesWidth] = useState(1152)
+  const [agnesNumFrames, setAgnesNumFrames] = useState(121)
+  const [agnesFrameRate, setAgnesFrameRate] = useState(24)
+  const [agnesNegativePrompt, setAgnesNegativePrompt] = useState('')
+  
+  // 多图上传（Agnes 多图/关键帧模式）
+  const [multiImages, setMultiImages] = useState([])
+  const multiImageInputRef = useRef(null)
 
   // 统一素材列表
   const [uploadedFiles, setUploadedFiles] = useState([])
@@ -581,7 +618,6 @@ function VideoGenerate() {
     if (playingVideo === url) {
       if (videoRef.current) {
         videoRef.current.pause()
-        videoRef.current = null
       }
       setPlayingVideo(null)
       return
@@ -589,21 +625,9 @@ function VideoGenerate() {
 
     if (videoRef.current) {
       videoRef.current.pause()
-      videoRef.current = null
     }
 
-    const video = document.createElement('video')
-    video.src = url
-    video.controls = true
-    video.style.maxWidth = '100%'
-    videoRef.current = video
     setPlayingVideo(url)
-
-    const container = document.getElementById(`video-player-${taskId}`)
-    if (container) {
-      container.innerHTML = ''
-      container.appendChild(video)
-    }
   }
 
   function handleDownload(url, filename = 'video') {
@@ -621,6 +645,7 @@ function VideoGenerate() {
   }
 
   async function handleGenerate() {
+    // 验证提示词
     if (generationMode === GENERATION_MODE.TEXT_TO_VIDEO && !prompt.trim()) {
       setError('请输入视频描述词')
       return
@@ -640,7 +665,9 @@ function VideoGenerate() {
     const newTask = {
       id: taskId,
       mode: generationMode,
+      agnesMode: agnesMode,
       model: selectedModel,
+      provider: videoProvider,
       prompt,
       progress: 0,
       status: 'generating',
@@ -654,7 +681,6 @@ function VideoGenerate() {
 
     try {
       let body = {
-        mode: generationMode,
         model: selectedModel,
         resolution,
         ratio,
@@ -664,25 +690,47 @@ function VideoGenerate() {
         watermark,
       }
 
-      // 根据模式构建内容
-      if (generationMode === GENERATION_MODE.MULTIMODAL_REFERENCE) {
-        // 多模态模式：使用 @ 引用解析
-        body.content = buildApiContent()
-        body.prompt = prompt // 同时传递原始提示词
-      } else if (generationMode === GENERATION_MODE.TEXT_TO_VIDEO) {
-        // 文生视频
-        body.content = [{ type: 'text', text: prompt }]
+      // 根据不同的提供商构建请求体
+      if (videoProvider === VIDEO_PROVIDER.AGNES) {
+        // Agnes Video V2.0 专用逻辑
+        body.mode = agnesMode
+        body.prompt = prompt
+        body.height = agnesHeight
+        body.width = agnesWidth
+        body.num_frames = agnesNumFrames
+        body.frame_rate = agnesFrameRate
+        if (agnesNegativePrompt.trim()) body.negative_prompt = agnesNegativePrompt.trim()
+        
+        // 根据模式添加图片参数
+        if (agnesMode === AGNES_GENERATION_MODE.IMAGE_TO_VIDEO && firstFrameUrl) {
+          body.image = firstFrameUrl
+        } else if ((agnesMode === AGNES_GENERATION_MODE.MULTI_IMAGE_VIDEO || agnesMode === AGNES_GENERATION_MODE.KEYFRAME_ANIMATION) && multiImages.length > 0) {
+          body.extra_body = { image: multiImages.map(img => img.url) }
+          if (agnesMode === AGNES_GENERATION_MODE.KEYFRAME_ANIMATION) {
+            body.extra_body.mode = 'keyframes'
+          }
+        }
       } else {
-        // 图生视频模式
-        body.content = []
-        if (prompt.trim()) {
-          body.content.push({ type: 'text', text: prompt })
-        }
-        if (firstFrameUrl) {
-          body.firstFrameImage = firstFrameUrl
-        }
-        if (lastFrameUrl) {
-          body.lastFrameImage = lastFrameUrl
+        // Seedance 逻辑（默认）
+        body.mode = generationMode
+        
+        // 根据模式构建内容
+        if (generationMode === GENERATION_MODE.MULTIMODAL_REFERENCE) {
+          body.content = buildApiContent()
+          body.prompt = prompt
+        } else if (generationMode === GENERATION_MODE.TEXT_TO_VIDEO) {
+          body.content = [{ type: 'text', text: prompt }]
+        } else {
+          body.content = []
+          if (prompt.trim()) {
+            body.content.push({ type: 'text', text: prompt })
+          }
+          if (firstFrameUrl) {
+            body.firstFrameImage = firstFrameUrl
+          }
+          if (lastFrameUrl) {
+            body.lastFrameImage = lastFrameUrl
+          }
         }
       }
 
@@ -717,7 +765,8 @@ function VideoGenerate() {
         startQueryForTaskId(taskId, taskIdFromServer)
       }
 
-      await fetchVideoHistory()
+      // 不再立即调用 fetchVideoHistory，因为 activeTasks 已经显示了新任务
+      // 历史记录会在下次加载时自动更新
     } catch (err) {
       let errorMessage = err.message || '生成出错'
       if (err.name === 'AbortError') {
@@ -735,9 +784,9 @@ function VideoGenerate() {
     }
   }
 
-  const isMultimodalMode = generationMode === GENERATION_MODE.MULTIMODAL_REFERENCE
-  const isImageMode = generationMode === GENERATION_MODE.IMAGE_TO_VIDEO_FIRST ||
-                     generationMode === GENERATION_MODE.IMAGE_TO_VIDEO_FIRST_LAST
+  const isMultimodalMode = videoProvider === VIDEO_PROVIDER.SEEDANCE && generationMode === GENERATION_MODE.MULTIMODAL_REFERENCE
+  const isImageMode = videoProvider === VIDEO_PROVIDER.SEEDANCE && (generationMode === GENERATION_MODE.IMAGE_TO_VIDEO_FIRST ||
+                     generationMode === GENERATION_MODE.IMAGE_TO_VIDEO_FIRST_LAST)
   const [activeParamTab, setActiveParamTab] = useState('basic')
 
   function resetFiles() {
@@ -747,84 +796,214 @@ function VideoGenerate() {
     setLastFrameUrl('')
     setLastFrameName('')
     setPrompt('')
+    setMultiImages([])
+  }
+
+  // 切换视频提供商时重置状态
+  function handleProviderChange(provider) {
+    setVideoProvider(provider)
+    resetFiles()
+    if (provider === VIDEO_PROVIDER.SEEDANCE) {
+      setGenerationMode(GENERATION_MODE.TEXT_TO_VIDEO)
+      setSelectedModel('doubao-seedance-2-0-260128')
+    } else {
+      setAgnesMode(AGNES_GENERATION_MODE.TEXT_TO_VIDEO)
+      setSelectedModel('agnes-video-v2.0')
+    }
+  }
+
+  // 处理多图上传（Agnes 专用）
+  async function handleMultiImageUpload(files) {
+    if (!files || files.length === 0) return
+    setLoadingUpload(true)
+    setError('')
+    try {
+      const formData = new FormData()
+      Array.from(files).forEach(file => formData.append('files', file))
+      const resp = await fetch('/api/upload', { method: 'POST', body: formData })
+      const data = await resp.json()
+      if (data.success && data.files?.length > 0) {
+        const newImages = data.files.map((f, idx) => ({
+          id: multiImages.length + idx + 1,
+          url: f.url,
+          filename: f.filename || f.originalname || file.name,
+        }))
+        setMultiImages(prev => [...prev, ...newImages])
+      } else {
+        setError(data.message || '上传失败')
+      }
+    } catch (err) {
+      setError('上传失败: ' + err.message)
+    } finally {
+      setLoadingUpload(false)
+    }
+  }
+
+  function handleMultiImageInputChange(e) {
+    const files = e.target.files
+    if (files) handleMultiImageUpload(files)
+    e.target.value = ''
+  }
+
+  function removeMultiImage(id) {
+    setMultiImages(prev => prev.filter(img => img.id !== id).map((img, idx) => ({ ...img, id: idx + 1 })))
   }
 
   return (
     <div className="workspace">
       <div className="config-panel">
         <div className="panel-title">
-          <span style={{ cursor: 'pointer' }}>&larr;</span> 工具箱 - Seedance 2.0 视频生成
+          <span style={{ cursor: 'pointer' }}>&larr;</span> 工具箱 - AI 视频生成
         </div>
 
-        {/* 生成模式选择 */}
-        <div className="section-label">生成模式</div>
-        <div className="mode-tabs">
+        {/* API 提供商切换 */}
+        <div className="section-label">选择 API 提供商</div>
+        <div className="provider-tabs">
           <button
             type="button"
-            className={`mode-tab ${generationMode === GENERATION_MODE.TEXT_TO_VIDEO ? 'active' : ''}`}
-            onClick={() => { setGenerationMode(GENERATION_MODE.TEXT_TO_VIDEO); resetFiles(); }}
+            className={`provider-tab ${videoProvider === VIDEO_PROVIDER.SEEDANCE ? 'active' : ''}`}
+            onClick={() => handleProviderChange(VIDEO_PROVIDER.SEEDANCE)}
           >
-            文生视频
+            Seedance
           </button>
           <button
             type="button"
-            className={`mode-tab ${generationMode === GENERATION_MODE.IMAGE_TO_VIDEO_FIRST ? 'active' : ''}`}
-            onClick={() => { setGenerationMode(GENERATION_MODE.IMAGE_TO_VIDEO_FIRST); resetFiles(); }}
+            className={`provider-tab ${videoProvider === VIDEO_PROVIDER.AGNES ? 'active' : ''}`}
+            onClick={() => handleProviderChange(VIDEO_PROVIDER.AGNES)}
           >
-            首帧
-          </button>
-          <button
-            type="button"
-            className={`mode-tab ${generationMode === GENERATION_MODE.IMAGE_TO_VIDEO_FIRST_LAST ? 'active' : ''}`}
-            onClick={() => { setGenerationMode(GENERATION_MODE.IMAGE_TO_VIDEO_FIRST_LAST); resetFiles(); }}
-          >
-            首尾帧
-          </button>
-          <button
-            type="button"
-            className={`mode-tab ${generationMode === GENERATION_MODE.MULTIMODAL_REFERENCE ? 'active' : ''}`}
-            onClick={() => { setGenerationMode(GENERATION_MODE.MULTIMODAL_REFERENCE); resetFiles(); }}
-          >
-            多模态
-          </button>
-        </div>
-        <p className="hint">{MODE_DESCRIPTIONS[generationMode]}</p>
-
-        {/* 模型选择 */}
-        <div className="section-label">视频模型</div>
-        <div className="model-tabs">
-          <button
-            type="button"
-            className={`model-tab ${selectedModel === 'doubao-seedance-2-0-260128' ? 'active' : ''}`}
-            onClick={() => setSelectedModel('doubao-seedance-2-0-260128')}
-          >
-            Seedance 2.0
-          </button>
-          <button
-            type="button"
-            className={`model-tab ${selectedModel === 'doubao-seedance-2-0-fast-260128' ? 'active' : ''}`}
-            onClick={() => setSelectedModel('doubao-seedance-2-0-fast-260128')}
-          >
-            2.0 fast
-          </button>
-          <button
-            type="button"
-            className={`model-tab ${selectedModel === 'doubao-seedance-1-5-pro-251215' ? 'active' : ''}`}
-            onClick={() => setSelectedModel('doubao-seedance-1-5-pro-251215')}
-          >
-            1.5 pro
-          </button>
-          <button
-            type="button"
-            className={`model-tab ${selectedModel === 'doubao-seedance-1-0-pro-250123' ? 'active' : ''}`}
-            onClick={() => setSelectedModel('doubao-seedance-1-0-pro-250123')}
-          >
-            1.0 pro
+            Agnes Video V2.0
           </button>
         </div>
 
-        {/* 图生视频-首帧：上传首帧图 */}
-        {generationMode === GENERATION_MODE.IMAGE_TO_VIDEO_FIRST && (
+        {/* Seedance 模式选择 */}
+        {videoProvider === VIDEO_PROVIDER.SEEDANCE && (
+          <>
+            <div className="section-label">生成模式</div>
+            <div className="mode-tabs">
+              <button
+                type="button"
+                className={`mode-tab ${generationMode === GENERATION_MODE.TEXT_TO_VIDEO ? 'active' : ''}`}
+                onClick={() => { setGenerationMode(GENERATION_MODE.TEXT_TO_VIDEO); resetFiles(); }}
+              >
+                文生视频
+              </button>
+              <button
+                type="button"
+                className={`mode-tab ${generationMode === GENERATION_MODE.IMAGE_TO_VIDEO_FIRST ? 'active' : ''}`}
+                onClick={() => { setGenerationMode(GENERATION_MODE.IMAGE_TO_VIDEO_FIRST); resetFiles(); }}
+              >
+                首帧
+              </button>
+              <button
+                type="button"
+                className={`mode-tab ${generationMode === GENERATION_MODE.IMAGE_TO_VIDEO_FIRST_LAST ? 'active' : ''}`}
+                onClick={() => { setGenerationMode(GENERATION_MODE.IMAGE_TO_VIDEO_FIRST_LAST); resetFiles(); }}
+              >
+                首尾帧
+              </button>
+              <button
+                type="button"
+                className={`mode-tab ${generationMode === GENERATION_MODE.MULTIMODAL_REFERENCE ? 'active' : ''}`}
+                onClick={() => { setGenerationMode(GENERATION_MODE.MULTIMODAL_REFERENCE); resetFiles(); }}
+              >
+                多模态
+              </button>
+            </div>
+            <p className="hint">{MODE_DESCRIPTIONS[generationMode]}</p>
+
+            {/* Seedance 模型选择 */}
+            <div className="section-label">视频模型</div>
+            <div className="model-tabs">
+              <button
+                type="button"
+                className={`model-tab ${selectedModel === 'doubao-seedance-2-0-260128' ? 'active' : ''}`}
+                onClick={() => setSelectedModel('doubao-seedance-2-0-260128')}
+              >
+                Seedance 2.0
+              </button>
+              <button
+                type="button"
+                className={`model-tab ${selectedModel === 'doubao-seedance-2-0-fast-260128' ? 'active' : ''}`}
+                onClick={() => setSelectedModel('doubao-seedance-2-0-fast-260128')}
+              >
+                2.0 fast
+              </button>
+              <button
+                type="button"
+                className={`model-tab ${selectedModel === 'doubao-seedance-1-5-pro-251215' ? 'active' : ''}`}
+                onClick={() => setSelectedModel('doubao-seedance-1-5-pro-251215')}
+              >
+                1.5 pro
+              </button>
+              <button
+                type="button"
+                className={`model-tab ${selectedModel === 'doubao-seedance-1-0-pro-250123' ? 'active' : ''}`}
+                onClick={() => setSelectedModel('doubao-seedance-1-0-pro-250123')}
+              >
+                1.0 pro
+              </button>
+            </div>
+          </>
+        )}
+
+        {/* Agnes 模式选择 */}
+        {videoProvider === VIDEO_PROVIDER.AGNES && (
+          <>
+            <div className="section-label">生成模式</div>
+            <div className="mode-tabs">
+              <button
+                type="button"
+                className={`mode-tab ${agnesMode === AGNES_GENERATION_MODE.TEXT_TO_VIDEO ? 'active' : ''}`}
+                onClick={() => { setAgnesMode(AGNES_GENERATION_MODE.TEXT_TO_VIDEO); resetFiles(); }}
+              >
+                文生视频
+              </button>
+              <button
+                type="button"
+                className={`mode-tab ${agnesMode === AGNES_GENERATION_MODE.IMAGE_TO_VIDEO ? 'active' : ''}`}
+                onClick={() => { setAgnesMode(AGNES_GENERATION_MODE.IMAGE_TO_VIDEO); resetFiles(); }}
+              >
+                图生视频
+              </button>
+              <button
+                type="button"
+                className={`mode-tab ${agnesMode === AGNES_GENERATION_MODE.MULTI_IMAGE_VIDEO ? 'active' : ''}`}
+                onClick={() => { setAgnesMode(AGNES_GENERATION_MODE.MULTI_IMAGE_VIDEO); resetFiles(); }}
+              >
+                多图视频
+              </button>
+              <button
+                type="button"
+                className={`mode-tab ${agnesMode === AGNES_GENERATION_MODE.KEYFRAME_ANIMATION ? 'active' : ''}`}
+                onClick={() => { setAgnesMode(AGNES_GENERATION_MODE.KEYFRAME_ANIMATION); resetFiles(); }}
+              >
+                关键帧动画
+              </button>
+            </div>
+            <p className="hint">
+              {agnesMode === AGNES_GENERATION_MODE.TEXT_TO_VIDEO && '仅输入文本提示词生成视频'}
+              {agnesMode === AGNES_GENERATION_MODE.IMAGE_TO_VIDEO && '上传图片，AI 将其动画化'}
+              {agnesMode === AGNES_GENERATION_MODE.MULTI_IMAGE_VIDEO && '使用多张参考图像指导视频生成'}
+              {agnesMode === AGNES_GENERATION_MODE.KEYFRAME_ANIMATION && '在多个关键帧之间生成平滑过渡动画'}
+            </p>
+
+            {/* Agnes 模型标识 */}
+            <div className="section-label">视频模型</div>
+            <div className="model-tabs">
+              <button
+                type="button"
+                className={`model-tab active`}
+                onClick={() => {}}
+                style={{ cursor: 'default' }}
+              >
+                Agnes Video V2.0
+              </button>
+            </div>
+          </>
+        )}
+
+        {/* Seedance 图生视频-首帧：上传首帧图 */}
+        {videoProvider === VIDEO_PROVIDER.SEEDANCE && generationMode === GENERATION_MODE.IMAGE_TO_VIDEO_FIRST && (
           <>
             <div className="section-label">首帧图片</div>
             <div
@@ -867,8 +1046,8 @@ function VideoGenerate() {
           </>
         )}
 
-        {/* 图生视频-首尾帧：上传首帧 + 尾帧 */}
-        {generationMode === GENERATION_MODE.IMAGE_TO_VIDEO_FIRST_LAST && (
+        {/* Seedance 图生视频-首尾帧：上传首帧 + 尾帧 */}
+        {videoProvider === VIDEO_PROVIDER.SEEDANCE && generationMode === GENERATION_MODE.IMAGE_TO_VIDEO_FIRST_LAST && (
           <>
             <div className="section-label">首帧图片</div>
             <div
@@ -950,8 +1129,8 @@ function VideoGenerate() {
           </>
         )}
 
-        {/* 多模态模式：统一上传区 */}
-        {generationMode === GENERATION_MODE.MULTIMODAL_REFERENCE && (
+        {/* Seedance 多模态模式：统一上传区 */}
+        {videoProvider === VIDEO_PROVIDER.SEEDANCE && generationMode === GENERATION_MODE.MULTIMODAL_REFERENCE && (
           <>
             <div className="section-label">
               上传素材 <span style={{ color: '#a4b0be', fontWeight: 'normal' }}>（图片/视频/音频，在提示词中用 @1 @2 引用）</span>
@@ -1024,10 +1203,114 @@ function VideoGenerate() {
           </>
         )}
 
+        {/* Agnes 图生视频模式：单图上传 */}
+        {videoProvider === VIDEO_PROVIDER.AGNES && agnesMode === AGNES_GENERATION_MODE.IMAGE_TO_VIDEO && (
+          <>
+            <div className="section-label">输入图片</div>
+            <div
+              className="upload-area"
+              onClick={() => firstFrameInputRef.current?.click()}
+              onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add('drag-over') }}
+              onDragLeave={(e) => { e.preventDefault(); e.currentTarget.classList.remove('drag-over') }}
+              onDrop={(e) => {
+                e.preventDefault()
+                e.currentTarget.classList.remove('drag-over')
+                const file = e.dataTransfer.files?.[0]
+                if (file && file.type.startsWith('image/')) handleFrameUpload(file, 'first')
+              }}
+            >
+              {firstFrameUrl ? (
+                <img src={firstFrameUrl} alt="输入图" style={{ maxWidth: '100%', maxHeight: 120, borderRadius: 8 }} />
+              ) : (
+                <>
+                  点击或拖拽上传图片
+                  <br />
+                  <span className="upload-tip">支持 PNG、JPG，10MB 以内</span>
+                </>
+              )}
+              {loadingUpload && <div className="upload-status">正在上传...</div>}
+              <input
+                ref={firstFrameInputRef}
+                type="file"
+                accept="image/*"
+                onChange={(e) => handleFrameChange(e, 'first')}
+                style={{ display: 'none' }}
+              />
+            </div>
+            {firstFrameName && (
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: -6, marginBottom: 8 }}>
+                已上传: {firstFrameName}
+                <button type="button" onClick={() => { setFirstFrameUrl(''); setFirstFrameName(''); }}
+                  style={{ marginLeft: 8, background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: 11 }}>移除</button>
+              </div>
+            )}
+          </>
+        )}
+
+        {/* Agnes 多图视频 / 关键帧动画：多图上传 */}
+        {(videoProvider === VIDEO_PROVIDER.AGNES && (agnesMode === AGNES_GENERATION_MODE.MULTI_IMAGE_VIDEO || agnesMode === AGNES_GENERATION_MODE.KEYFRAME_ANIMATION)) && (
+          <>
+            <div className="section-label">
+              {agnesMode === AGNES_GENERATION_MODE.KEYFRAME_ANIMATION ? '关键帧图片' : '参考图片'}
+              <span style={{ color: '#a4b0be', fontWeight: 'normal' }}>（至少上传 2 张图片）</span>
+            </div>
+            <div
+              className="upload-area"
+              onClick={() => multiImageInputRef.current?.click()}
+              onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add('drag-over') }}
+              onDragLeave={(e) => { e.preventDefault(); e.currentTarget.classList.remove('drag-over') }}
+              onDrop={(e) => {
+                e.preventDefault()
+                e.currentTarget.classList.remove('drag-over')
+                const files = e.dataTransfer.files
+                if (files && files.length > 0) handleMultiImageUpload(files)
+              }}
+            >
+              点击或拖拽上传多张图片
+              <br />
+              <span className="upload-tip">支持 PNG、JPG，10MB 以内</span>
+              {loadingUpload && <div className="upload-status">正在上传...</div>}
+              <input
+                ref={multiImageInputRef}
+                type="file"
+                multiple
+                accept="image/*"
+                onChange={handleMultiImageInputChange}
+                style={{ display: 'none' }}
+              />
+            </div>
+
+            {/* 多图列表 */}
+            {multiImages.length > 0 && (
+              <div className="media-files-grid">
+                {multiImages.map((img) => (
+                  <div key={img.id} className="media-file-item">
+                    <div className="media-file-badge" style={{ background: '#6c5ce7' }}>
+                      #{img.id}
+                    </div>
+                    <img src={img.url} alt={img.filename} />
+                    <button
+                      type="button"
+                      className="thumb-remove"
+                      onClick={() => removeMultiImage(img.id)}
+                    >×</button>
+                  </div>
+                ))}
+              </div>
+            )}
+            {multiImages.length > 0 && (
+              <p className="hint" style={{ marginTop: 4 }}>
+                已上传 {multiImages.length} 张图片
+                {agnesMode === AGNES_GENERATION_MODE.KEYFRAME_ANIMATION && '（将按顺序生成关键帧之间的过渡）'}
+              </p>
+            )}
+          </>
+        )}
+
         {/* 提示词输入 */}
         <div className="section-label">
-          {isMultimodalMode ? '视频描述词' : '视频描述词'}
-          {uploadedFiles.length > 0 && (
+          视频描述词
+          {videoProvider === VIDEO_PROVIDER.SEEDANCE && generationMode === GENERATION_MODE.MULTIMODAL_REFERENCE && uploadedFiles.length > 0 && (
             <span style={{ color: '#a4b0be', fontWeight: 'normal' }}>（可用 @1 @2 引用素材）</span>
           )}
         </div>
@@ -1036,7 +1319,7 @@ function VideoGenerate() {
             ref={promptRef}
             className="prompt-box"
             placeholder={
-              isMultimodalMode
+              videoProvider === VIDEO_PROVIDER.SEEDANCE && generationMode === GENERATION_MODE.MULTIMODAL_REFERENCE
                 ? '描述期望生成的视频，例如：结合@1和@2的风格，生成一段...'
                 : '描述期望生成的视频内容，支持中英文'
             }
@@ -1076,90 +1359,189 @@ function VideoGenerate() {
           )}
         </div>
 
-        {/* 生成参数 */}
-        <div className="section-label">生成参数</div>
-        <div className="params-tabs">
-          <button
-            type="button"
-            className={`params-tab ${activeParamTab === 'basic' ? 'active' : ''}`}
-            onClick={() => setActiveParamTab('basic')}
-          >
-            基础参数
-          </button>
-          <button
-            type="button"
-            className={`params-tab ${activeParamTab === 'video' ? 'active' : ''}`}
-            onClick={() => setActiveParamTab('video')}
-          >
-            视频参数
-          </button>
-        </div>
-
-        <div className="params-panel">
-          {activeParamTab === 'basic' && (
-            <div className="params-row">
-              <div className="param-item">
-                <label>分辨率</label>
-                <select value={resolution} onChange={(e) => setResolution(e.target.value)}>
-                  <option value="480p">480p</option>
-                  <option value="720p">720p</option>
-                  <option value="1080p">1080p</option>
-                </select>
-              </div>
-              <div className="param-item">
-                <label>画幅比例</label>
-                <select value={ratio} onChange={(e) => setRatio(e.target.value)}>
-                  <option value="16:9">16:9 横版</option>
-                  <option value="4:3">4:3</option>
-                  <option value="1:1">1:1 方形</option>
-                  <option value="3:4">3:4 竖版</option>
-                  <option value="9:16">9:16 竖版</option>
-                  <option value="21:9">21:9 宽屏</option>
-                  <option value="adaptive">自适应</option>
-                </select>
-              </div>
+        {/* Seedance 生成参数 */}
+        {videoProvider === VIDEO_PROVIDER.SEEDANCE && (
+          <>
+            <div className="section-label">生成参数</div>
+            <div className="params-tabs">
+              <button
+                type="button"
+                className={`params-tab ${activeParamTab === 'basic' ? 'active' : ''}`}
+                onClick={() => setActiveParamTab('basic')}
+              >
+                基础参数
+              </button>
+              <button
+                type="button"
+                className={`params-tab ${activeParamTab === 'video' ? 'active' : ''}`}
+                onClick={() => setActiveParamTab('video')}
+              >
+                视频参数
+              </button>
             </div>
-          )}
 
-          {activeParamTab === 'video' && (
-            <div className="params-row">
-              <div className="param-item">
-                <label>时长（秒）</label>
-                <input
-                  type="number"
-                  value={duration}
-                  onChange={(e) => setDuration(e.target.value)}
-                  min="2"
-                  max="15"
-                  placeholder="2-15秒"
-                />
-              </div>
-              <div className="param-item">
-                <label>种子值</label>
-                <input
-                  type="number"
-                  value={seed}
-                  onChange={(e) => setSeed(e.target.value)}
-                  placeholder="-1 随机"
-                />
-              </div>
-              <div className="param-item">
-                <label>生成音频</label>
-                <select value={generateAudio ? 'true' : 'false'} onChange={(e) => setGenerateAudio(e.target.value === 'true')}>
-                  <option value="true">有音频</option>
-                  <option value="false">无音频</option>
-                </select>
-              </div>
-              <div className="param-item">
-                <label>水印</label>
-                <select value={watermark ? 'true' : 'false'} onChange={(e) => setWatermark(e.target.value === 'true')}>
-                  <option value="false">无水印</option>
-                  <option value="true">有水印</option>
-                </select>
-              </div>
+            <div className="params-panel">
+              {activeParamTab === 'basic' && (
+                <div className="params-row">
+                  <div className="param-item">
+                    <label>分辨率</label>
+                    <select value={resolution} onChange={(e) => setResolution(e.target.value)}>
+                      <option value="480p">480p</option>
+                      <option value="720p">720p</option>
+                      <option value="1080p">1080p</option>
+                    </select>
+                  </div>
+                  <div className="param-item">
+                    <label>画幅比例</label>
+                    <select value={ratio} onChange={(e) => setRatio(e.target.value)}>
+                      <option value="16:9">16:9 横版</option>
+                      <option value="4:3">4:3</option>
+                      <option value="1:1">1:1 方形</option>
+                      <option value="3:4">3:4 竖版</option>
+                      <option value="9:16">9:16 竖版</option>
+                      <option value="21:9">21:9 宽屏</option>
+                      <option value="adaptive">自适应</option>
+                    </select>
+                  </div>
+                </div>
+              )}
+
+              {activeParamTab === 'video' && (
+                <div className="params-row">
+                  <div className="param-item">
+                    <label>时长（秒）</label>
+                    <input
+                      type="number"
+                      value={duration}
+                      onChange={(e) => setDuration(e.target.value)}
+                      min="2"
+                      max="15"
+                      placeholder="2-15秒"
+                    />
+                  </div>
+                  <div className="param-item">
+                    <label>种子值</label>
+                    <input
+                      type="number"
+                      value={seed}
+                      onChange={(e) => setSeed(e.target.value)}
+                      placeholder="-1 随机"
+                    />
+                  </div>
+                  <div className="param-item">
+                    <label>生成音频</label>
+                    <select value={generateAudio ? 'true' : 'false'} onChange={(e) => setGenerateAudio(e.target.value === 'true')}>
+                      <option value="true">有音频</option>
+                      <option value="false">无音频</option>
+                    </select>
+                  </div>
+                  <div className="param-item">
+                    <label>水印</label>
+                    <select value={watermark ? 'true' : 'false'} onChange={(e) => setWatermark(e.target.value === 'true')}>
+                      <option value="false">无水印</option>
+                      <option value="true">有水印</option>
+                    </select>
+                  </div>
+                </div>
+              )}
             </div>
-          )}
-        </div>
+          </>
+        )}
+
+        {/* Agnes 生成参数 */}
+        {videoProvider === VIDEO_PROVIDER.AGNES && (
+          <>
+            <div className="section-label">生成参数</div>
+            <div className="params-tabs">
+              <button
+                type="button"
+                className={`params-tab ${activeParamTab === 'basic' ? 'active' : ''}`}
+                onClick={() => setActiveParamTab('basic')}
+              >
+                基础参数
+              </button>
+              <button
+                type="button"
+                className={`params-tab ${activeParamTab === 'video' ? 'active' : ''}`}
+                onClick={() => setActiveParamTab('video')}
+              >
+                视频参数
+              </button>
+            </div>
+
+            <div className="params-panel">
+              {activeParamTab === 'basic' && (
+                <div className="params-row">
+                  <div className="param-item">
+                    <label>分辨率</label>
+                    <select
+                      value={`${agnesWidth}x${agnesHeight}`}
+                      onChange={(e) => {
+                        const [w, h] = e.target.value.split('x').map(Number);
+                        setAgnesWidth(w);
+                        setAgnesHeight(h);
+                      }}
+                    >
+                      <option value="1152x768">1152x768 (3:2)</option>
+                      <option value="1024x1024">1024x1024 (1:1)</option>
+                      <option value="1280x720">1280x720 (16:9)</option>
+                      <option value="768x1152">768x1152 (2:3)</option>
+                      <option value="1920x1080">1920x1080 (16:9 HD)</option>
+                    </select>
+                  </div>
+                </div>
+              )}
+
+              {activeParamTab === 'video' && (
+                <div className="params-row">
+                  <div className="param-item">
+                    <label>时长</label>
+                    <select
+                      value={agnesNumFrames}
+                      onChange={(e) => {
+                        const frames = parseInt(e.target.value, 10);
+                        setAgnesNumFrames(frames);
+                      }}
+                    >
+                      <option value="81">3.3秒</option>
+                      <option value="121">5秒</option>
+                      <option value="161">6.7秒</option>
+                      <option value="241">10秒</option>
+                      <option value="441">18秒</option>
+                    </select>
+                  </div>
+                  <div className="param-item">
+                    <label>帧率</label>
+                    <select value={agnesFrameRate} onChange={(e) => setAgnesFrameRate(parseInt(e.target.value, 10))}>
+                      <option value="24">24 FPS</option>
+                      <option value="30">30 FPS</option>
+                      <option value="60">60 FPS</option>
+                    </select>
+                  </div>
+                  <div className="param-item">
+                    <label>种子值</label>
+                    <input
+                      type="number"
+                      value={seed}
+                      onChange={(e) => setSeed(e.target.value)}
+                      placeholder="-1 随机"
+                    />
+                  </div>
+                  <div className="param-item" style={{ width: '100%' }}>
+                    <label>负向提示词</label>
+                    <input
+                      type="text"
+                      value={agnesNegativePrompt}
+                      onChange={(e) => setAgnesNegativePrompt(e.target.value)}
+                      placeholder="描述需要避免的内容，如：模糊、变形、低质量"
+                      style={{ width: '100%' }}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+          </>
+        )}
 
         {error && <p className="error-text">{error}</p>}
 
@@ -1194,7 +1576,9 @@ function VideoGenerate() {
             className={`result-card generating-card ${task.status === 'failed' ? 'failed-card' : ''}`}
           >
             <div className="card-header">
-              <span className="tag">Seedance 2.0</span>
+              <span className="tag">
+                {task.provider === VIDEO_PROVIDER.AGNES ? 'Agnes V2.0' : 'Seedance 2.0'}
+              </span>
               <div className="card-actions">
                 {task.status === 'generating' && <span className="generating-badge">生成中</span>}
                 {task.status === 'submitted' && <span className="generating-badge" style={{ backgroundColor: '#6366f1' }}>已提交</span>}
@@ -1202,7 +1586,9 @@ function VideoGenerate() {
                 {task.status === 'failed' && <span className="generating-badge" style={{ backgroundColor: '#ef4444' }}>失败</span>}
               </div>
             </div>
-            <div className="prompt-text">[{MODE_LABELS[task.mode]}] {task.prompt || '正在生成视频...'}</div>
+            <div className="prompt-text">
+              [{task.provider === VIDEO_PROVIDER.AGNES ? AGNES_MODE_LABELS[task.agnesMode] || task.agnesMode : MODE_LABELS[task.mode] || task.mode}] {task.prompt || '正在生成视频...'}
+            </div>
             <div className="card-meta-row">
               <span className="meta-item">{task.model}</span>
               <span className="meta-time">{task.createdAt.toLocaleString()}</span>
@@ -1265,10 +1651,17 @@ function VideoGenerate() {
           </div>
         )}
 
-        {history.map((item) => (
+        {history.map((item) => {
+          // 过滤掉已经在 activeTasks 中显示的任务
+          const isInActiveTasks = activeTasks.some(t => t.taskId === item.task_id);
+          if (isInActiveTasks) return null;
+          
+          return (
           <div className="result-card" key={item.id}>
             <div className="card-header">
-              <span className="tag">Seedance 2.0</span>
+              <span className="tag">
+                {item.model && item.model.startsWith('agnes') ? 'Agnes V2.0' : 'Seedance 2.0'}
+              </span>
               <div className="card-actions">
                 {item.videoUrl && (
                   <button className="btn-outline" type="button" onClick={() => handlePlayVideo(item.videoUrl, `history-${item.id}`)} style={{ marginRight: '8px' }}>
@@ -1276,7 +1669,7 @@ function VideoGenerate() {
                   </button>
                 )}
                 {item.videoUrl && (
-                  <button className="btn-outline" type="button" onClick={() => handleDownload(item.videoUrl, 'seedance-video')} style={{ marginRight: '8px' }}>
+                  <button className="btn-outline" type="button" onClick={() => handleDownload(item.videoUrl, 'video')} style={{ marginRight: '8px' }}>
                     ⬇ 下载
                   </button>
                 )}
@@ -1285,7 +1678,7 @@ function VideoGenerate() {
                 </button>
               </div>
             </div>
-            <div className="prompt-text">[{MODE_LABELS[item.mode] || item.mode}] {item.prompt || '无描述'}</div>
+            <div className="prompt-text">{item.prompt || '无描述'}</div>
             <div className="card-meta-row">
               <span className="meta-item">{item.model}</span>
               {item.resolution && <span className="meta-item">{item.resolution} · {item.ratio}</span>}
@@ -1299,7 +1692,31 @@ function VideoGenerate() {
             {item.status === 'queued' && <div style={{ marginTop: '10px', color: '#6366f1' }}>排队中...</div>}
             {item.status === 'running' && <div style={{ marginTop: '10px', color: '#6366f1' }}>生成中...</div>}
           </div>
-        ))}
+          );
+        })}
+
+        {/* 视频播放器区域 */}
+        {playingVideo && (
+          <div className="result-card" style={{ marginTop: '20px', background: '#1f1f1f', padding: '16px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+              <span style={{ color: '#fff' }}>正在播放</span>
+              <button className="btn-outline" onClick={() => {
+                if (videoRef.current) {
+                  videoRef.current.pause()
+                  videoRef.current = null
+                }
+                setPlayingVideo(null)
+              }}>✕ 关闭</button>
+            </div>
+            <video
+              ref={videoRef}
+              src={playingVideo}
+              controls
+              autoPlay
+              style={{ width: '100%', maxHeight: '400px', borderRadius: '8px' }}
+            />
+          </div>
+        )}
       </div>
     </div>
   )
