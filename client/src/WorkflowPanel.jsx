@@ -1642,6 +1642,7 @@ function VideoGenerateFields({ selectedNode, updateNodeData }) {
         <option value="seedance2.0-fast">Seedance 2.0 Fast（快速）</option>
         <option value="seedance1.5-pro">Seedance 1.5 Pro</option>
         <option value="seedance1.0-pro">Seedance 1.0 Pro</option>
+        <option value="agnes-video-v2.0">Agnes Video V2.0（电影级）</option>
       </select>
       <div className="section-label" style={{ marginTop: 12 }}>比例</div>
       <select className="input-field" value={selectedNode.data.ratio || '16:9'}

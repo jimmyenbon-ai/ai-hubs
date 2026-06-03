@@ -1467,6 +1467,7 @@ async function handleVideoGenerate(node, inputs, context) {
   const userPrompt = inputs.prompt || inputs.text || '';
 
   // 提取参考图 URL（只取 content-role：产品/logo，排除 style-role：设计海报）
+  // 优先级：1. 用户指定的参考图 2. 知识库图片 3. 上游图片生成节点的输出
   let referenceImageUrls = [];
   if (inputs.referenceImages && inputs.referenceImages.length > 0) {
     referenceImageUrls = inputs.referenceImages.filter(u => typeof u === 'string' && u.trim());
@@ -1480,7 +1481,21 @@ async function handleVideoGenerate(node, inputs, context) {
       .filter(k => k.type === 'image' && (k.referenceRole || 'content') === 'content' && k.url)
       .map(k => k.url);
   }
+  // 【关键修复】支持接收图片生成节点的输出作为首帧
+  // 如果上游有 imageGenerate 节点，它的输出会传到 inputs.imageUrl
+  if (referenceImageUrls.length === 0 && inputs.imageUrl && typeof inputs.imageUrl === 'string' && inputs.imageUrl.trim()) {
+    referenceImageUrls = [inputs.imageUrl.trim()];
+    console.log(`[视频生成] 接收上游图片生成节点的输出作为首帧: ${inputs.imageUrl.substring(0, 80)}...`);
+  }
   referenceImageUrls = referenceImageUrls.slice(0, MAX_REFERENCE_IMAGES);
+
+  // 【关键修复】首帧图片：优先使用图片生成节点的输出
+  let firstFrameImage = null;
+  if (inputs.imageUrl && typeof inputs.imageUrl === 'string' && inputs.imageUrl.trim()) {
+    firstFrameImage = inputs.imageUrl.trim();
+  } else if (referenceImageUrls.length > 0) {
+    firstFrameImage = referenceImageUrls[0];
+  }
 
   // 公网化参考图
   const publicRefs = [];
@@ -1490,6 +1505,17 @@ async function handleVideoGenerate(node, inputs, context) {
       if (publicUrl) publicRefs.push(publicUrl);
     } catch (e) {
       console.warn(`[视频生成] 参考图上传失败: ${url.substring(0, 80)}`, e.message);
+    }
+  }
+
+  // 公网化首帧图片
+  let publicFirstFrame = null;
+  if (firstFrameImage) {
+    try {
+      publicFirstFrame = await ensurePublicImageUrl(firstFrameImage);
+      console.log(`[视频生成] 首帧图片公网化: ${firstFrameImage.substring(0, 80)}... → ${publicFirstFrame}`);
+    } catch (e) {
+      console.warn(`[视频生成] 首帧图片上传失败: ${firstFrameImage.substring(0, 80)}`, e.message);
     }
   }
 
@@ -1520,11 +1546,12 @@ async function handleVideoGenerate(node, inputs, context) {
   const ratio = node.data?.ratio || '16:9';
   const duration = node.data?.duration || 5;
 
-  // 自动判断生成模式：有参考图 → 多模态参考，否则 → 纯文本
+  // 自动判断生成模式：有首帧图片 → 图生视频，否则 → 纯文本
+  const hasFirstFrame = !!publicFirstFrame;
   const hasRefs = publicRefs.length > 0;
-  const mode = hasRefs ? 'multimodal_reference' : 'text_to_video';
+  const mode = hasFirstFrame ? 'image_to_video_first' : (hasRefs ? 'multimodal_reference' : 'text_to_video');
 
-  console.log(`[视频生成] model=${model}, mode=${mode}, refs=${publicRefs.length}, ratio=${ratio}, duration=${duration}s`);
+  console.log(`[视频生成] model=${model}, mode=${mode}, hasFirstFrame=${hasFirstFrame}, refs=${publicRefs.length}, ratio=${ratio}, duration=${duration}s`);
 
   try {
     const apiBase = getApiBase();
@@ -1535,9 +1562,13 @@ async function handleVideoGenerate(node, inputs, context) {
       ratio,
       duration,
     };
+    // 有首帧图片时传入
+    if (hasFirstFrame) {
+      body.firstFrameImage = publicFirstFrame;
+    }
+    // 有参考图时传入
     if (hasRefs) {
       body.referenceImages = publicRefs;
-      body.firstFrameImage = publicRefs[0];
     }
 
     const response = await fetch(`${apiBase}/api/video/generate`, {
