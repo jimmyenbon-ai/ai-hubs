@@ -1627,10 +1627,21 @@ function VideoGenerate() {
 
             {task.status === 'ready' && task.videoUrl && (
               <div style={{ marginTop: '10px' }}>
-                <div id={`video-player-${task.id}`}></div>
-                <button className="btn-outline" type="button" onClick={() => handlePlayVideo(task.videoUrl, task.id)} style={{ marginRight: '8px' }}>
-                  {playingVideo === task.videoUrl ? '⏸ 暂停' : '▶ 播放'}
-                </button>
+                <video
+                  src={task.videoUrl}
+                  controls
+                  muted
+                  loop
+                  playsInline
+                  style={{
+                    width: '100%',
+                    maxHeight: '200px',
+                    borderRadius: '8px',
+                    background: '#000',
+                    objectFit: 'contain',
+                    marginBottom: '10px',
+                  }}
+                />
                 <button className="btn-outline" type="button" onClick={() => handleDownload(task.videoUrl, 'seedance-video')} style={{ marginRight: '8px' }}>
                   ⬇ 下载
                 </button>
@@ -1655,7 +1666,9 @@ function VideoGenerate() {
           // 过滤掉已经在 activeTasks 中显示的任务
           const isInActiveTasks = activeTasks.some(t => t.taskId === item.task_id);
           if (isInActiveTasks) return null;
-          
+
+          const isPlayingThis = playingVideo === item.videoUrl;
+
           return (
           <div className="result-card" key={item.id}>
             <div className="card-header">
@@ -1665,7 +1678,7 @@ function VideoGenerate() {
               <div className="card-actions">
                 {item.videoUrl && (
                   <button className="btn-outline" type="button" onClick={() => handlePlayVideo(item.videoUrl, `history-${item.id}`)} style={{ marginRight: '8px' }}>
-                    {playingVideo === item.videoUrl ? '⏸ 暂停' : '▶ 播放'}
+                    {isPlayingThis ? '⏸ 暂停' : '▶ 播放'}
                   </button>
                 )}
                 {item.videoUrl && (
@@ -1678,6 +1691,28 @@ function VideoGenerate() {
                 </button>
               </div>
             </div>
+            {/* 内联视频预览区域 */}
+            {item.videoUrl && (
+              <div style={{ marginTop: '10px', marginBottom: '10px' }}>
+                <video
+                  src={item.videoUrl}
+                  controls={isPlayingThis}
+                  autoPlay={isPlayingThis}
+                  muted={isPlayingThis}
+                  loop={isPlayingThis}
+                  playsInline
+                  style={{
+                    width: '100%',
+                    maxHeight: isPlayingThis ? '300px' : '180px',
+                    borderRadius: '8px',
+                    background: '#000',
+                    objectFit: 'contain',
+                  }}
+                  onMouseEnter={(e) => { if (!isPlayingThis) e.target.play().catch(() => {}); }}
+                  onMouseLeave={(e) => { if (!isPlayingThis) { e.target.pause(); e.target.currentTime = 0; } }}
+                />
+              </div>
+            )}
             <div className="prompt-text">{item.prompt || '无描述'}</div>
             <div className="card-meta-row">
               <span className="meta-item">{item.model}</span>

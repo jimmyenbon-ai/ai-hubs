@@ -4,6 +4,7 @@ const { createAgnesVideoTask, queryAgnesVideoTask } = require('../utils/agnesVid
 const { deductPoints } = require('../utils/pointsService');
 const cache = require('../utils/cache');
 const { saveVideo: saveVideoLocal, localPathToUrl } = require('../utils/localStorage');
+const { ensurePublicImageUrl } = require('../utils/imageUtils');
 
 // 生成模式常量
 const GENERATION_MODE = {
@@ -149,11 +150,31 @@ async function handleVideoGenerate(req, res, next) {
         throw err;
       }
 
+      // 【关键修复】首帧/尾帧图片需要公网化，Seedance API 无法访问本地 URL
+      let publicFirstFrameImage = firstFrameImage;
+      let publicLastFrameImage = lastFrameImage;
+      if (firstFrameImage) {
+        try {
+          publicFirstFrameImage = await ensurePublicImageUrl(firstFrameImage);
+          console.log(`[视频生成] 首帧图片公网化: ${firstFrameImage} → ${publicFirstFrameImage}`);
+        } catch (e) {
+          console.warn(`[视频生成] 首帧图片公网化失败，将使用原始URL: ${e.message}`);
+        }
+      }
+      if (lastFrameImage) {
+        try {
+          publicLastFrameImage = await ensurePublicImageUrl(lastFrameImage);
+          console.log(`[视频生成] 尾帧图片公网化: ${lastFrameImage} → ${publicLastFrameImage}`);
+        } catch (e) {
+          console.warn(`[视频生成] 尾帧图片公网化失败，将使用原始URL: ${e.message}`);
+        }
+      }
+
       // 构建 content 内容
       requestContent = buildContent(mode, {
         prompt,
-        firstFrameImage,
-        lastFrameImage,
+        firstFrameImage: publicFirstFrameImage,
+        lastFrameImage: publicLastFrameImage,
         referenceImages,
         referenceVideo,
         referenceAudio,
