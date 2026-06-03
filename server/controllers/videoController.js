@@ -37,35 +37,41 @@ const DEFAULT_CONFIG = {
 
 /**
  * 根据生成模式构建 content 内容
+ * 注意：豆包 Seedance API 对 content 格式有要求
  */
 function buildContent(mode, params) {
   const content = [];
   const { prompt, firstFrameImage, lastFrameImage, referenceImages, referenceVideo, referenceAudio } = params;
 
-  // 添加文本提示词（可选）
-  if (prompt && prompt.trim()) {
-    content.push(formatTextContent(prompt));
-  }
-
   switch (mode) {
     case GENERATION_MODE.TEXT_TO_VIDEO:
       // 纯文生视频：只需要文本
+      if (prompt && prompt.trim()) {
+        content.push(formatTextContent(prompt));
+      }
       break;
 
     case GENERATION_MODE.IMAGE_TO_VIDEO_FIRST:
-      // 图生视频-首帧：首帧图片
+      // 图生视频-首帧：图片优先（豆包要求图片在前），prompt 可选放在后面
       if (firstFrameImage) {
         content.push(formatImageUrl(firstFrameImage, 'first_frame'));
+      }
+      // prompt 放在图片之后（如果 API 支持的话）
+      if (prompt && prompt.trim()) {
+        content.push(formatTextContent(prompt));
       }
       break;
 
     case GENERATION_MODE.IMAGE_TO_VIDEO_FIRST_LAST:
-      // 图生视频-首尾帧：首帧 + 尾帧
+      // 图生视频-首尾帧：首帧 + 尾帧 + 可选 prompt
       if (firstFrameImage) {
         content.push(formatImageUrl(firstFrameImage, 'first_frame'));
       }
       if (lastFrameImage) {
         content.push(formatImageUrl(lastFrameImage, 'last_frame'));
+      }
+      if (prompt && prompt.trim()) {
+        content.push(formatTextContent(prompt));
       }
       break;
 
@@ -84,6 +90,9 @@ function buildContent(mode, params) {
       }
       if (referenceAudio) {
         content.push(formatAudioUrl(referenceAudio, 'reference_audio'));
+      }
+      if (prompt && prompt.trim()) {
+        content.push(formatTextContent(prompt));
       }
       break;
 
