@@ -84,6 +84,14 @@ const SYSTEM_PROMPT = `你是一个专业的 AI 设计任务助手。
 - 如果用户只需要文案，不需要图片，不要生成图片提示词
 - 图片数量由用户决定（用户说"3张"就生成3个提示词）
 
+⚠️ 输出格式要求（极其重要）：
+- 禁止使用 Markdown 语法！不要输出 ##、**、*、-、--、=== 等符号
+- 标题直接写成一行中文，用【】包裹，如：【产品概述】
+- 段落之间空一行分隔，每个段落是自然流畅的中文句子
+- 列表项用中文序号"一、二、三"或"1）2）3）"表示
+- 强调语句直接用引号「」包裹，不要用加粗或斜体
+- 最终输出必须是纯文本，用户可以直接复制发布到公众号/官网
+
 ⚠️ 产品型号精确匹配（极其重要）：
 - 用户在查询中提到的产品型号/变体名称（如"R5任意弧"、"R5直角锁"、"R5弧形锁"、"R5 90°"等），你必须精确识别
 - 知识库中的文档可能用英文命名（如 "R5-Curve" = 任意弧，"R5-Straight" = 直角锁，"R5-Arc" = 弧形锁，"R5-90" = 90°）
@@ -280,7 +288,7 @@ async function handleChat(conversationId, userMessage) {
 
     try {
       const textResult = await llmService.complete(llmConfig, SYSTEM_PROMPT,
-        `## 任务类型\n请生成一篇${langLabel}${typeLabel}。\n\n## 用户需求\n${userMessage}\n\n## 知识库内容（注意：请只使用与用户指定产品型号精确匹配的内容，忽略其他型号）\n${knowledgeResult.texts.join('\n\n') || '（无相关知识库内容）'}${contextSection}\n\n⚠️ 重要：如果知识库中包含多个不同型号/变体的内容，请只采用用户明确指定的型号。例如用户要"R5任意弧"，就不要使用"R5直角锁"或"R5弧形锁"的内容。\n\n请直接输出生成的内容，不要添加额外的说明。`);
+        `## 任务类型\n请生成一篇${langLabel}${typeLabel}。\n\n## 用户需求\n${userMessage}\n\n## 知识库内容（注意：请只使用与用户指定产品型号精确匹配的内容，忽略其他型号）\n${knowledgeResult.texts.join('\n\n') || '（无相关知识库内容）'}${contextSection}\n\n⚠️ 重要：如果知识库中包含多个不同型号/变体的内容，请只采用用户明确指定的型号。例如用户要"R5任意弧"，就不要使用"R5直角锁"或"R5弧形锁"的内容。\n\n⚠️ 格式要求：纯文本输出，禁止 Markdown（无 ## ** - 等符号），标题用【】，可直接复制发布。\n\n请直接输出生成的内容，不要添加额外的说明。`);
       generatedText = textResult.content;
     } catch (err) {
       console.error('[AI-Dialog] 文案生成失败:', err.message);
@@ -567,7 +575,7 @@ async function handleChatStream({ conversationId, userMessage, emit, signal }) {
 
     try {
       const textResult = await llmService.complete(llmConfig, SYSTEM_PROMPT,
-        `## 任务类型\n请生成一篇${langLabel}${typeLabel}。\n\n## 用户需求\n${userMessage}\n\n## 知识库内容（注意：请只使用与用户指定产品型号精确匹配的内容）\n${knowledgeResult.texts.join('\n\n') || '（无相关知识库内容）'}${contextSection}\n\n⚠️ 重要：如果知识库中包含多个不同型号/变体的内容，请只采用用户明确指定的型号。\n\n请直接输出生成的内容，不要添加额外的说明。`);
+        `## 任务类型\n请生成一篇${langLabel}${typeLabel}。\n\n## 用户需求\n${userMessage}\n\n## 知识库内容（注意：请只使用与用户指定产品型号精确匹配的内容）\n${knowledgeResult.texts.join('\n\n') || '（无相关知识库内容）'}${contextSection}\n\n⚠️ 重要：如果知识库中包含多个不同型号/变体的内容，请只采用用户明确指定的型号。\n\n⚠️ 格式要求：纯文本输出，禁止 Markdown（无 ## ** - 等符号），标题用【】，可直接复制发布。\n\n请直接输出生成的内容，不要添加额外的说明。`);
       generatedText = textResult.content;
       emitSafe('text_result', { content: generatedText });
     } catch (err) {
