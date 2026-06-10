@@ -20,6 +20,19 @@ const SYNONYMS_MAP = {
   '方案': ['solution', '解决方案', '应用', '场景'],
   '手册': ['manual', '指南', '使用说明', '文档'],
   
+  // R5 系列产品变体（中文 ↔ 英文文档名映射）
+  // 产品文档为英文名（如 R5-Curve-rental），搜索时需支持中文查询
+  '任意弧': ['curve', 'curved', 'flexible', 'r5-curve', 'r5 curve'],
+  'curve': ['任意弧', 'curved', 'flexible', 'r5-curve', 'r5 curve'],
+  '直角锁': ['straight', 'right angle', 'r5-straight', 'r5 straight'],
+  'straight': ['直角锁', 'right angle', '直角', 'r5-straight', 'r5 straight'],
+  '弧形锁': ['arc', 'arched', 'r5-arc', 'r5 arc'],
+  'arc': ['弧形锁', 'arched', '弧形', 'r5-arc', 'r5 arc'],
+  '90°': ['90-degree', '90 degree', 'right angle', '90°直角', '直角', 'r5-90'],
+  '90-degree': ['90°', '直角', 'right angle', 'r5-90'],
+  'r5': ['r5系列', 'R5'],
+  'r5系列': ['r5', 'r5 series'],
+
   // 功能词
   '规格': ['spec', 'specs', '参数', 'parameter', 'specifications'],
   '特点': ['feature', 'features', '特性', '优势'],

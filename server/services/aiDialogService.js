@@ -82,7 +82,18 @@ const SYSTEM_PROMPT = `你是一个专业的 AI 设计任务助手。
 - 每张图片的提示词要具体、描述性强，包含主体、风格、光照、构图等细节
 - 在回复末尾用固定格式引用生成的图片：[图片1] [图片2] [图片3]
 - 如果用户只需要文案，不需要图片，不要生成图片提示词
-- 图片数量由用户决定（用户说"3张"就生成3个提示词）`;
+- 图片数量由用户决定（用户说"3张"就生成3个提示词）
+
+⚠️ 产品型号精确匹配（极其重要）：
+- 用户在查询中提到的产品型号/变体名称（如"R5任意弧"、"R5直角锁"、"R5弧形锁"、"R5 90°"等），你必须精确识别
+- 知识库中的文档可能用英文命名（如 "R5-Curve" = 任意弧，"R5-Straight" = 直角锁，"R5-Arc" = 弧形锁，"R5-90" = 90°）
+- 如果知识库返回了多个同系列不同型号的内容，你必须只使用与用户指定型号匹配的内容
+- 如果知识库中找不到用户指定的具体型号，请在回答中诚实说明，不要用同系列其他型号的内容代替
+- 中文-英文产品名对照参考：
+  · 任意弧 = Curve / Flexible / Curved
+  · 直角锁 = Straight / Right Angle
+  · 弧形锁 = Arc / Arched
+  · 90° = 90-degree / Right Angle`;
 
 const IMAGE_PROMPT_SYSTEM = `你是一个专业的 AI 生图提示词工程师。
 
@@ -129,6 +140,33 @@ async function searchKnowledge(userMessage) {
   };
 }
 
+// ============ 意图分析（LLM 自主决定）============
+
+const INTENT_ANALYSIS_SYSTEM = `你是一个专业的 AI 任务分析助手。分析用户需求，决定需要生成什么内容。
+
+分析维度：
+1. 是否需要生成文案（营销文案、博客、产品描述、社交媒体等）
+2. 是否需要生成图片（海报、配图、产品图、社交图片等）
+3. 如果需要图片，数量是多少（最多5张）
+4. 如果需要图片，比例偏好是什么（1:1、16:9、9:16 等）
+
+重要规则：
+- 如果用户问的是产品介绍、公司介绍、功能说明，即使没有明确说"生成文案"，也应生成文案
+- 如果用户说"帮我看看这个产品"或"介绍一下"，理解为需要文案+配图
+- 如果用户明确说"只是问问"、"不需要生成内容"，则不需要生成任何内容
+- 如果只需要纯文字问答，不需要图片
+
+以 JSON 格式返回分析结果，不要有任何解释文字：
+{
+  "needsText": true/false,
+  "needsImages": true/false,
+  "imageCount": 数字（最多5）,
+  "imageAspectRatio": "1:1"/"16:9"/"9:16"/"4:3"/"3:4",
+  "taskType": "blog_article"/"marketing_copy"/"product_desc"/"social_post"/"general",
+  "language": "zh"/"en",
+  "summary": 一句话描述你决定生成什么（仅用于日志）
+}`;
+
 // ============ 核心对话处理 ============
 
 async function handleChat(conversationId, userMessage) {
@@ -150,13 +188,44 @@ async function handleChat(conversationId, userMessage) {
     knowledgeResult = { texts: [], imageUrls: [], total: 0 };
   }
 
-  // 3. 让 DeepSeek 分析需求，决定是否需要文案和生图
-  const needsText = /文|文章|博客|copy|文案|内容|描述|介绍|说明|推广|营销/i.test(userMessage);
-  const needsImages = /图|图片|配图|生图|照片|画面|图像/i.test(userMessage);
+  // 3. LLM 自主分析意图
+  let intent;
+  try {
+    const intentResult = await llmService.complete(llmConfig, INTENT_ANALYSIS_SYSTEM,
+      `请分析以下用户需求：\n${userMessage}\n\n知识库检索结果：\n${knowledgeResult.texts.length > 0 ? knowledgeResult.texts.join('\n---\n') : '（无相关知识库内容）'}`);
+    const content = intentResult.content.trim();
+    const jsonMatch = content.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      intent = JSON.parse(jsonMatch[0]);
+    } else {
+      intent = { needsText: true, needsImages: false, imageCount: 0, imageAspectRatio: '1:1', taskType: 'general', language: 'zh' };
+    }
+  } catch (err) {
+    console.error('[AI-Dialog] 意图分析失败，降级为默认策略:', err.message);
+    intent = { needsText: true, needsImages: false, imageCount: 0, imageAspectRatio: '1:1', taskType: 'general', language: 'zh' };
+  }
 
-  // 从用户消息中推断图片数量
-  const numMatch = userMessage.match(/(\d+)\s*[张个幅]/);
-  const imageCount = numMatch ? Math.min(parseInt(numMatch[1]), 10) : 3;
+  const { needsText, needsImages, imageCount = 0, imageAspectRatio = '1:1', taskType = 'general', language = 'zh' } = intent;
+
+  // 如果 LLM 判断不需要任何内容生成，直接用知识库内容回答
+  if (!needsText && !needsImages) {
+    const answerText = knowledgeResult.texts.length > 0
+      ? knowledgeResult.texts.join('\n\n')
+      : '抱歉，我暂时没有找到相关信息，请尝试其他问题或补充知识库内容。';
+
+    const assistantMessage = await Message.create(conversationId, {
+      role: 'assistant',
+      content: answerText,
+      attachments: [],
+    });
+
+    return {
+      messageId: assistantMessage.id,
+      content: answerText,
+      images: [],
+      knowledgeUsed: knowledgeResult.total,
+    };
+  }
 
   // 4. 构建上下文
   let contextSection = '';
@@ -170,9 +239,19 @@ async function handleChat(conversationId, userMessage) {
   // 5. 生成文案（如果需要）
   let generatedText = '';
   if (needsText) {
-    const textPrompt = `${SYSTEM_PROMPT}${contextSection}\n\n## 用户需求\n${userMessage}\n\n请根据以上信息和知识库内容，完成用户的任务。如果需要生成图片，请在文案之后给出每个图片的生图提示词。`;
+    const taskLabels = {
+      blog_article: '博客文章',
+      marketing_copy: '营销文案',
+      product_desc: '产品描述',
+      social_post: '社交媒体帖子',
+      general: '内容',
+    };
+    const langLabel = language === 'en' ? '英文' : '中文';
+    const typeLabel = taskLabels[taskType] || '内容';
+
     try {
-      const textResult = await llmService.complete(llmConfig, SYSTEM_PROMPT, `请完成以下任务：\n\n## 知识库内容\n${knowledgeResult.texts.join('\n\n') || '（无相关知识库内容）'}\n\n## 用户需求\n${userMessage}`);
+      const textResult = await llmService.complete(llmConfig, SYSTEM_PROMPT,
+        `## 任务类型\n请生成一篇${langLabel}${typeLabel}。\n\n## 用户需求\n${userMessage}\n\n## 知识库内容（注意：请只使用与用户指定产品型号精确匹配的内容，忽略其他型号）\n${knowledgeResult.texts.join('\n\n') || '（无相关知识库内容）'}${contextSection}\n\n⚠️ 重要：如果知识库中包含多个不同型号/变体的内容，请只采用用户明确指定的型号。例如用户要"R5任意弧"，就不要使用"R5直角锁"或"R5弧形锁"的内容。\n\n请直接输出生成的内容，不要添加额外的说明。`);
       generatedText = textResult.content;
     } catch (err) {
       console.error('[AI-Dialog] 文案生成失败:', err.message);
@@ -182,21 +261,28 @@ async function handleChat(conversationId, userMessage) {
 
   // 6. 生成图片（如果需要）
   let generatedImages = [];
-  if (needsImages && imageCount > 0) {
+  const actualImageCount = Math.min(imageCount, 5);
+  if (needsImages && actualImageCount > 0) {
     const refImagesForGeneration = knowledgeResult.imageUrls.slice(0, 3);
 
     // 6a. 让 LLM 生成生图提示词
     let imagePrompts = [];
     try {
       const promptResult = await llmService.complete(llmConfig, IMAGE_PROMPT_SYSTEM,
-        `## 用户需求\n${userMessage}\n\n## 知识库内容摘要\n${knowledgeResult.texts.slice(0, 3).join('\n\n') || '无'}\n\n## 参考图片URL（可选使用）\n${refImagesForGeneration.join('\n') || '无'}\n\n请生成 ${imageCount} 个生图提示词（JSON数组）：`);
-      
+        `## 用户需求\n${userMessage}\n\n## 知识库内容摘要\n${knowledgeResult.texts.slice(0, 3).join('\n\n') || '无'}\n\n## 参考图片URL（可选使用）\n${refImagesForGeneration.join('\n') || '无'}\n\n## 要求图片数量和比例\n数量：${actualImageCount} 张，比例：${imageAspectRatio}\n\n请生成 ${actualImageCount} 个生图提示词（JSON数组）：`);
+
       const content = promptResult.content.trim();
       let jsonMatch = content.match(/\[[\s\S]*\]/);
       if (jsonMatch) {
         imagePrompts = JSON.parse(jsonMatch[0]);
+        // 如果 LLM 返回数量不足，补足
+        if (imagePrompts.length < actualImageCount) {
+          for (let i = imagePrompts.length; i < actualImageCount; i++) {
+            imagePrompts.push({ index: i + 1, aspectRatio: imageAspectRatio, prompt: imagePrompts[0]?.prompt || userMessage });
+          }
+        }
       } else {
-        imagePrompts = parseFlexiblePrompts(content, imageCount);
+        imagePrompts = parseFlexiblePrompts(content, actualImageCount);
       }
     } catch (err) {
       console.error('[AI-Dialog] 生图提示词生成失败:', err.message);
@@ -206,11 +292,10 @@ async function handleChat(conversationId, userMessage) {
     if (imagePrompts.length > 0) {
       generatedImages = await generateImages(imagePrompts, refImagesForGeneration, userMessage);
     } else {
-      // fallback：使用通用提示词
       generatedImages = await generateImages(
-        Array.from({ length: imageCount }, (_, i) => ({
+        Array.from({ length: actualImageCount }, (_, i) => ({
           index: i + 1,
-          aspectRatio: '1:1',
+          aspectRatio: imageAspectRatio,
           prompt: `${userMessage} - image ${i + 1}, high quality, professional photography`,
         })),
         refImagesForGeneration,
