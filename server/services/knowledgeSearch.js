@@ -79,7 +79,8 @@ function tokenize(text) {
   
   // 进一步分割混合字符串（如 "BPro产品" → ["BPro", "产品"]）
   const result = [];
-  const mixedPattern = /([a-zA-Z]+)|(\d+(?:\.\d+)?)|([\u4e00-\u9fa5]+)/g;
+  // \u4f18\u5148\u5339\u914d\u4ea7\u54c1\u578b\u53f7\uff08\u5982 R5/RS40/BPro\uff09\uff0c\u9632\u6b62\u5b57\u6bcd+\u6570\u5b57\u88ab\u62c6\u6563
+  const mixedPattern = /([a-zA-Z]+\d+[a-zA-Z]*)|([a-zA-Z]+)|(\d+(?:\.\d+)?)|([\u4e00-\u9fa5]+)/g;
   
   for (const token of tokens) {
     if (token.length <= 3) {
@@ -524,7 +525,8 @@ function intelligentSearch(knowledgeList, options = {}) {
 
   // 产品型号精确过滤：查询中含英文/数字型号关键词时，排除不包含该型号的文件
   // 如搜 "R5" 排除 "R5Plus"，搜 "FC Pro" 排除 "BPro"
-  const modelKeywords = allKeywords.filter(k => /^[a-z0-9\s]+$/i.test(k) && k.length >= 2);
+  // 仅含字母+数字、至少一位字母、长度>=2 才是型号关键词（排除纯数字如500、纯英文普通词如logo）
+  const modelKeywords = allKeywords.filter(k => /^[a-z0-9\s]+$/i.test(k) && /[a-z]/i.test(k) && k.length >= 2);
   if (modelKeywords.length > 0) {
     const beforeModel = candidates.length;
     candidates = candidates.filter(item => {
