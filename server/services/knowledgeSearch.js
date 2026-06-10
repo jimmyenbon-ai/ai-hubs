@@ -75,8 +75,12 @@ function tokenize(text) {
   // "B Pro" 拆成 "b"+"pro" 后 "b" 被过滤，"pro" 在 "BPro" 中无边界
   // 规范化后 "BPro" → "bpro"，与知识库文本名直接匹配
   let normalized = text
+    // "B Pro" / "B-Pro" → "BPro"（单字母+后缀）
     .replace(/\b([A-Za-z])\s+(Pro|Plus|Max|Lite|Ultra|Mini)\b/gi, '$1$2')
-    .replace(/\b([A-Za-z])-(Pro|Plus|Max|Lite|Ultra|Mini)\b/gi, '$1$2');
+    .replace(/\b([A-Za-z])-(Pro|Plus|Max|Lite|Ultra|Mini)\b/gi, '$1$2')
+    // "R 5" / "R-5" → "R5"（单字母+数字，如产品系列名）
+    .replace(/\b([A-Za-z])\s+(\d+)\b/g, '$1$2')
+    .replace(/\b([A-Za-z])-(\d+)\b/g, '$1$2');
   
   // 移除特殊字符，保留中英文和数字
   const cleaned = normalized.replace(/[^\w\s\u4e00-\u9fa5]/g, ' ');
@@ -600,16 +604,37 @@ function intelligentSearch(knowledgeList, options = {}) {
   
   // 排序（分数高的在前）
   filtered.sort((a, b) => b._relevanceScore - a._relevanceScore);
-  
-  // 限制数量
-  const result = filtered.slice(0, limit);
-  
-  console.log(`[知识库搜索] 找到 ${result.length} 条相关结果`);
+
+  // 文本和图片分开取，保证各占一半名额
+  // 避免图片文件名分高挤掉文本文档（如 "B Pro" 搜不出 "BPro参数.txt"）
+  const textItems = filtered.filter(item => !isMultimedia(item));
+  const imageItems = filtered.filter(item => isMultimedia(item));
+  const halfLimit = Math.ceil(limit / 2);
+
+  const result = [];
+  const usedText = textItems.slice(0, halfLimit);
+  const usedImage = imageItems.slice(0, halfLimit);
+
+  // 交替排列，文本在前
+  for (let i = 0; i < Math.max(usedText.length, usedImage.length); i++) {
+    if (i < usedText.length) result.push(usedText[i]);
+    if (i < usedImage.length) result.push(usedImage[i]);
+  }
+
+  // 一方不足时用另一方补齐
+  if (result.length < limit) {
+    const remaining = [...textItems.slice(halfLimit), ...imageItems.slice(halfLimit)]
+      .sort((a, b) => b._relevanceScore - a._relevanceScore)
+      .slice(0, limit - result.length);
+    result.push(...remaining);
+  }
+
+  console.log(`[知识库搜索] 找到 ${result.length} 条（文本${usedText.length}+图片${usedImage.length}）`);
   for (let i = 0; i < Math.min(3, result.length); i++) {
     const item = result[i];
     console.log(`[知识库搜索]   #${i + 1}: "${item.title}" (分数: ${item._relevanceScore.toFixed(2)})`);
   }
-  
+
   return result;
 }
 
