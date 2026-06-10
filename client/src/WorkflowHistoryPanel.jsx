@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Icon } from './components/Icons';
 
 export default function WorkflowHistoryPanel({ onBack }) {
   const [runs, setRuns] = useState([]);
@@ -80,9 +81,9 @@ export default function WorkflowHistoryPanel({ onBack }) {
 
   function getStatusBadge(status) {
     const configs = {
-      running: { bg: '#3b82f6', label: '运行中', icon: '⏳' },
-      completed: { bg: '#10b981', label: '已完成', icon: '✅' },
-      failed: { bg: '#ef4444', label: '失败', icon: '❌' },
+      running: { bg: '#3b82f6', label: '运行中', icon: <Icon.Loader size={12} /> },
+      completed: { bg: '#10b981', label: '已完成', icon: <Icon.Check size={12} /> },
+      failed: { bg: '#ef4444', label: '失败', icon: <Icon.X size={12} /> },
     };
     const config = configs[status] || configs.running;
     return (
@@ -146,7 +147,7 @@ export default function WorkflowHistoryPanel({ onBack }) {
           value={searchQuery}
           onChange={e => setSearchQuery(e.target.value)}
         />
-        <button className="btn-outline" onClick={fetchRuns}>🔄 刷新</button>
+        <button className="btn-outline" onClick={fetchRuns}><Icon.Refresh size={13} /> 刷新</button>
       </div>
 
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>

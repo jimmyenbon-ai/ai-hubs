@@ -1,12 +1,21 @@
 import { useState, useEffect } from 'react';
+import { Icon } from './components/Icons';
 
-const ROLE_ICONS = {
-  'role-graphic-design': '🎨',
-  'role-copywriting': '✍️',
-  'role-video': '🎬',
-  'role-3d': '🧊',
-  'role-general': '🏠',
+const ICON_MAP = {
+  palette: Icon.Palette,
+  pen: Icon.Pen,
+  video: Icon.Video,
+  cube: Icon.Cube,
+  house: Icon.House,
+  brain: Icon.Brain,
+  bot: Icon.Bot,
+  user: Icon.User,
 };
+
+function getRoleIcon(iconKey, size = 16) {
+  const Comp = ICON_MAP[iconKey];
+  return Comp ? <Comp size={size} /> : <Icon.User size={size} />;
+}
 
 export default function RoleSelector({ currentRole, onRoleChange }) {
   const [roles, setRoles] = useState([]);
@@ -34,7 +43,7 @@ export default function RoleSelector({ currentRole, onRoleChange }) {
         }}
       >
         <span style={{ fontSize: 18 }}>
-          {current ? (ROLE_ICONS[current.id] || current.icon || '👤') : '👤'}
+          {current ? getRoleIcon(current.icon, 18) : <Icon.User size={18} />}
         </span>
         <span style={{ fontSize: 13, fontWeight: 500, flex: 1 }}>
           {current ? current.name : '选择角色'}
@@ -73,7 +82,7 @@ export default function RoleSelector({ currentRole, onRoleChange }) {
                 onMouseEnter={e => { if (currentRole !== role.id) e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; }}
                 onMouseLeave={e => { if (currentRole !== role.id) e.currentTarget.style.background = 'transparent'; }}
               >
-                <span style={{ fontSize: 16 }}>{ROLE_ICONS[role.id] || role.icon || '👤'}</span>
+                <span style={{ fontSize: 16 }}>{getRoleIcon(role.icon, 16)}</span>
                 <div>
                   <div style={{ fontWeight: 500, color: '#fff' }}>{role.name}</div>
                   {role.description && (

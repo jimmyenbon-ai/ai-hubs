@@ -1,11 +1,12 @@
 // 常用提示词快捷库 - 帮助设计师快速添加质量词、风格词、光效词等
 import { useState } from 'react'
+import { Icon } from './Icons'
 
 // 预设快捷词库
 const PROMPT_PRESETS = {
   quality: {
     label: '质量词',
-    icon: '✨',
+    iconKey: 'sparkles',
     color: '#f59e0b',
     items: [
       { label: '4K高清', prompt: '4K, high resolution, detailed' },
@@ -20,7 +21,7 @@ const PROMPT_PRESETS = {
   },
   style: {
     label: '风格词',
-    icon: '🎨',
+    iconKey: 'palette',
     color: '#8b5cf6',
     items: [
       { label: '写实摄影', prompt: 'photorealistic, realistic lighting' },
@@ -39,7 +40,7 @@ const PROMPT_PRESETS = {
   },
   lighting: {
     label: '光效词',
-    icon: '💡',
+    iconKey: 'lightbulb',
     color: '#06b6d4',
     items: [
       { label: '电影光', prompt: 'cinematic lighting, dramatic' },
@@ -56,7 +57,7 @@ const PROMPT_PRESETS = {
   },
   composition: {
     label: '构图词',
-    icon: '📐',
+    iconKey: 'grid',
     color: '#10b981',
     items: [
       { label: '居中构图', prompt: 'centered composition, symmetrical' },
@@ -72,7 +73,7 @@ const PROMPT_PRESETS = {
   },
   mood: {
     label: '氛围词',
-    icon: '🌟',
+    iconKey: 'star',
     color: '#ec4899',
     items: [
       { label: '高级感', prompt: 'luxurious, elegant, premium feel' },
@@ -88,7 +89,7 @@ const PROMPT_PRESETS = {
   },
   brand: {
     label: '品牌调性',
-    icon: '🏢',
+    iconKey: 'building',
     color: '#6366f1',
     items: [
       { label: '华为风格', prompt: 'Huawei style, premium tech brand' },
@@ -161,7 +162,7 @@ function PromptQuickLibrary({ onInsert, onClose }) {
     <div className="prompt-quick-library">
       <div className="library-header">
         <div className="library-title">
-          <span>💡</span> 提示词快捷库
+          <span><Icon.Lightbulb size={14} /></span> 提示词快捷库
         </div>
         <button className="library-close" onClick={onClose}>×</button>
       </div>
@@ -178,7 +179,10 @@ function PromptQuickLibrary({ onInsert, onClose }) {
 
       {/* 分类标签 */}
       <div className="library-tabs">
-        {Object.entries(PROMPT_PRESETS).map(([key, cat]) => (
+        {Object.entries(PROMPT_PRESETS).map(([key, cat]) => {
+          const iconMap = { sparkles: Icon.Sparkles, palette: Icon.Palette, lightbulb: Icon.Lightbulb, grid: Icon.Grid, star: Icon.Star, building: Icon.Building };
+          const TabIcon = iconMap[cat.iconKey] || Icon.Sparkles;
+          return (
           <button
             key={key}
             className={`library-tab ${selectedTab === key && !searchText ? 'active' : ''}`}
@@ -188,10 +192,11 @@ function PromptQuickLibrary({ onInsert, onClose }) {
               setSearchText('')
             }}
           >
-            <span>{cat.icon}</span>
+            <span><TabIcon size={13} /></span>
             <span>{cat.label}</span>
           </button>
-        ))}
+          );
+        })}
       </div>
 
       {/* 词条列表 */}
@@ -209,7 +214,7 @@ function PromptQuickLibrary({ onInsert, onClose }) {
                 onClick={() => handleSelectItem(displayItem)}
               >
                 <div className="item-label">
-                  {isSelected && <span className="check-icon">✓</span>}
+                  {isSelected && <span className="check-icon"><Icon.Check size={12} /></span>}
                   {displayItem.label}
                 </div>
                 <div className="item-prompt">{displayItem.prompt}</div>

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Icon, ICON_LIST } from './components/Icons'
 
 function TemplateManage({ templates, onBack, onEdit, onDelete, onRefresh }) {
   const [search, setSearch] = useState('')
@@ -20,6 +21,11 @@ function TemplateManage({ templates, onBack, onEdit, onDelete, onRefresh }) {
     } finally {
       setDeletingId(null)
     }
+  }
+
+  function getIconByKey(key) {
+    const found = ICON_LIST.find(i => i.key === key)
+    return found ? <found.Icon size={16} /> : <Icon.File size={16} />
   }
 
   return (
@@ -66,7 +72,7 @@ function TemplateManage({ templates, onBack, onEdit, onDelete, onRefresh }) {
         )}
         {filtered.map((tpl) => (
           <div key={tpl.id} className="template-manage-item">
-            <div className="template-manage-item-icon">{tpl.icon || '📄'}</div>
+            <div className="template-manage-item-icon">{getIconByKey(tpl.icon)}</div>
             <div className="template-manage-item-info">
               <div className="template-manage-item-name">{tpl.name}</div>
               <div className="template-manage-item-meta">

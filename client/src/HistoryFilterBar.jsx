@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Icon } from './components/Icons';
 
 export default function HistoryFilterBar({
   search, onSearchChange,
@@ -39,7 +40,7 @@ export default function HistoryFilterBar({
         />
         <button type="submit" className="btn-outline small">搜索</button>
         {search && (
-          <button type="button" className="btn-outline small" onClick={handleClearSearch}>✕</button>
+          <button type="button" className="btn-outline small" onClick={handleClearSearch}><Icon.X size={12} /></button>
         )}
       </form>
 

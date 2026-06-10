@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { NANO_IMAGE_SIZES } from './ImageFreePanel'
 import { renderCanvas, downloadCanvas } from './components/CanvasRenderer'
+import { Icon } from './components/Icons'
 
 // 占位符识别正则
 const VAR_REGEX = /\{([^}]+)\}/g
@@ -678,7 +679,7 @@ function TemplatePanel({ template, templates, onSave, onGenerate, onBack }) {
                   onClick={handleGenerate}
                   disabled={generating}
                 >
-                  {generating ? '生成中...' : '✦ 免费生成海报'}
+                  {generating ? '生成中...' : <><Icon.Sparkle size={14} /> 免费生成海报</>}
                 </button>
               </div>
             ) : (
@@ -791,7 +792,7 @@ function TemplatePanel({ template, templates, onSave, onGenerate, onBack }) {
                   onClick={handleGenerate}
                   disabled={generating}
                 >
-                  {generating ? '生成中...' : `✦ 一键生成${localTemplate.name}`}
+                  {generating ? '生成中...' : <><Icon.Sparkle size={14} /> 一键生成{localTemplate.name}</>}
                 </button>
               </>
             )}
@@ -809,7 +810,7 @@ function TemplatePanel({ template, templates, onSave, onGenerate, onBack }) {
                   <span className="tag">{localTemplate.name}</span>
                   <div className="card-actions">
                     <button className="btn-outline small" onClick={() => handleDownload(item.resultImageUrl)}>
-                      ⬇ 下载
+                      <Icon.Download size={12} /> 下载
                     </button>
                   </div>
                 </div>
@@ -839,7 +840,7 @@ function TemplatePanel({ template, templates, onSave, onGenerate, onBack }) {
             <div className="card-header">
               <span className="tag" style={{ background: '#10b981' }}>生成成功</span>
               <button className="btn-outline small" onClick={() => handleDownload(resultImage)}>
-                ⬇ 下载
+                <Icon.Download size={12} /> 下载
               </button>
             </div>
             <div className="image-preview-area">

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import './App.css'
 import HistoryFilterBar from './HistoryFilterBar'
+import { Icon } from './components/Icons'
 
 function MusicGenerate() {
   const [gptDescriptionPrompt, setGptDescriptionPrompt] = useState('')
@@ -687,7 +688,7 @@ function MusicGenerate() {
           onClick={handleGenerate}
           type="button"
         >
-          ✦ 立即生成 (消耗积分)
+          <Icon.Sparkle size={14} /> 立即生成 (消耗积分)
         </button>
       </div>
 
@@ -836,7 +837,7 @@ function MusicGenerate() {
                     onClick={() => handlePlayAudio((item.audioUrls && item.audioUrls[0]) || item.audioUrl, item.id)}
                     style={{ marginRight: '8px' }}
                   >
-                    {playingAudio === ((item.audioUrls && item.audioUrls[0]) || item.audioUrl) ? '⏸ 暂停' : '▶ 播放'}
+                    {playingAudio === ((item.audioUrls && item.audioUrls[0]) || item.audioUrl) ? <><Icon.Pause size={13} /> 暂停</> : <><Icon.Play size={13} /> 播放</>}
                   </button>
                 )}
                 {(item.audioUrl || (Array.isArray(item.audioUrls) && item.audioUrls.length > 0)) && (
@@ -854,7 +855,7 @@ function MusicGenerate() {
                     }}
                     style={{ marginRight: '8px' }}
                   >
-                    ⬇ 下载
+                    <Icon.Download size={13} /> 下载
                   </button>
                 )}
                 <button
@@ -863,7 +864,7 @@ function MusicGenerate() {
                   onClick={() => handleDeleteHistory(item.id)}
                   style={{ color: '#ef4444', borderColor: '#ef4444' }}
                 >
-                  🗑 删除
+                  <Icon.Trash size={13} /> 删除
                 </button>
               </div>
             </div>

@@ -354,7 +354,7 @@ export default function LLMConfigPanel({ onBack }) {
                     fontSize: 13,
                     color: testResult.success ? '#10b981' : '#ef4444',
                   }}>
-                    {testResult.success ? '✓ ' + (testResult.data?.response || '连接成功') : '✗ ' + testResult.message}
+                    {testResult.success ? <><Icon.Check size={13} /> {testResult.data?.response || '连接成功'}</> : <><Icon.X size={13} /> {testResult.message}</>}
                   </div>
                 )}
               </div>

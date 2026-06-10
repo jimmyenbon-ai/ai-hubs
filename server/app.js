@@ -29,6 +29,7 @@ const roleRoutes = require('./routes/roleRoutes');
 const styleProfileRoutes = require('./routes/styleProfileRoutes');
 const feedbackRoutes = require('./routes/feedbackRoutes');
 const userPrefsRoutes = require('./routes/userPrefsRoutes');
+const aiDialogRoutes = require('./routes/aiDialogRoutes');
 const errorHandler = require('./middleware/errorHandler');
 const { generalLimiter } = require('./middleware/rateLimiter');
 
@@ -84,6 +85,7 @@ app.use('/api/roles', roleRoutes);
 app.use('/api/style-profiles', styleProfileRoutes);
 app.use('/api/feedback', feedbackRoutes);
 app.use('/api/prefs', userPrefsRoutes);
+app.use('/api/ai-dialog', aiDialogRoutes);
 
 // 健康检查（包含详细状态）
 app.get('/api/health', (req, res) => {

@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
+import { Icon } from './components/Icons'
 
 const MODEL_OPTIONS = [
   { value: 'gpt-image-2', label: 'GPT-Image 2', category: 'gpt' },
@@ -35,11 +36,11 @@ const IMAGE_SIZES = [
 
 function statusIcon(status) {
   switch (status) {
-    case 'queued': return '⏳'
-    case 'running': return '🔄'
-    case 'completed': return '✅'
-    case 'failed': return '❌'
-    default: return '⏳'
+    case 'queued': return <Icon.Clock size={12} />
+    case 'running': return <Icon.Loader size={12} />
+    case 'completed': return <Icon.Check size={12} color="#10b981" />
+    case 'failed': return <Icon.X size={12} color="#ef4444" />
+    default: return <Icon.Clock size={12} />
   }
 }
 
@@ -452,7 +453,7 @@ function BatchGeneratePanel() {
                         title="删除"
                         style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }}
                       >
-                        ✕
+                        <Icon.X size={12} />
                       </button>
                     </td>
                   </tr>
@@ -562,7 +563,7 @@ function BatchGeneratePanel() {
                           onClick={() => handleDownloadSingle(item.resultImageUrl)}
                           title="下载"
                         >
-                          ⬇
+                          <Icon.Download size={12} />
                         </button>
                       )}
                       {item.status === 'failed' && (
@@ -571,7 +572,7 @@ function BatchGeneratePanel() {
                           onClick={() => handleRetry(item.index)}
                           title="重试"
                         >
-                          🔄
+                          <Icon.Refresh size={12} />
                         </button>
                       )}
                     </td>

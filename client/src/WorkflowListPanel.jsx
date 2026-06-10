@@ -1,19 +1,20 @@
 import { useState, useEffect } from 'react';
+import { Icon } from './components/Icons';
 
 const CATEGORY_ICONS = {
-  image: '🖼️',
-  marketing: '📢',
-  video: '🎬',
-  music: '🎵',
-  general: '⚙️',
+  image: <Icon.Image size={18} />,
+  marketing: <Icon.Bell size={18} />,
+  video: <Icon.Video size={18} />,
+  music: <Icon.Music size={18} />,
+  general: <Icon.Settings size={18} />,
 };
 
 const ROLE_LABELS = {
-  'role-graphic-design': '🎨 平面设计',
-  'role-copywriting': '✍️ 文案策划',
-  'role-video': '🎬 视频制作',
-  'role-3d': '🧊 3D建模',
-  'role-general': '🏠 通用',
+  'role-graphic-design': <><Icon.Palette size={14} /> 平面设计</>,
+  'role-copywriting': <><Icon.Pen size={14} /> 文案策划</>,
+  'role-video': <><Icon.Video size={14} /> 视频制作</>,
+  'role-3d': <><Icon.Cube size={14} /> 3D建模</>,
+  'role-general': <><Icon.Home size={14} /> 通用</>,
 };
 
 export default function WorkflowListPanel({ onBack, onSelectWorkflow, onCreateWorkflow, currentRole }) {
@@ -121,7 +122,7 @@ export default function WorkflowListPanel({ onBack, onSelectWorkflow, onCreateWo
             <option value="all">全部分类</option>
             {categories.map(c => (
               <option key={c} value={c}>
-                {CATEGORY_ICONS[c] || '📋'} {c}
+                {CATEGORY_ICONS[c] || <Icon.List size={18} />} {c}
               </option>
             ))}
           </select>
@@ -174,7 +175,7 @@ export default function WorkflowListPanel({ onBack, onSelectWorkflow, onCreateWo
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                     <span style={{ fontSize: 24 }}>
-                      {CATEGORY_ICONS[tpl.category] || '⚙️'}
+                      {CATEGORY_ICONS[tpl.category] || <Icon.Settings size={24} />}
                     </span>
                     <span style={{ fontWeight: 600, fontSize: 15 }}>{tpl.name}</span>
                     {tpl.isPreset && (
@@ -197,14 +198,14 @@ export default function WorkflowListPanel({ onBack, onSelectWorkflow, onCreateWo
                         style={{ padding: '4px 8px', fontSize: 11 }}
                         onClick={e => { e.stopPropagation(); handleClone(tpl.id, tpl.name); }}
                         title="复制副本后编辑"
-                      >📋</button>
+                      ><Icon.Copy size={12} /></button>
                     )}
                     {!tpl.isPreset && (
                       <button
                         className="btn-outline"
                         style={{ padding: '4px 8px', fontSize: 11, color: '#ef4444' }}
                         onClick={e => { e.stopPropagation(); handleDelete(tpl.id); }}
-                      >🗑️</button>
+                      ><Icon.Trash size={12} /></button>
                     )}
                   </div>
                 </div>
@@ -234,10 +235,10 @@ export default function WorkflowListPanel({ onBack, onSelectWorkflow, onCreateWo
                   paddingTop: 12,
                   borderTop: '1px solid var(--border-color)',
                 }}>
-                  <span>📊 {tpl.nodes?.length || 0} 个节点</span>
-                  <span>🔗 {tpl.edges?.length || 0} 条连接</span>
+                  <span><Icon.BarChart size={12} /> {tpl.nodes?.length || 0} 个节点</span>
+                  <span><Icon.GitBranch size={12} /> {tpl.edges?.length || 0} 条连接</span>
                   {tpl.variables?.length > 0 && (
-                    <span>📥 {tpl.variables.length} 个输入</span>
+                    <span><Icon.Download size={12} /> {tpl.variables.length} 个输入</span>
                   )}
                 </div>
 
@@ -267,7 +268,7 @@ export default function WorkflowListPanel({ onBack, onSelectWorkflow, onCreateWo
                     style={{ flex: 1, fontSize: 13 }}
                     onClick={e => { e.stopPropagation(); onSelectWorkflow(tpl); }}
                   >
-                    ▶️ 打开
+                    <Icon.ExternalLink size={13} /> 打开
                   </button>
                 </div>
               </div>

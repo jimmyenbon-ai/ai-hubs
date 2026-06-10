@@ -7,7 +7,7 @@ const CONTENT_TYPES = [
   { value: 'music', label: '音乐' },
 ]
 
-function Sidebar({ currentGroup, currentMode, currentRole, onRoleChange, templates = [], onNavigate, onCreateTemplate, onManageTemplates, onOpenPromptLibrary, onOpenWorkflow, onOpenStyleManager, onOpenSettings, onOpenTutorial }) {
+function Sidebar({ currentGroup, currentMode, currentRole, onRoleChange, templates = [], onNavigate, onCreateTemplate, onManageTemplates, onOpenPromptLibrary, onOpenWorkflow, onOpenStyleManager, onOpenSettings, onOpenTutorial, onOpenAIDialog }) {
   const [expandedGroups, setExpandedGroups] = useState({
     image: true,
     video: false,
@@ -176,6 +176,22 @@ function Sidebar({ currentGroup, currentMode, currentRole, onRoleChange, templat
           )
         })}
       </nav>
+      {/* AI 对话入口 */}
+      <div className="nav-library-entry" style={{ padding: '8px 10px' }}>
+        <div
+          className={`nav-group-header ${currentGroup === 'ai-dialog' ? 'active-group' : ''}`}
+          onClick={onOpenAIDialog}
+          style={{ padding: '10px 12px', borderRadius: 8, cursor: 'pointer' }}
+        >
+          <span className="nav-group-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+            </svg>
+          </span>
+          <span className="nav-group-label">AI 智能对话</span>
+        </div>
+      </div>
+
       {/* 工作流入口 */}
       <div className="nav-library-entry" style={{ padding: '8px 10px' }}>
         <div

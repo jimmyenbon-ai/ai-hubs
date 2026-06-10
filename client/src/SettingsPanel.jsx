@@ -68,13 +68,13 @@ function SettingsPanel({ onBack }) {
       })
       const data = await resp.json()
       if (data.success) {
-        setSaveMsg('✅ 配置已保存并生效')
+        setSaveMsg('配置已保存并生效')
         setTimeout(() => setSaveMsg(''), 4000)
       } else {
-        setSaveMsg('❌ 保存失败: ' + (data.message || '未知错误'))
+        setSaveMsg('保存失败: ' + (data.message || '未知错误'))
       }
     } catch (_) {
-      setSaveMsg('❌ 网络错误')
+      setSaveMsg('网络错误')
     }
     setLoading(false)
   }
@@ -92,7 +92,7 @@ function SettingsPanel({ onBack }) {
     if (!val) return
     try {
       await navigator.clipboard.writeText(val)
-      setSaveMsg('✅ 已复制到剪贴板')
+      setSaveMsg('已复制到剪贴板')
       setTimeout(() => setSaveMsg(''), 2000)
     } catch {
       // fallback for older browsers
@@ -104,7 +104,7 @@ function SettingsPanel({ onBack }) {
       ta.select()
       document.execCommand('copy')
       document.body.removeChild(ta)
-      setSaveMsg('✅ 已复制到剪贴板')
+      setSaveMsg('已复制到剪贴板')
       setTimeout(() => setSaveMsg(''), 2000)
     }
   }
@@ -230,14 +230,14 @@ function SettingsPanel({ onBack }) {
         ))}
 
         {saveMsg && (
-          <p className={`settings-save-msg ${saveMsg.includes('❌') ? 'error-text' : ''}`}>
+          <p className={`settings-save-msg ${saveMsg.includes('失败') || saveMsg.includes('错误') || saveMsg.includes('网络') ? 'error-text' : ''}`}>
             {saveMsg}
           </p>
         )}
 
         <div className="settings-actions">
           <button type="submit" className="generate-btn" disabled={loading}>
-            {loading ? '保存中...' : '💾 保存全部配置'}
+            {loading ? '保存中...' : '保存全部配置'}
           </button>
         </div>
       </form>

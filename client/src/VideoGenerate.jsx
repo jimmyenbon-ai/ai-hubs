@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import './App.css'
 import HistoryFilterBar from './HistoryFilterBar'
+import { Icon } from './components/Icons'
 
 // 视频提供商常量
 const VIDEO_PROVIDER = {
@@ -1187,7 +1188,7 @@ function VideoGenerate() {
                       <img src={file.url} alt={file.filename} />
                     ) : (
                       <div className="media-file-placeholder">
-                        {file.type === MEDIA_TYPE.VIDEO ? '🎬' : '🎵'}
+                        {file.type === MEDIA_TYPE.VIDEO ? <Icon.Video size={18} /> : <Icon.Music size={18} />}
                         <span>{file.filename}</span>
                       </div>
                     )}
@@ -1346,7 +1347,7 @@ function VideoGenerate() {
                     {f.type === MEDIA_TYPE.IMAGE ? (
                       <img src={f.url} alt={f.filename} />
                     ) : (
-                      <span style={{ fontSize: '16px' }}>{f.type === MEDIA_TYPE.VIDEO ? '🎬' : '🎵'}</span>
+                      <span style={{ fontSize: '16px' }}>{f.type === MEDIA_TYPE.VIDEO ? <Icon.Video size={16} /> : <Icon.Music size={16} />}</span>
                     )}
                   </div>
                   <div className="mention-text">
@@ -1546,7 +1547,7 @@ function VideoGenerate() {
         {error && <p className="error-text">{error}</p>}
 
         <button className="generate-btn" onClick={handleGenerate} type="button">
-          ✦ 立即生成视频
+          <Icon.Sparkle size={14} /> 立即生成视频
         </button>
       </div>
 
@@ -1643,7 +1644,7 @@ function VideoGenerate() {
                   }}
                 />
                 <button className="btn-outline" type="button" onClick={() => handleDownload(task.videoUrl, 'seedance-video')} style={{ marginRight: '8px' }}>
-                  ⬇ 下载
+                  <Icon.Download size={13} /> 下载
                 </button>
               </div>
             )}
@@ -1678,16 +1679,16 @@ function VideoGenerate() {
               <div className="card-actions">
                 {item.videoUrl && (
                   <button className="btn-outline" type="button" onClick={() => handlePlayVideo(item.videoUrl, `history-${item.id}`)} style={{ marginRight: '8px' }}>
-                    {isPlayingThis ? '⏸ 暂停' : '▶ 播放'}
+                    {isPlayingThis ? <><Icon.Pause size={13} /> 暂停</> : <><Icon.Play size={13} /> 播放</>}
                   </button>
                 )}
                 {item.videoUrl && (
                   <button className="btn-outline" type="button" onClick={() => handleDownload(item.videoUrl, 'video')} style={{ marginRight: '8px' }}>
-                    ⬇ 下载
+                    <Icon.Download size={13} /> 下载
                   </button>
                 )}
                 <button className="btn-outline" type="button" onClick={() => handleDeleteHistory(item.id)} style={{ color: '#ef4444', borderColor: '#ef4444' }}>
-                  🗑 删除
+                  <Icon.Trash size={13} /> 删除
                 </button>
               </div>
             </div>
@@ -1741,7 +1742,7 @@ function VideoGenerate() {
                   videoRef.current = null
                 }
                 setPlayingVideo(null)
-              }}>✕ 关闭</button>
+              }}><Icon.X size={14} /> 关闭</button>
             </div>
             <video
               ref={videoRef}

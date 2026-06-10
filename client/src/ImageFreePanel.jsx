@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import PromptQuickLibrary from './components/PromptQuickLibrary'
 import HistoryFilterBar from './HistoryFilterBar'
+import { Icon } from './components/Icons'
 
 export const NANO_IMAGE_SIZES = [
   { value: '1K', label: '1K' },
@@ -663,7 +664,7 @@ function ImageFreePanel({ injectedTemplate, onInjectedConsumed, userId, currentR
           className="prompt-library-btn"
           onClick={() => setShowPromptLibrary(true)}
         >
-          💡 提示词快捷库
+          <Icon.Sparkles size={14} /> 提示词快捷库
         </button>
 
         {/* 提示词快捷库弹窗 */}
@@ -742,7 +743,7 @@ function ImageFreePanel({ injectedTemplate, onInjectedConsumed, userId, currentR
         </div>
 
         {error && <p className="error-text">{error}</p>}
-        <button className="generate-btn" onClick={handleGenerate} type="button">✦ 立即生成 (消耗积分)</button>
+        <button className="generate-btn" onClick={handleGenerate} type="button"><Icon.Sparkle size={14} /> 立即生成 (消耗积分)</button>
       </div>
 
       <div className="results-panel">
@@ -871,16 +872,16 @@ function ImageFreePanel({ injectedTemplate, onInjectedConsumed, userId, currentR
                       style={item.favorite ? { color: '#f97316', borderColor: '#f97316' } : {}}
                       title={item.favorite ? "取消收藏" : "收藏"}
                     >
-                      {item.favorite ? '❤️' : '🤍'}
+                      {item.favorite ? <Icon.HeartFilled size={13} /> : <Icon.Heart size={13} />}
                     </button>
-                    <button className="btn-outline" type="button" onClick={() => handleDownload(item.resultImageUrl)}>⬇ 下载</button>
+                    <button className="btn-outline" type="button" onClick={() => handleDownload(item.resultImageUrl)}><Icon.Download size={12} /> 下载</button>
                     <button className="btn-outline" type="button" onClick={() => { setSelectedItem(item); setResultImage(item.resultImageUrl || '') }}>查看大图</button>
-                    <button className="btn-outline" type="button" onClick={() => handleSaveAsStyle(item)} title="保存为风格画像">🎨 存风格</button>
+                    <button className="btn-outline" type="button" onClick={() => handleSaveAsStyle(item)} title="保存为风格画像"><Icon.Palette size={12} /> 存风格</button>
                     <button className="btn-outline" type="button" onClick={() => handleFeedback(item.id, 'like')}
-                      style={item.feedback === 'like' ? { color: '#10b981', borderColor: '#10b981' } : {}}>👍</button>
+                      style={item.feedback === 'like' ? { color: '#10b981', borderColor: '#10b981' } : {}}><Icon.ThumbsUp size={12} /></button>
                     <button className="btn-outline" type="button" onClick={() => handleFeedback(item.id, 'dislike')}
-                      style={item.feedback === 'dislike' ? { color: '#ef4444', borderColor: '#ef4444' } : {}}>👎</button>
-                    <button className="btn-outline" type="button" onClick={() => handleDeleteHistory(item.id)} style={{ color: '#ef4444', borderColor: '#ef4444' }}>🗑 删除</button>
+                      style={item.feedback === 'dislike' ? { color: '#ef4444', borderColor: '#ef4444' } : {}}><Icon.ThumbsDown size={12} /></button>
+                    <button className="btn-outline" type="button" onClick={() => handleDeleteHistory(item.id)} style={{ color: '#ef4444', borderColor: '#ef4444' }}><Icon.Trash size={12} /> 删除</button>
                   </div>
                 </div>
                 <div className="prompt-text">{item.originalPrompt}</div>
@@ -933,7 +934,7 @@ function ImageFreePanel({ injectedTemplate, onInjectedConsumed, userId, currentR
           <div className="result-card" style={{ marginTop: 16 }}>
             <div className="card-header">
               <span className="tag">最近一次生成</span>
-              <button className="btn-outline" type="button" onClick={() => handleDownload(resultImage)}>⬇ 下载当前图</button>
+              <button className="btn-outline" type="button" onClick={() => handleDownload(resultImage)}><Icon.Download size={12} /> 下载当前图</button>
             </div>
             <div className="image-preview-area">
               <div className="img-placeholder result"><img src={resultImage} alt="最近一次生成" /></div>

@@ -1,11 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
+import { Icon } from './components/Icons';
 
 const DEFAULT_FOLDERS = [
-  { path: 'product', name: '产品', icon: '📦' },
-  { path: 'company', name: '公司', icon: '🏢' },
-  { path: 'design', name: '设计素材', icon: '🎨' },
-  { path: 'brand', name: '品牌', icon: '🏷️' },
-  { path: 'other', name: '其他', icon: '📌' },
+  { path: 'product', name: '产品', iconKey: 'package' },
+  { path: 'company', name: '公司', iconKey: 'building' },
+  { path: 'design', name: '设计素材', iconKey: 'palette' },
+  { path: 'brand', name: '品牌', iconKey: 'tag' },
+  { path: 'other', name: '其他', iconKey: 'pin' },
 ];
 
 export default function KnowledgePanel({ onBack }) {
@@ -323,7 +324,7 @@ export default function KnowledgePanel({ onBack }) {
     return {
       path,
       name: preset?.name || path,
-      icon: preset?.icon || '📁',
+      iconKey: preset?.iconKey || 'folder',
     };
   });
 
@@ -345,7 +346,7 @@ export default function KnowledgePanel({ onBack }) {
             borderRadius: 6, padding: '6px 12px', cursor: 'pointer',
             color: 'var(--text-primary)', fontSize: 13,
           }}>← 返回</button>
-          <h2 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>📚 知识库</h2>
+          <h2 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}><Icon.Book size={18} /> 知识库</h2>
         </div>
 
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -387,7 +388,7 @@ export default function KnowledgePanel({ onBack }) {
           >
             <option value="">移动到文件夹...</option>
             {folderList.map(f => (
-              <option key={f.path} value={f.path}>{f.icon} {f.name}</option>
+              <option key={f.path} value={f.path}><Icon.Folder size={12} /> {f.name}</option>
             ))}
           </select>
           <button
@@ -417,7 +418,7 @@ export default function KnowledgePanel({ onBack }) {
         }}>
           {/* 全部 */}
           <FolderItem
-            icon="📁"
+            iconKey="folder"
             name="全部知识"
             count={totalAll}
             active={filterFolder === 'all'}
@@ -430,7 +431,7 @@ export default function KnowledgePanel({ onBack }) {
           {folderList.map(f => (
             <FolderItem
               key={f.path}
-              icon={f.icon}
+              iconKey={f.iconKey}
               name={f.name}
               sub={f.path}
               count={folderStats[f.path] || 0}
@@ -465,7 +466,7 @@ export default function KnowledgePanel({ onBack }) {
           >
             {pendingFiles.length === 0 && !uploading ? (
               <div>
-                <div style={{ fontSize: 24, marginBottom: 6 }}>📂</div>
+                <div style={{ fontSize: 24, marginBottom: 6 }}><Icon.FolderOpen size={24} /></div>
                 <div style={{ fontSize: 13, color: 'var(--text-primary)', marginBottom: 4 }}>
                   拖拽文件到此处上传
                 </div>
@@ -475,7 +476,7 @@ export default function KnowledgePanel({ onBack }) {
                 <label style={{
                   ...uploadBtnStyle, cursor: 'pointer', display: 'inline-flex',
                 }}>
-                  📎 选择文件
+                  <Icon.Upload size={13} /> 选择文件
                   <input
                     type="file"
                     accept=".txt,.md,.pdf,.doc,.docx,.jpg,.jpeg,.png,.gif,.webp,.svg"
@@ -534,16 +535,16 @@ export default function KnowledgePanel({ onBack }) {
                     borderRadius: 6, padding: '8px 24px', fontSize: 14, cursor: 'pointer',
                     fontWeight: 600,
                   }}
-                >
-                  {uploading ? `⏳ ${uploadProgress}` : `上传 ${pendingFiles.length} 个文件`}
-                </button>
+                  >
+                    {uploading ? <><Icon.Loader size={13} /> {uploadProgress}</> : `上传 ${pendingFiles.length} 个文件`}
+                  </button>
               </div>
             )}
 
             {/* 上传中进度（无队列时） */}
             {uploading && pendingFiles.length === 0 && (
               <span style={{ color: 'var(--primary-color)', fontSize: 12 }}>
-                ⏳ {uploadProgress}
+                <Icon.Loader size={13} /> {uploadProgress}
               </span>
             )}
           </div>
@@ -598,7 +599,16 @@ export default function KnowledgePanel({ onBack }) {
 
 // ========== 子组件 ==========
 
-function FolderItem({ icon, name, sub, count, active, onClick }) {
+function FolderItem({ iconKey, name, sub, count, active, onClick }) {
+  const folderIconMap = {
+    folder: Icon.Folder,
+    package: Icon.Package,
+    building: Icon.Building,
+    palette: Icon.Palette,
+    tag: Icon.Tag,
+    pin: Icon.Pin,
+  };
+  const FolderIcon = folderIconMap[iconKey] || Icon.Folder;
   return (
     <div
       onClick={onClick}
@@ -618,7 +628,7 @@ function FolderItem({ icon, name, sub, count, active, onClick }) {
       onMouseEnter={e => { if (!active) e.currentTarget.style.background = 'var(--hover-bg, rgba(128,128,128,0.1))'; }}
       onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent'; }}
     >
-      <span style={{ fontSize: 15 }}>{icon}</span>
+      <span style={{ fontSize: 15 }}><FolderIcon size={15} /></span>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: 13 }}>{name}</div>
         {sub && <div style={{ fontSize: 10, color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sub}</div>}
@@ -670,7 +680,7 @@ function KnowledgeItem({ item, selected, onToggleSelect, onEdit, onDelete }) {
             width: '100%', height: '100%', display: 'flex', alignItems: 'center',
             justifyContent: 'center', fontSize: 20,
           }}>
-            {item.type === 'image' ? '🖼️' : '📄'}
+            {item.type === 'image' ? <Icon.Image size={20} /> : <Icon.File size={20} />}
           </div>
         )}
       </div>
@@ -687,11 +697,11 @@ function KnowledgeItem({ item, selected, onToggleSelect, onEdit, onDelete }) {
             </span>
           )}
           {folderTag && (
-            <span style={{
+              <span style={{
               fontSize: 10, background: 'var(--primary-color-bg, rgba(99,102,241,0.1))',
               color: 'var(--primary-color)', borderRadius: 4, padding: '1px 6px',
             }}>
-              📁 {folderTag}
+              <Icon.Folder size={10} /> {folderTag}
             </span>
           )}
         </div>
@@ -702,8 +712,8 @@ function KnowledgeItem({ item, selected, onToggleSelect, onEdit, onDelete }) {
 
       {/* 操作 */}
       <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-        <button onClick={() => onEdit(item)} style={iconBtnStyle}>✏️</button>
-        <button onClick={() => onDelete(item.id)} style={iconBtnStyle}>🗑️</button>
+        <button onClick={() => onEdit(item)} style={iconBtnStyle}><Icon.Edit size={12} /></button>
+        <button onClick={() => onDelete(item.id)} style={iconBtnStyle}><Icon.Trash size={12} /></button>
       </div>
     </div>
   );
@@ -737,7 +747,7 @@ function KnowledgeFormModal({ form, setForm, editingId, folders, onSubmit, onClo
               >
                 <option value="">选择文件夹...</option>
                 {folders.map(f => (
-                  <option key={f.path} value={f.path}>{f.icon} {f.name} ({f.path})</option>
+                  <option key={f.path} value={f.path}>{<Icon.Folder size={12} />} {f.name} ({f.path})</option>
                 ))}
               </select>
               <input

@@ -1,3 +1,5 @@
+import { Icon } from './components/Icons'
+
 export default function PromptTemplateCard({ template, onUse, onEdit, onDelete }) {
   const hasCover = template.coverImage && template.coverImage.trim()
   const tags = Array.isArray(template.tags) ? template.tags : []
@@ -28,7 +30,7 @@ export default function PromptTemplateCard({ template, onUse, onEdit, onDelete }
           <img src={template.coverImage} alt={name} loading="lazy" />
         ) : (
           <div className="prompt-template-card-thumb-placeholder">
-            <div className="prompt-template-card-thumb-placeholder-icon">🖼️</div>
+            <div className="prompt-template-card-thumb-placeholder-icon"><Icon.Image size={32} /></div>
             <span>暂无封面</span>
           </div>
         )}

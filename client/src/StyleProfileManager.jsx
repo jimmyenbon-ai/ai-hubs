@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Icon } from './components/Icons';
 
 export default function StyleProfileManager({ onBack, onSelectProfile }) {
   const [profiles, setProfiles] = useState([]);
@@ -113,8 +114,8 @@ export default function StyleProfileManager({ onBack, onSelectProfile }) {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
                   <div style={{ fontWeight: 600, fontSize: 15 }}>{profile.name}</div>
                   <div style={{ display: 'flex', gap: 4 }}>
-                    <button className="btn-outline" style={{ padding: '2px 8px', fontSize: 11 }} onClick={() => openEdit(profile)}>✏️</button>
-                    <button className="btn-outline" style={{ padding: '2px 8px', fontSize: 11, color: '#ef4444' }} onClick={() => handleDelete(profile.id)}>🗑️</button>
+                    <button className="btn-outline" style={{ padding: '2px 8px', fontSize: 11 }} onClick={() => openEdit(profile)}><Icon.Edit size={12} /></button>
+                    <button className="btn-outline" style={{ padding: '2px 8px', fontSize: 11, color: '#ef4444' }} onClick={() => handleDelete(profile.id)}><Icon.Trash size={12} /></button>
                   </div>
                 </div>
                 {profile.description && (
@@ -130,9 +131,9 @@ export default function StyleProfileManager({ onBack, onSelectProfile }) {
                   ))}
                 </div>
                 <div style={{ display: 'flex', gap: 12, fontSize: 11, color: 'var(--text-secondary)' }}>
-                  <span>🎯 {profile.usageCount || 0} 次使用</span>
-                  <span>⭐ {profile.rating || 0} 分</span>
-                  <span>📐 {profile.parameters?.aspectRatio || '-'}</span>
+                  <span><Icon.Target size={11} /> {profile.usageCount || 0} 次使用</span>
+                  <span><Icon.Star size={11} /> {profile.rating || 0} 分</span>
+                  <span><Icon.Maximize size={11} /> {profile.parameters?.aspectRatio || '-'}</span>
                 </div>
                 {profile.promptTemplate && (
                   <div style={{ marginTop: 8, fontSize: 11, color: 'var(--text-secondary)', background: 'var(--bg-tertiary)', padding: 8, borderRadius: 6, maxHeight: 60, overflow: 'hidden' }}>
@@ -142,7 +143,7 @@ export default function StyleProfileManager({ onBack, onSelectProfile }) {
                 {onSelectProfile && (
                   <button className="btn-outline" style={{ marginTop: 8, width: '100%', fontSize: 12 }}
                     onClick={() => onSelectProfile(profile)}>
-                    🎨 使用此风格生成
+                    <Icon.Palette size={13} /> 使用此风格生成
                   </button>
                 )}
               </div>

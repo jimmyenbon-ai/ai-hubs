@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { Icon } from './components/Icons'
 
 const MODEL_OPTIONS = [
   { value: 'gpt-image-2', label: 'GPT Image 2' },
@@ -46,9 +47,9 @@ const POINT_COST_OPTIONS = [
 ]
 
 const TYPE_OPTIONS = [
-  { value: 'image', label: '🖼️ 图片' },
-  { value: 'video', label: '🎬 视频' },
-  { value: 'music', label: '🎵 音乐' },
+  { value: 'image', label: '图片', Icon: Icon.Image },
+  { value: 'video', label: '视频', Icon: Icon.Video },
+  { value: 'music', label: '音乐', Icon: Icon.Music },
 ]
 
 const DEFAULT_FORM = {
@@ -165,7 +166,7 @@ export default function PromptTemplateModal({ template, onClose, onSave, noBackd
                   onClick={() => set('contentType', opt.value)}
                   style={{ fontSize: 12 }}
                 >
-                  {opt.label}
+                  <opt.Icon size={13} /> {opt.label}
                 </button>
               ))}
             </div>

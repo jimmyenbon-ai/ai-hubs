@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react'
 import PromptTemplateCard from './PromptTemplateCard'
 import PromptTemplateModal from './PromptTemplateModal'
+import { Icon } from './components/Icons'
 
 const TYPE_TABS = [
-  { value: 'image', label: '🖼️ 图片' },
-  { value: 'video', label: '🎬 视频' },
-  { value: 'music', label: '🎵 音乐' },
+  { value: 'image', label: '图片', Icon: Icon.Image },
+  { value: 'video', label: '视频', Icon: Icon.Video },
+  { value: 'music', label: '音乐', Icon: Icon.Music },
 ]
 
 export default function PromptTemplateLibrary({ onUseTemplate, currentGroup, currentMode, onNavigate }) {
@@ -181,7 +182,7 @@ export default function PromptTemplateLibrary({ onUseTemplate, currentGroup, cur
                 className={`prompt-library-type-tab ${!showRecommended && activeType === tab.value ? 'active' : ''}`}
                 onClick={() => { setShowRecommended(false); handleTypeChange(tab.value); }}
               >
-                {tab.label}
+                <tab.Icon size={14} /> {tab.label}
               </button>
             ))}
             <button
@@ -189,7 +190,7 @@ export default function PromptTemplateLibrary({ onUseTemplate, currentGroup, cur
               onClick={() => setShowRecommended(true)}
               style={showRecommended ? { background: '#10b981', color: '#fff' } : {}}
             >
-              ⭐ 推荐
+              <Icon.Star size={14} /> 推荐
             </button>
           </div>
         </div>
@@ -236,7 +237,7 @@ export default function PromptTemplateLibrary({ onUseTemplate, currentGroup, cur
             <div className="prompt-library-empty"><div className="spinner" style={{ margin: '0 auto 12px' }} /><p>加载中…</p></div>
           ) : suggestions.length === 0 ? (
             <div className="prompt-library-empty">
-              <div className="prompt-library-empty-icon">📋</div>
+              <div className="prompt-library-empty-icon"><Icon.Inbox size={36} /></div>
               <p>暂无推荐</p>
               <p style={{ fontSize: 12, opacity: 0.6 }}>对生成结果点赞后，高频好评的 Prompt 模式会出现在这里</p>
             </div>
@@ -250,7 +251,7 @@ export default function PromptTemplateLibrary({ onUseTemplate, currentGroup, cur
                 }}>
                   <div style={{ flex: 1 }}>
                     <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 4 }}>{s.suggestedName}</div>
-                    <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>👍 {s.likeCount} 次好评 · 关键词: {s.pattern}</div>
+                    <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}><Icon.ThumbsUp size={12} /> {s.likeCount} 次好评 · 关键词: {s.pattern}</div>
                   </div>
                   <button className="generate-btn" style={{ fontSize: 12, padding: '6px 14px' }}
                     onClick={() => handleConvertSuggestion(s.pattern)}>
@@ -267,13 +268,13 @@ export default function PromptTemplateLibrary({ onUseTemplate, currentGroup, cur
           </div>
         ) : templates.length === 0 && !search && !selectedCategory ? (
           <div className="prompt-library-empty">
-            <div className="prompt-library-empty-icon">📭</div>
+            <div className="prompt-library-empty-icon"><Icon.Inbox size={36} /></div>
             <p>还没有模板</p>
             <p style={{ fontSize: 12, opacity: 0.6 }}>点击右上角「新建模板」创建第一个提示词模板</p>
           </div>
         ) : templates.length === 0 ? (
           <div className="prompt-library-empty">
-            <div className="prompt-library-empty-icon">🔍</div>
+            <div className="prompt-library-empty-icon"><Icon.Search size={36} /></div>
             <p>没有找到匹配的模板</p>
             <p style={{ fontSize: 12, opacity: 0.6 }}>试试其他关键词或分类</p>
           </div>

@@ -19,24 +19,41 @@ import LLMConfigPanel from './LLMConfigPanel';
 import KnowledgePanel from './KnowledgePanel';
 import WorkflowHistoryPanel from './WorkflowHistoryPanel';
 import WorkflowListPanel from './WorkflowListPanel';
+import { Icon } from './components/Icons';
 
 const NODE_TYPES_CONFIG = {
-  input: { label: '用户输入', color: '#3b82f6', icon: '📥' },
-  llmAnalyze: { label: 'LLM 分析', color: '#6366f1', icon: '🧠' },
-  llmGenerate: { label: 'LLM 生成', color: '#8b5cf6', icon: '✍️' },
-  textGenerate: { label: '文案生成', color: '#f97316', icon: '📝' },
-  knowledgeQuery: { label: '知识查询', color: '#06b6d4', icon: '📚' },
-  imageGenerate: { label: '图片生成', color: '#f59e0b', icon: '🖼️' },
-  videoGenerate: { label: '视频生成', color: '#ef4444', icon: '🎬' },
-  musicGenerate: { label: '音乐生成', color: '#10b981', icon: '🎵' },
-  condition: { label: '条件分支', color: '#f97316', icon: '🔀' },
-  loop: { label: '循环迭代', color: '#ec4899', icon: '🔄' },
-  output: { label: '输出', color: '#64748b', icon: '📤' },
+  input: { label: '用户输入', color: '#3b82f6' },
+  llmAnalyze: { label: 'LLM 分析', color: '#6366f1' },
+  llmGenerate: { label: 'LLM 生成', color: '#8b5cf6' },
+  textGenerate: { label: '文案生成', color: '#f97316' },
+  knowledgeQuery: { label: '知识查询', color: '#06b6d4' },
+  imageGenerate: { label: '图片生成', color: '#f59e0b' },
+  videoGenerate: { label: '视频生成', color: '#ef4444' },
+  musicGenerate: { label: '音乐生成', color: '#10b981' },
+  condition: { label: '条件分支', color: '#f97316' },
+  loop: { label: '循环迭代', color: '#ec4899' },
+  output: { label: '输出', color: '#64748b' },
+};
+
+// 工作流节点 SVG 图标映射
+const NODE_ICONS = {
+  input: <Icon.Download size={16} />,
+  llmAnalyze: <Icon.Brain size={16} />,
+  llmGenerate: <Icon.Pen size={16} />,
+  textGenerate: <Icon.FileText size={16} />,
+  knowledgeQuery: <Icon.Book size={16} />,
+  imageGenerate: <Icon.Palette size={16} />,
+  videoGenerate: <Icon.Video size={16} />,
+  musicGenerate: <Icon.Music size={16} />,
+  condition: <Icon.Shuffle size={16} />,
+  loop: <Icon.Repeat size={16} />,
+  output: <Icon.Upload size={16} />,
+  unknown: <Icon.Question size={16} />,
 };
 
 // ============ 基础节点组件 ============
 function WorkflowNode({ data, type, selected, dragging }) {
-  const config = NODE_TYPES_CONFIG[type] || { label: type, color: '#64748b', icon: '❓' };
+  const config = NODE_TYPES_CONFIG[type] || { label: type, color: '#64748b' };
   return (
     <div style={{
       background: config.color,
@@ -54,7 +71,7 @@ function WorkflowNode({ data, type, selected, dragging }) {
     }}>
       <Handle type="target" position={Position.Left} style={{ background: '#fff', width: 8, height: 8 }} />
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        <span style={{ fontSize: 16 }}>{config.icon}</span>
+        {NODE_ICONS[type] || NODE_ICONS.unknown}
         <span>{data.label || config.label}</span>
       </div>
       {data.model && <div style={{ fontSize: 10, opacity: 0.8, marginTop: 4 }}>{data.model}</div>}
@@ -86,14 +103,14 @@ function InputNode({ data, selected }) {
     }}>
       <Handle type="source" position={Position.Right} id="text" style={{ background: '#fff', width: 8, height: 8, top: '50%' }} />
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: data.text ? 6 : 0 }}>
-        <span style={{ fontSize: 16 }}>📥</span>
+        {NODE_ICONS.input}
         <span>{data.label || '用户输入'}</span>
       </div>
       <div style={{ fontSize: 11, opacity: 0.75, lineHeight: 1.4, wordBreak: 'break-word' }}>
         {preview}
       </div>
       {imgCount > 0 && (
-        <div style={{ fontSize: 10, opacity: 0.7, marginTop: 4 }}>🖼️ {imgCount} 张参考图</div>
+        <div style={{ fontSize: 10, opacity: 0.7, marginTop: 4 }}><Icon.Image size={12} /> {imgCount} 张参考图</div>
       )}
       <Handle type="source" position={Position.Right} id="images" style={{ background: '#f59e0b', width: 8, height: 8, top: '75%' }} />
     </div>
@@ -116,7 +133,7 @@ function ConditionNode({ data, selected }) {
     }}>
       <Handle type="target" position={Position.Left} style={{ background: '#fff', width: 8, height: 8 }} />
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        <span style={{ fontSize: 16 }}>🔀</span>
+        {NODE_ICONS.condition}
         <span>{data.label || '条件分支'}</span>
       </div>
       {data.condition && <div style={{ fontSize: 10, opacity: 0.8, marginTop: 4 }}>{data.condition}</div>}
@@ -146,7 +163,7 @@ function LoopNode({ data, selected }) {
     }}>
       <Handle type="target" position={Position.Left} style={{ background: '#fff', width: 8, height: 8 }} />
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        <span style={{ fontSize: 16 }}>🔄</span>
+        {NODE_ICONS.loop}
         <span>{data.label || '循环迭代'}</span>
       </div>
       {data.maxIterations && <div style={{ fontSize: 10, opacity: 0.8, marginTop: 4 }}>最多 {data.maxIterations} 次</div>}
@@ -205,7 +222,7 @@ function NodeTypeButton({ type, config, onAdd }) {
           color: 'inherit', textAlign: 'left',
         }}
       >
-        <span style={{ fontSize: 15 }}>{config.icon}</span>
+        {NODE_ICONS[type] || NODE_ICONS.unknown}
         <span>{config.label}</span>
       </button>
 
@@ -216,13 +233,13 @@ function NodeTypeButton({ type, config, onAdd }) {
           borderRadius: 8, padding: '10px 12px', width: 220,
           boxShadow: '0 8px 24px rgba(0,0,0,0.3)', pointerEvents: 'none',
         }}>
-          <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 6, color: config.color }}>{config.icon} {config.label}</div>
+          <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 6, color: config.color }}>{NODE_ICONS[type]} {config.label}</div>
           {NODE_TYPE_HELP[type]?.desc && (
             <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 6, lineHeight: 1.4 }}>{NODE_TYPE_HELP[type].desc}</div>
           )}
           <div style={{ fontSize: 11 }}>
-            <div style={{ color: 'var(--text-secondary)' }}>📥 输入：<span style={{ color: 'var(--text-primary)' }}>{NODE_TYPE_HELP[type]?.inputs}</span></div>
-            <div style={{ color: 'var(--text-secondary)' }}>📤 输出：<span style={{ color: 'var(--text-primary)' }}>{NODE_TYPE_HELP[type]?.outputs}</span></div>
+            <div style={{ color: 'var(--text-secondary)' }}><Icon.Download size={12} /> 输入：<span style={{ color: 'var(--text-primary)' }}>{NODE_TYPE_HELP[type]?.inputs}</span></div>
+            <div style={{ color: 'var(--text-secondary)' }}><Icon.Upload size={12} /> 输出：<span style={{ color: 'var(--text-primary)' }}>{NODE_TYPE_HELP[type]?.outputs}</span></div>
           </div>
         </div>
       )}
@@ -298,7 +315,7 @@ function ResultBlock({ label, content }) {
     navigator.clipboard.writeText(cleaned).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); });
   };
   const handleDownload = () => {
-    const safeLabel = label.replace(/[^\w一-鿿]/g, '_').slice(0, 20);
+    const safeLabel = typeof label === 'string' ? label.replace(/[^\w一-鿿]/g, '_').slice(0, 20) : 'result';
     downloadTextFile(cleaned, `AI-Hub_${safeLabel}_${new Date().toISOString().slice(0, 10)}.txt`);
   };
   return (
@@ -314,7 +331,7 @@ function ResultBlock({ label, content }) {
               padding: '2px 8px', display: 'flex', alignItems: 'center', gap: 4,
             }}
           >
-            {copied ? '✅ 已复制' : '📋 复制'}
+            {copied ? <><Icon.Check size={12} /> 已复制</> : <><Icon.Copy size={12} /> 复制</>}
           </button>
           <button
             onClick={handleDownload}
@@ -324,7 +341,7 @@ function ResultBlock({ label, content }) {
               padding: '2px 8px', display: 'flex', alignItems: 'center', gap: 4,
             }}
           >
-            📥 TXT
+            <Icon.Download size={12} /> TXT
           </button>
         </div>
       </div>
@@ -357,7 +374,7 @@ function ResultMedia({ label, type, url }) {
             padding: '2px 8px', display: 'flex', alignItems: 'center', gap: 4,
           }}
         >
-          ⬇ 下载
+          <Icon.Download size={12} /> 下载
         </button>
       </div>
       {type === 'image' && (
@@ -945,20 +962,7 @@ export default function WorkflowPanel({ onBack, currentRole }) {
 
   // ========== 进度展示 ==========
   const getNodeStepLabel = (nodeName, nodeType) => {
-    const map = {
-      input: `📥 ${nodeName}`,
-      llmAnalyze: `🔍 ${nodeName}`,
-      llmGenerate: `✍️ ${nodeName}`,
-      textGenerate: `📝 ${nodeName}`,
-      knowledgeQuery: `📚 ${nodeName}`,
-      imageGenerate: `🎨 ${nodeName}`,
-      videoGenerate: `🎬 ${nodeName}`,
-      musicGenerate: `🎵 ${nodeName}`,
-      condition: `🔀 ${nodeName}`,
-      loop: `🔄 ${nodeName}`,
-      output: `📤 ${nodeName}`,
-    };
-    return map[nodeType] || nodeName;
+    return nodeName;
   };
 
   const renderStepProgress = useCallback(() => {
@@ -966,7 +970,7 @@ export default function WorkflowPanel({ onBack, currentRole }) {
       return (
         <div style={{ marginTop: 8 }}>
           {runResult.steps.map((step, i) => {
-            const icon = step.output?.error ? '❌' : '✅';
+            const stepIcon = step.output?.error ? <Icon.X size={12} color="#ef4444" /> : <Icon.Check size={12} color="#10b981" />;
             const detail = step.output?.error
               ? step.output.error
               : step.output?.imageUrl ? `图片生成成功 ${step.output.resolution || ''}`
@@ -982,7 +986,7 @@ export default function WorkflowPanel({ onBack, currentRole }) {
               <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 6, fontSize: 11, color: 'var(--text-secondary)', marginBottom: 3 }}>
                 <span style={{ width: 6, height: 6, borderRadius: '50%', flexShrink: 0, marginTop: 4, background: step.output?.error ? '#ef4444' : '#10b981' }} />
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ color: 'var(--text-primary)', fontWeight: 500 }}>{icon} {getNodeStepLabel(step.nodeName, step.nodeType)}</div>
+                  <div style={{ color: 'var(--text-primary)', fontWeight: 500 }}>{stepIcon} {getNodeStepLabel(step.nodeName, step.nodeType)}</div>
                   {detail && <div style={{ color: 'var(--text-secondary)', marginTop: 1, fontSize: 10, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{detail}</div>}
                 </div>
                 <span style={{ marginLeft: 'auto', flexShrink: 0 }}>{step.duration}ms</span>
@@ -1039,20 +1043,20 @@ export default function WorkflowPanel({ onBack, currentRole }) {
         gap: 2,
         flexShrink: 0,
       }}>
-        <button onClick={onBack} title="返回主页" style={toolBtnStyle}><span style={toolBtnEmoji}>←</span><span style={toolBtnLabel}>主页</span></button>
-        <button onClick={() => setView('list')} title="工作流列表" style={toolBtnStyle}><span style={toolBtnEmoji}>📋</span><span style={toolBtnLabel}>列表</span></button>
-        <button onClick={handleNewWorkflow} title="新建工作流" style={toolBtnStyle}><span style={toolBtnEmoji}>➕</span><span style={toolBtnLabel}>新建</span></button>
+        <button onClick={onBack} title="返回主页" style={toolBtnStyle}><Icon.ChevronRight size={14} style={{ transform: 'rotate(180deg)' }} /><span style={toolBtnLabel}>主页</span></button>
+        <button onClick={() => setView('list')} title="工作流列表" style={toolBtnStyle}><Icon.LayoutList size={14} /><span style={toolBtnLabel}>列表</span></button>
+        <button onClick={handleNewWorkflow} title="新建工作流" style={toolBtnStyle}><Icon.Plus size={14} /><span style={toolBtnLabel}>新建</span></button>
         <div style={{ flex: 1 }} />
         <button onClick={handleUndo} title={`撤销 (${historyRef.current.getUndoCount()})`}
           disabled={!historyRef.current.canUndo()}
-          style={{ ...toolBtnStyle, opacity: historyRef.current.canUndo() ? 1 : 0.3 }}><span style={toolBtnEmoji}>↩️</span><span style={toolBtnLabel}>撤销</span></button>
+          style={{ ...toolBtnStyle, opacity: historyRef.current.canUndo() ? 1 : 0.3 }}><Icon.Clockwise size={14} style={{ transform: 'scaleX(-1)' }} /><span style={toolBtnLabel}>撤销</span></button>
         <button onClick={handleRedo} title={`重做 (${historyRef.current.getRedoCount()})`}
           disabled={!historyRef.current.canRedo()}
-          style={{ ...toolBtnStyle, opacity: historyRef.current.canRedo() ? 1 : 0.3 }}><span style={toolBtnEmoji}>↪️</span><span style={toolBtnLabel}>重做</span></button>
+          style={{ ...toolBtnStyle, opacity: historyRef.current.canRedo() ? 1 : 0.3 }}><Icon.Clockwise size={14} /><span style={toolBtnLabel}>重做</span></button>
         <div style={{ borderTop: '1px solid var(--border-color)', margin: '4px 0' }} />
-        <button onClick={() => setView('llm')} title="LLM 配置" style={toolBtnStyle}><span style={toolBtnEmoji}>🤖</span><span style={toolBtnLabel}>LLM</span></button>
-        <button onClick={() => setView('knowledge')} title="知识库" style={toolBtnStyle}><span style={toolBtnEmoji}>📚</span><span style={toolBtnLabel}>知识库</span></button>
-        <button onClick={() => setView('history')} title="执行历史" style={toolBtnStyle}><span style={toolBtnEmoji}>📜</span><span style={toolBtnLabel}>历史</span></button>
+        <button onClick={() => setView('llm')} title="LLM 配置" style={toolBtnStyle}><Icon.Bot size={14} /><span style={toolBtnLabel}>LLM</span></button>
+        <button onClick={() => setView('knowledge')} title="知识库" style={toolBtnStyle}><Icon.Book size={14} /><span style={toolBtnLabel}>知识库</span></button>
+        <button onClick={() => setView('history')} title="执行历史" style={toolBtnStyle}><Icon.History size={14} /><span style={toolBtnLabel}>历史</span></button>
       </div>
 
       {/* 节点库面板 */}
@@ -1075,7 +1079,7 @@ export default function WorkflowPanel({ onBack, currentRole }) {
             title={nodePanelCollapsed ? '展开' : '折叠'}
             style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 13, color: 'var(--text-secondary)', padding: '2px 4px' }}
           >
-            {nodePanelCollapsed ? '▶' : '◀'}
+            {nodePanelCollapsed ? <Icon.ChevronRight size={13} /> : <Icon.ChevronLeft size={13} />}
           </button>
         </div>
         {!nodePanelCollapsed && Object.entries(NODE_TYPES_CONFIG).map(([type, config]) => (
@@ -1093,11 +1097,11 @@ export default function WorkflowPanel({ onBack, currentRole }) {
         }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
             <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>
-              💡 快捷输入 {nodes.some(n => n.type === 'input') && <span style={{ fontSize: 10, opacity: 0.5 }}>(画布上有输入节点时会合并)</span>}
+              <Icon.Lightbulb size={14} /> 快捷输入 {nodes.some(n => n.type === 'input') && <span style={{ fontSize: 10, opacity: 0.5 }}>(画布上有输入节点时会合并)</span>}
             </div>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-              {refImages.length > 0 && <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>🖼️ {refImages.length}张参考图</span>}
-              {running && <div style={{ fontSize: 11, color: '#3b82f6' }}>⏳ 执行中...</div>}
+              {refImages.length > 0 && <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}><Icon.Image size={12} /> {refImages.length}张参考图</span>}
+              {running && <div style={{ fontSize: 11, color: '#3b82f6' }}><Icon.Loader size={12} /> 执行中...</div>}
             </div>
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
@@ -1140,7 +1144,7 @@ export default function WorkflowPanel({ onBack, currentRole }) {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'center' }}>
               <button className="generate-btn" onClick={handleRun} disabled={running}
                 style={{ padding: '10px 16px', width: 'auto' }}>
-                {running ? '⏳' : '▶'} {running ? '执行中' : '执行'}
+                {running ? <Icon.Loader size={12} /> : <Icon.Play size={12} />} {running ? '执行中' : '执行'}
               </button>
               <label style={{
                 background: 'var(--bg-tertiary)', border: '1px solid var(--border-color)',
@@ -1148,7 +1152,7 @@ export default function WorkflowPanel({ onBack, currentRole }) {
                 color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: 4,
                 whiteSpace: 'nowrap',
               }}>
-                {refUploading ? '⏳' : '🖼️'} 参考图
+                {refUploading ? <Icon.Loader size={12} /> : <Icon.Image size={12} />} 参考图
                 <input type="file" ref={refFileInput} accept="image/*" multiple
                   style={{ display: 'none' }} onChange={handleRefUpload} disabled={refUploading} />
               </label>
@@ -1164,7 +1168,7 @@ export default function WorkflowPanel({ onBack, currentRole }) {
             padding: '8px 14px', color: '#dc2626', fontSize: 13,
             boxShadow: '0 4px 12px rgba(0,0,0,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
           }}>
-            ⚠️ {cycleError}
+            <Icon.AlertTriangle size={14} /> {cycleError}
             <button onClick={() => setCycleError('')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#dc2626', fontSize: 16 }}>×</button>
           </div>
         )}
@@ -1220,11 +1224,11 @@ export default function WorkflowPanel({ onBack, currentRole }) {
           {/* 右下角工具栏 */}
           <Panel position="bottom-left" style={{ left: '50%', transform: 'translateX(-50%)' }}>
             <div style={{ display: 'flex', gap: 8, background: 'var(--bg-secondary)', padding: '8px 12px', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.3)' }}>
-              <button className="btn-outline" onClick={handleSave} style={{ fontSize: 12, padding: '5px 12px' }}>💾 保存</button>
-              <button className="btn-outline" onClick={autoArrange} style={{ fontSize: 12, padding: '5px 12px', borderColor: '#10b981', color: '#10b981' }}>📐 排列</button>
-              <button className="btn-outline" onClick={handleExport} style={{ fontSize: 12, padding: '5px 12px', borderColor: '#6366f1', color: '#6366f1' }}>📤 导出</button>
+              <button className="btn-outline" onClick={handleSave} style={{ fontSize: 12, padding: '5px 12px' }}><Icon.Save size={12} /> 保存</button>
+              <button className="btn-outline" onClick={autoArrange} style={{ fontSize: 12, padding: '5px 12px', borderColor: '#10b981', color: '#10b981' }}><Icon.Grid size={12} /> 排列</button>
+              <button className="btn-outline" onClick={handleExport} style={{ fontSize: 12, padding: '5px 12px', borderColor: '#6366f1', color: '#6366f1' }}><Icon.Upload size={12} /> 导出</button>
               <input ref={importInputRef} type="file" accept=".json" style={{ display: 'none' }} onChange={handleImport} />
-              <button className="btn-outline" onClick={() => importInputRef.current?.click()} style={{ fontSize: 12, padding: '5px 12px', borderColor: '#6366f1', color: '#6366f1' }}>📥 导入</button>
+              <button className="btn-outline" onClick={() => importInputRef.current?.click()} style={{ fontSize: 12, padding: '5px 12px', borderColor: '#6366f1', color: '#6366f1' }}><Icon.Download size={12} /> 导入</button>
             </div>
           </Panel>
         </ReactFlow>
@@ -1249,7 +1253,7 @@ export default function WorkflowPanel({ onBack, currentRole }) {
             flexShrink: 0,
           }}>
             <span style={{ fontWeight: 600, fontSize: 14 }}>
-              {running ? '⏳ 执行中...' : runResult?.success ? '✅ 执行成功' : '❌ 执行失败'}
+              {running ? <Icon.Loader size={12} /> : <Icon.Check size={12} />} {running ? '执行中...' : runResult?.success ? '执行成功' : '执行失败'}
             </span>
             {!running && (
               <button
@@ -1291,10 +1295,10 @@ export default function WorkflowPanel({ onBack, currentRole }) {
                 padding: '10px 12px',
               }}>
                 <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 1 }}>
-                  📋 执行步骤
+                  <Icon.List size={12} /> 执行步骤
                 </div>
                 {runResult.steps.map((step, i) => {
-                  const icon = step.output?.error ? '❌' : '✅';
+                  const stepIcon = step.output?.error ? <Icon.X size={12} color="#ef4444" /> : <Icon.Check size={12} color="#10b981" />;
                   const detail = step.output?.error
                     ? step.output.error
                     : step.output?.imageUrl ? `图片生成成功 ${step.output.resolution || ''}`
@@ -1328,12 +1332,12 @@ export default function WorkflowPanel({ onBack, currentRole }) {
                     fontSize: 11, fontWeight: 600, color: 'var(--text-muted)',
                     marginBottom: 10, textTransform: 'uppercase', letterSpacing: 1,
                   }}>
-                    📤 输出结果
+                    <Icon.Upload size={14} /> 输出结果
                   </div>
 
                   {runResult.steps?.some(s => s.output?.error) && (
                     <div style={{ marginBottom: 12, padding: '10px 12px', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', borderRadius: 6 }}>
-                      <div style={{ fontWeight: 600, fontSize: 13, color: '#ef4444', marginBottom: 4 }}>⚠️ 部分步骤出错</div>
+                      <div style={{ fontWeight: 600, fontSize: 13, color: '#ef4444', marginBottom: 4 }}><Icon.AlertTriangle size={14} /> 部分步骤出错</div>
                       {runResult.steps.filter(s => s.output?.error).map((s, i) => (
                         <div key={i} style={{ fontSize: 12, color: '#dc2626', marginBottom: 2 }}>
                           · {s.nodeName || s.nodeType}: {s.output?.error}
@@ -1343,23 +1347,23 @@ export default function WorkflowPanel({ onBack, currentRole }) {
                   )}
 
                   {runResult.outputs?.styleAnalysis && (
-                    <ResultBlock label="🎨 风格分析" content={runResult.outputs.styleAnalysis} />
+                    <ResultBlock label={<><Icon.Palette size={14} /> 风格分析</>} content={runResult.outputs.styleAnalysis} />
                   )}
-                  {runResult.outputs?.prompt && <ResultBlock label="📝 提示词" content={runResult.outputs.prompt} />}
+                  {runResult.outputs?.prompt && <ResultBlock label={<><Icon.FileText size={14} /> 提示词</>} content={runResult.outputs.prompt} />}
                   {(runResult.outputs?.copy || runResult.outputs?.text) && (
-                    <ResultBlock label="📄 文案" content={runResult.outputs.copy || runResult.outputs.text} />
+                    <ResultBlock label={<><Icon.File size={14} /> 文案</>} content={runResult.outputs.copy || runResult.outputs.text} />
                   )}
                   {runResult.outputs?.referenceImages?.length > 0 && (
                     <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 8 }}>
-                      🖼️ 参考图: {runResult.outputs.referenceImages.length} 张
+                      <Icon.Image size={14} /> 参考图: {runResult.outputs.referenceImages.length} 张
                     </div>
                   )}
-                  {runResult.outputs?.imageUrl && <ResultMedia label="🖼️ 图片" type="image" url={runResult.outputs.imageUrl} />}
-                  {runResult.outputs?.videoUrl && <ResultMedia label="🎬 视频" type="video" url={runResult.outputs.videoUrl} />}
-                  {runResult.outputs?.audioUrl && <ResultMedia label="🎵 音频" type="audio" url={runResult.outputs.audioUrl} />}
+                  {runResult.outputs?.imageUrl && <ResultMedia label={<><Icon.Image size={14} /> 图片</>} type="image" url={runResult.outputs.imageUrl} />}
+                  {runResult.outputs?.videoUrl && <ResultMedia label={<><Icon.Video size={14} /> 视频</>} type="video" url={runResult.outputs.videoUrl} />}
+                  {runResult.outputs?.audioUrl && <ResultMedia label={<><Icon.Music size={14} /> 音频</>} type="audio" url={runResult.outputs.audioUrl} />}
                   {!runResult.outputs?.prompt && !runResult.outputs?.copy && !runResult.outputs?.text && !runResult.outputs?.imageUrl && !runResult.outputs?.videoUrl && !runResult.outputs?.audioUrl && (
                     <div style={{ color: '#f59e0b', fontSize: 12, marginTop: 4 }}>
-                      ⚠️ 执行完成但未捕获到输出（请检查上方错误信息，或检查 LLM 调用配置是否正确）
+                      <Icon.AlertTriangle size={14} /> 执行完成但未捕获到输出（请检查上方错误信息，或检查 LLM 调用配置是否正确）
                     </div>
                   )}
                 </div>
@@ -1416,8 +1420,8 @@ function NodeProperties({ selectedNode, updateNodeData, deleteNode, copyNode }) 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
         <div style={{ fontWeight: 600, fontSize: 14 }}>节点属性</div>
         <div style={{ display: 'flex', gap: 6 }}>
-          <button onClick={() => copyNode(selectedNode)} title="复制节点" style={{ background: '#3b82f6', border: 'none', color: '#fff', padding: '4px 8px', borderRadius: 4, cursor: 'pointer', fontSize: 11 }}>📋</button>
-          <button onClick={() => deleteNode(selectedNode.id)} title="删除节点" style={{ background: '#ef4444', border: 'none', color: '#fff', padding: '4px 8px', borderRadius: 4, cursor: 'pointer', fontSize: 11 }}>🗑️</button>
+          <button onClick={() => copyNode(selectedNode)} title="复制节点" style={{ background: '#3b82f6', border: 'none', color: '#fff', padding: '4px 8px', borderRadius: 4, cursor: 'pointer', fontSize: 11 }}><Icon.Copy size={12} /></button>
+          <button onClick={() => deleteNode(selectedNode.id)} title="删除节点" style={{ background: '#ef4444', border: 'none', color: '#fff', padding: '4px 8px', borderRadius: 4, cursor: 'pointer', fontSize: 11 }}><Icon.Trash size={12} /></button>
         </div>
       </div>
 
@@ -1488,7 +1492,7 @@ function InputNodeFields({ selectedNode, updateNodeData }) {
         textAlign: 'center', cursor: 'pointer', marginBottom: 8,
         background: 'var(--bg-tertiary)', fontSize: 12, color: 'var(--text-secondary)',
       }} onClick={() => fileRef.current?.click()}>
-        {uploading ? '⏳ 上传中...' : '📷 点击上传参考图'}
+        {uploading ? <Icon.Loader size={12} /> : <Icon.Camera size={12} />} {uploading ? '上传中...' : '点击上传参考图'}
       </div>
       <input ref={fileRef} type="file" accept="image/*" multiple
         style={{ display: 'none' }} onChange={handleUpload} disabled={uploading} />

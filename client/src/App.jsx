@@ -11,6 +11,8 @@ import WorkflowPanel from './WorkflowPanel'
 import BatchGeneratePanel from './BatchGeneratePanel'
 import SettingsPanel from './SettingsPanel'
 import StyleProfileManager from './StyleProfileManager'
+import AIDialogPanel from './AIDialogPanel'
+import { Icon, ICON_LIST } from './components/Icons'
 
 function App() {
   const [currentGroup, setCurrentGroup] = useState('image')
@@ -31,6 +33,7 @@ function App() {
   const [showWorkflow, setShowWorkflow] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
   const [showStyleManager, setShowStyleManager] = useState(false)
+  const [showAIDialog, setShowAIDialog] = useState(false)
   const [userId, setUserId] = useState(() => localStorage.getItem('aihub_user_id') || null)
 
   // 切换主题
@@ -242,6 +245,13 @@ function App() {
           }}
           onOpenWorkflow={() => {
             setShowWorkflow(true)
+            setShowAIDialog(false)
+            setSidebarOpen(false)
+          }}
+          onOpenAIDialog={() => {
+            setShowAIDialog(true)
+            setShowWorkflow(false)
+            setShowPromptLibrary(false)
             setSidebarOpen(false)
           }}
           onOpenStyleManager={() => {
@@ -295,6 +305,7 @@ function App() {
               {!showWorkflow && !showPromptLibrary && currentGroup === 'image' && currentMode === 'free' && 'AI 图片生成 · 自由创作'}
               {!showWorkflow && !showPromptLibrary && currentGroup === 'image' && currentMode === 'batch' && 'AI 图片生成 · 批量生成'}
               {showSettings && '系统设置'}
+              {showAIDialog && 'AI 智能对话'}
               {!showWorkflow && !showPromptLibrary && currentGroup === 'image' && currentMode.startsWith('tpl_') && (getCurrentTemplate()?.name || '模板生成')}
               {!showWorkflow && !showPromptLibrary && currentGroup === 'video' && 'AI 视频生成'}
               {!showWorkflow && !showPromptLibrary && currentGroup === 'music' && 'Suno AI音乐生成'}
@@ -318,7 +329,7 @@ function App() {
               {pointsError ? '积分: --' : `积分: ${pointsLabel}`}
               {/* 积分预警：低于10分时显示警告 */}
               {!pointsError && points !== null && points < 10 && (
-                <span style={{ marginLeft: 6, color: '#f97316', fontSize: 12 }} title="积分不足，请及时充值">⚠️</span>
+                <span style={{ marginLeft: 6, color: '#f97316', fontSize: 12 }} title="积分不足，请及时充值"><Icon.AlertTriangle size={12} /></span>
               )}
             </button>
           </div>
@@ -346,9 +357,10 @@ function App() {
               }}
             />
           )}
-          {!showWorkflow && !showPromptLibrary && currentGroup === 'image' && renderImageWorkspace()}
-          {!showWorkflow && !showPromptLibrary && currentGroup === 'video' && <VideoGenerate />}
-          {!showWorkflow && !showPromptLibrary && currentGroup === 'music' && <MusicGenerate />}
+          {showAIDialog && <AIDialogPanel onBack={() => setShowAIDialog(false)} />}
+          {!showAIDialog && !showWorkflow && !showPromptLibrary && currentGroup === 'image' && renderImageWorkspace()}
+          {!showAIDialog && !showWorkflow && !showPromptLibrary && currentGroup === 'video' && <VideoGenerate />}
+          {!showAIDialog && !showWorkflow && !showPromptLibrary && currentGroup === 'music' && <MusicGenerate />}
           {showWorkflow && <WorkflowPanel onBack={() => setShowWorkflow(false)} currentRole={currentRole} />}
           {showSettings && <SettingsPanel onBack={() => setShowSettings(false)} />}
           {showStyleManager && <StyleProfileManager onBack={() => setShowStyleManager(false)} onSelectProfile={(profile) => { setShowStyleManager(false); setCurrentGroup('image'); setCurrentMode('free'); setInjectedTemplate({ prompt: profile.promptTemplate, model: profile.parameters?.model, aspectRatio: profile.parameters?.aspectRatio, imageSize: profile.parameters?.imageSize }); }} />}
@@ -369,13 +381,11 @@ function App() {
 // 新建模板弹窗组件
 const CreateTemplateModal = ({ onClose, onCreate }) => {
   const [name, setName] = useState('')
-  const [icon, setIcon] = useState('📄')
+  const [icon, setIcon] = useState('file')
   const [category, setCategory] = useState('')
   const [description, setDescription] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-
-  const EMOJI_LIST = ['📄', '👤', '📦', '🎉', '🏢', '🎨', '📸', '🎬', '🎵', '📊', '🌟', '🔔', '📝', '🎁', '🏆']
 
   async function handleSubmit() {
     if (!name.trim()) {
@@ -417,13 +427,13 @@ const CreateTemplateModal = ({ onClose, onCreate }) => {
 
         <div className="section-label">图标</div>
         <div className="emoji-picker">
-          {EMOJI_LIST.map((e) => (
+          {ICON_LIST.map(({ key, Icon: IconComp }) => (
             <button
-              key={e}
-              className={`emoji-btn ${icon === e ? 'active' : ''}`}
-              onClick={() => setIcon(e)}
+              key={key}
+              className={`emoji-btn ${icon === key ? 'active' : ''}`}
+              onClick={() => setIcon(key)}
             >
-              {e}
+              <IconComp size={16} />
             </button>
           ))}
         </div>
