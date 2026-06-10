@@ -70,9 +70,16 @@ const STOP_WORDS = new Set([
  */
 function tokenize(text) {
   if (!text) return [];
+
+  // 预处理：规范化复合品牌名（B Pro/B-Pro → BPro），避免短词被丢弃
+  // "B Pro" 拆成 "b"+"pro" 后 "b" 被过滤，"pro" 在 "BPro" 中无边界
+  // 规范化后 "BPro" → "bpro"，与知识库文本名直接匹配
+  let normalized = text
+    .replace(/\b([A-Za-z])\s+(Pro|Plus|Max|Lite|Ultra|Mini)\b/gi, '$1$2')
+    .replace(/\b([A-Za-z])-(Pro|Plus|Max|Lite|Ultra|Mini)\b/gi, '$1$2');
   
   // 移除特殊字符，保留中英文和数字
-  const cleaned = text.replace(/[^\w\s\u4e00-\u9fa5]/g, ' ');
+  const cleaned = normalized.replace(/[^\w\s\u4e00-\u9fa5]/g, ' ');
   
   // 分割
   const tokens = cleaned.split(/\s+/).filter(t => t.length > 0);
