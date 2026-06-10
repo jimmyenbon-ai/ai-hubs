@@ -102,10 +102,18 @@ router.post('/chat-stream', async (req, res) => {
         signal: { get aborted() { return controller.aborted; } },
       });
       await Conversation.touch(convId);
-      emit('done', { ...result, conversationId: convId });
+      if (!controller.aborted) {
+        emit('done', { ...result, conversationId: convId });
+        clearInterval(heartbeat);
+        res.end();
+      }
     } catch (err) {
       console.error('[AI-Dialog] /chat-stream error:', err);
-      emit('error', { message: err.message });
+      if (!controller.aborted) {
+        emit('error', { message: err.message });
+        clearInterval(heartbeat);
+        res.end();
+      }
     }
 
   } catch (err) {

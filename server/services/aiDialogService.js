@@ -116,11 +116,14 @@ const IMAGE_PROMPT_SYSTEM = `你是一个专业的 AI 生图提示词工程师�
 
 async function searchKnowledge(userMessage) {
   const allKnowledge = await KnowledgeBase.findAll({});
-  const results = intelligentSearch(allKnowledge, {
+  let results = intelligentSearch(allKnowledge, {
     query: userMessage,
     limit: 10,
     minScore: 0.1,
   });
+
+  // 变体过滤：用户指定了具体型号时，排除同系列其他型号的文档
+  results = filterByVariant(results, userMessage);
 
   const texts = [];
   const imageUrls = [];
@@ -138,6 +141,38 @@ async function searchKnowledge(userMessage) {
     imageUrls,
     total: results.length,
   };
+}
+
+// ============ 产品变体过滤 ============
+// 知识库搜索可能返回同系列不同变体的文档（如搜R5任意弧，也返回R5-90°）
+// 此函数根据用户查询中的变体关键词过滤结果
+const VARIANT_INDICATORS = [
+  { query: ['任意弧', 'curve', 'flexible', 'curved', 'r5-curve', 'r5-flexible'], names: ['curve', 'flexible', '任意弧'] },
+  { query: ['直角锁', 'straight', 'right angle', 'r5-straight'], names: ['straight', 'right-angle', '直角'] },
+  { query: ['弧形锁', 'arc', 'arched', 'r5-arc'], names: ['arc', 'arched', '弧形'] },
+  { query: ['90°', '90-degree', '90 degree', 'r5-90'], names: ['90', '90°', '90-degree'] },
+];
+
+function filterByVariant(results, userMessage) {
+  const msgLower = userMessage.toLowerCase();
+
+  for (const group of VARIANT_INDICATORS) {
+    const userMentionsVariant = group.query.some(q => msgLower.includes(q.toLowerCase()));
+    if (userMentionsVariant) {
+      const filtered = results.filter(item => {
+        const name = `${item.title || ''} ${item.originalName || ''} ${item.folder || ''}`.toLowerCase();
+        return group.names.some(n => name.includes(n.toLowerCase()));
+      });
+      if (filtered.length > 0) {
+        console.log(`[AI-Dialog] 变体过滤: 匹配 "${group.query[0]}" → 保留 ${filtered.length}/${results.length} 条`);
+        return filtered;
+      }
+      // 如果过滤后为空，保留原始结果（可能知识库中该变体文档命名不规范）
+      console.log(`[AI-Dialog] 变体过滤: "${group.query[0]}" 无匹配，保留全部结果`);
+    }
+  }
+
+  return results;
 }
 
 // ============ 意图分析（LLM 自主决定）============
