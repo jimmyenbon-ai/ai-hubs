@@ -516,6 +516,17 @@ async function handleChatStream({ conversationId, userMessage, emit, signal }) {
     attachments: [],
   });
 
+  // 1b. 加载对话历史（支持继续对话微调）
+  const historyMessages = await Message.findAll(conversationId);
+  // 排除刚保存的当前消息，取最近10轮
+  const recentHistory = historyMessages
+    .filter(m => m.id && !m.id.startsWith('temp-'))
+    .slice(-11, -1); // 排除最后一条（当前用户消息）
+  const historySection = recentHistory.length > 0
+    ? '\n\n## 对话历史（用于理解上下文，继续微调）\n' +
+      recentHistory.map(m => `${m.role === 'user' ? '用户' : '助手'}：${m.content.slice(0, 500)}`).join('\n---\n')
+    : '';
+
   // 2. 知识库检索
   let knowledgeResult;
   try {
@@ -541,7 +552,7 @@ async function handleChatStream({ conversationId, userMessage, emit, signal }) {
   let intent;
   try {
     const intentResult = await llmService.complete(llmConfig, INTENT_ANALYSIS_SYSTEM,
-      `请分析以下用户需求：\n${userMessage}\n\n知识库检索结果：\n${knowledgeResult.texts.length > 0 ? knowledgeResult.texts.join('\n---\n') : '（无相关知识库内容）'}`);
+      `请分析以下用户需求：\n${userMessage}${historySection}\n\n知识库检索结果：\n${knowledgeResult.texts.length > 0 ? knowledgeResult.texts.join('\n---\n') : '（无相关知识库内容）'}`);
     const content = intentResult.content.trim();
     const jsonMatch = content.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
@@ -592,7 +603,7 @@ async function handleChatStream({ conversationId, userMessage, emit, signal }) {
 
     try {
       const textResult = await llmService.complete(llmConfig, SYSTEM_PROMPT,
-        `## 任务类型\n请生成一篇${langLabel}${typeLabel}。\n\n## 用户需求\n${userMessage}\n\n## 知识库内容（注意：请只使用与用户指定产品型号精确匹配的内容）\n${knowledgeResult.texts.join('\n\n') || '（无相关知识库内容）'}${contextSection}\n\n⚠️ 重要：如果知识库中包含多个不同型号/变体的内容，请只采用用户明确指定的型号。\n\n⚠️ 格式要求：纯文本输出，禁止 Markdown（无 ## ** - 等符号），标题用【】，可直接复制发布。\n\n请直接输出生成的内容，不要添加额外的说明。`);
+        `## 任务类型\n请生成一篇${langLabel}${typeLabel}。\n\n## 用户需求\n${userMessage}\n${historySection}\n## 知识库内容（注意：请只使用与用户指定产品型号精确匹配的内容）\n${knowledgeResult.texts.join('\n\n') || '（无相关知识库内容）'}${contextSection}\n\n⚠️ 对话连续性：如果对话历史显示你之前生成过内容，而用户现在要求修改/微调（如"语气更专业"、"加一段"、"缩短"），请修改你上次生成的内容而不是重写一篇全新的。\n\n⚠️ 重要：如果知识库中包含多个不同型号/变体的内容，请只采用用户明确指定的型号。\n\n⚠️ 格式要求：纯文本输出，禁止 Markdown（无 ## ** - 等符号），标题用【】，可直接复制发布。\n\n请直接输出生成的内容，不要添加额外的说明。`);
       generatedText = textResult.content;
       emitSafe('text_result', { content: generatedText });
     } catch (err) {
