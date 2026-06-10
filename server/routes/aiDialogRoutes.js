@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { Conversation, Message } = require('../models/conversationModel');
-const { handleChat } = require('../services/aiDialogService');
+const { handleChat, handleChatStream } = require('../services/aiDialogService');
 
 // 获取对话列表
 router.get('/conversations', async (req, res) => {
@@ -45,6 +45,71 @@ router.delete('/conversations/:id', async (req, res) => {
     await Conversation.destroy(req.params.id);
     res.json({ success: true });
   } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// SSE 流式对话（核心接口，浏览器不会超时）
+router.post('/chat-stream', async (req, res) => {
+  try {
+    const { conversationId, message } = req.body;
+
+    if (!message || !message.trim()) {
+      return res.status(400).json({ success: false, message: '消息内容不能为空' });
+    }
+
+    let convId = conversationId;
+
+    if (!convId) {
+      const title = message.slice(0, 30) + (message.length > 30 ? '...' : '');
+      const newConv = await Conversation.create({ title });
+      convId = newConv.id;
+    }
+
+    // 设置 SSE
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
+    res.flushHeaders();
+
+    // 中断信号
+    const controller = { aborted: false };
+    req.on('close', () => { controller.aborted = true; });
+    req.on('end', () => { controller.aborted = true; });
+
+    function emit(event, data) {
+      if (controller.aborted) return;
+      res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+    }
+
+    // 心跳保活
+    const heartbeat = setInterval(() => {
+      if (controller.aborted) { clearInterval(heartbeat); return; }
+      res.write(': heartbeat\n\n');
+    }, 25000);
+
+    res.on('close', () => {
+      controller.aborted = true;
+      clearInterval(heartbeat);
+    });
+
+    try {
+      const result = await handleChatStream({
+        conversationId: convId,
+        userMessage: message,
+        emit,
+        signal: { get aborted() { return controller.aborted; } },
+      });
+      await Conversation.touch(convId);
+      emit('done', { ...result, conversationId: convId });
+    } catch (err) {
+      console.error('[AI-Dialog] /chat-stream error:', err);
+      emit('error', { message: err.message });
+    }
+
+  } catch (err) {
+    console.error('[AI-Dialog] /chat-stream setup error:', err);
     res.status(500).json({ success: false, message: err.message });
   }
 });

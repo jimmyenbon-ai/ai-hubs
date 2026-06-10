@@ -14,6 +14,11 @@ export default function AIDialogPanel({ onBack }) {
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
 
+  // SSE 实时状态
+  const [progressSteps, setProgressSteps] = useState([]);
+  const [liveImages, setLiveImages] = useState([]);
+  const [liveText, setLiveText] = useState('');
+
   async function fetchConversations() {
     try {
       const resp = await fetch('/api/ai-dialog/conversations');
@@ -41,7 +46,7 @@ export default function AIDialogPanel({ onBack }) {
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+  }, [messages, liveImages, liveText, progressSteps]);
 
   async function handleSend() {
     if (!input.trim() || status === 'loading') return;
@@ -50,37 +55,183 @@ export default function AIDialogPanel({ onBack }) {
     setStatus('loading');
     setError(null);
 
+    setProgressSteps([]);
+    setLiveImages([]);
+    setLiveText('');
+
     const optimisticUserMsg = { id: 'temp-' + Date.now(), role: 'user', content: userMessage, attachments: [] };
     setMessages(prev => [...prev, optimisticUserMsg]);
 
+    let convId = currentConversation?.id;
+
     try {
-      const resp = await fetch('/api/ai-dialog/chat', {
+      const resp = await fetch('/api/ai-dialog/chat-stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ conversationId: currentConversation?.id, message: userMessage }),
+        body: JSON.stringify({ conversationId: convId, message: userMessage }),
       });
-      const data = await resp.json();
 
-      if (!data.success) throw new Error(data.message || '处理失败');
+      if (!resp.ok) {
+        const errData = await resp.json().catch(() => ({ message: `HTTP ${resp.status}` }));
+        throw new Error(errData.message || `请求失败 (${resp.status})`);
+      }
 
-      if (data.data.conversationId && !currentConversation) {
-        loadConversation(data.data.conversationId);
-        fetchConversations();
-      } else if (data.data.conversationId) {
-        const assistantMsg = {
-          id: data.data.messageId,
-          role: 'assistant',
-          content: data.data.content,
-          attachments: data.data.images || [],
-        };
-        setMessages(prev => [...prev.filter(m => !m.id.startsWith('temp-')), assistantMsg]);
-        fetchConversations();
+      const reader = resp.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      // 正则匹配 SSE 事件：event: xxx\ndata: yyy\n\n
+      const eventRe = /event: ([^\n]+)\ndata: ([\s\S]*?)(?=\n\n|$)/g;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+
+        let match;
+        const consumedRanges = [];
+
+        eventRe.lastIndex = 0;
+        while ((match = eventRe.exec(buffer)) !== null) {
+          const eventName = match[1].trim();
+          const dataStr = match[2].trim();
+          consumedRanges.push({ start: match.index, end: match.index + match[0].length });
+
+          let data;
+          try { data = JSON.parse(dataStr); } catch { continue; }
+
+          switch (eventName) {
+            case 'knowledge_result':
+              setProgressSteps(prev => {
+                if (prev.some(s => s.id === 'knowledge')) return prev;
+                return [...prev, { id: 'knowledge', label: '知识库检索', detail: data.summary, type: 'ok' }];
+              });
+              break;
+
+            case 'intent_result':
+              setProgressSteps(prev => {
+                const filtered = prev.filter(s => s.id !== 'intent');
+                return [...filtered, { id: 'intent', label: '意图分析', detail: data.summary || '', type: 'ok' }];
+              });
+              break;
+
+            case 'status':
+              setProgressSteps(prev => {
+                const phaseLabel = data.phase === 'text' ? '文案生成'
+                  : data.phase === 'prompt' ? '提示词生成' : '处理中';
+                const filtered = prev.filter(s => s.id !== 'status-phase');
+                return [...filtered, { id: 'status-phase', label: phaseLabel, detail: data.message || '', type: 'loading' }];
+              });
+              break;
+
+            case 'text_result':
+              setLiveText(data.content || '');
+              setProgressSteps(prev => {
+                const filtered = prev.filter(s => s.id !== 'text');
+                return [...filtered, { id: 'text', label: '文案生成', detail: '文案已生成', type: 'ok' }];
+              });
+              break;
+
+            case 'prompt_result':
+              setProgressSteps(prev => {
+                const filtered = prev.filter(s => s.id !== 'prompt');
+                return [...filtered, { id: 'prompt', label: '提示词生成', detail: `${(data.prompts || []).length} 个提示词已就绪`, type: 'ok' }];
+              });
+              break;
+
+            case 'image_progress': {
+              const imgStatus = data.status;
+              if (imgStatus === 'generating') {
+                setProgressSteps(prev => {
+                  const filtered = prev.filter(s => s.id !== 'image-gen');
+                  return [...filtered, {
+                    id: 'image-gen', label: `图片生成 (${data.index}/${data.total})`,
+                    detail: '正在生成...', type: 'loading',
+                  }];
+                });
+              } else if (imgStatus === 'done' && data.imageUrl) {
+                setLiveImages(prev => [...prev, {
+                  url: data.imageUrl, prompt: data.prompt,
+                  index: data.index, total: data.total,
+                }]);
+                setProgressSteps(prev => {
+                  const filtered = prev.filter(s => s.id !== 'image-gen');
+                  return [...filtered, {
+                    id: 'image-gen',
+                    label: `图片生成 (${data.index}/${data.total})`,
+                    detail: `已完成 ${data.index}/${data.total} 张`,
+                    type: data.index === data.total ? 'ok' : 'loading',
+                  }];
+                });
+              } else if (imgStatus === 'error') {
+                setProgressSteps(prev => {
+                  const filtered = prev.filter(s => s.id !== 'image-gen');
+                  return [...filtered, {
+                    id: `img-err-${data.index}`,
+                    label: `图片 ${data.index}`,
+                    detail: `生成失败: ${data.error}`,
+                    type: 'error',
+                  }];
+                });
+              }
+              break;
+            }
+
+            case 'done': {
+              const allImages = data.images || [];
+              const assistantMsg = {
+                id: 'msg-assistant-' + Date.now(),
+                role: 'assistant',
+                content: data.content || '',
+                attachments: allImages
+                  .filter(img => img.url || img.imageUrl)
+                  .map((img, i) => ({
+                    type: 'image',
+                    url: img.url || img.imageUrl,
+                    prompt: img.prompt || '',
+                    index: i + 1,
+                  })),
+              };
+
+              setMessages(prev => {
+                const filtered = prev.filter(m => !m.id.startsWith('temp-'));
+                return [...filtered, assistantMsg];
+              });
+
+              const finalConvId = data.conversationId || convId;
+              if (finalConvId && finalConvId !== currentConversation?.id) {
+                loadConversation(finalConvId);
+              }
+              fetchConversations();
+
+              setProgressSteps([]);
+              setLiveImages([]);
+              setLiveText('');
+              setStatus('idle');
+              break;
+            }
+
+            case 'error':
+              throw new Error(data.message || '处理过程中出错');
+          }
+        }
+
+        // 截断已消费的 buffer
+        if (consumedRanges.length > 0) {
+          const last = consumedRanges[consumedRanges.length - 1];
+          buffer = buffer.slice(last.end);
+        }
       }
     } catch (err) {
+      console.error('[AI-Dialog] SSE error:', err);
       setError(err.message);
       setMessages(prev => prev.filter(m => !m.id.startsWith('temp-')));
-    } finally {
+      setProgressSteps([]);
+      setLiveImages([]);
+      setLiveText('');
       setStatus('idle');
+    } finally {
       inputRef.current?.focus();
     }
   }
@@ -122,7 +273,6 @@ export default function AIDialogPanel({ onBack }) {
 
   return (
     <div className="aidp-root">
-      {/* 顶部栏 */}
       <div className="aidp-header">
         <div className="aidp-header-left">
           <button className="aidp-icon-btn" onClick={onBack} title="返回">
@@ -148,9 +298,7 @@ export default function AIDialogPanel({ onBack }) {
         </div>
       </div>
 
-      {/* 主体 */}
       <div className="aidp-body">
-        {/* 左侧历史 */}
         <div className={`aidp-sidebar${sidebarOpen ? ' open' : ''}`}>
           <div className="aidp-sidebar-inner">
             <div className="aidp-sidebar-label">历史对话</div>
@@ -179,7 +327,6 @@ export default function AIDialogPanel({ onBack }) {
           </div>
         </div>
 
-        {/* 右侧聊天 */}
         <div className="aidp-chat">
           <div className="aidp-messages">
             {messages.length === 0 && (
@@ -197,9 +344,51 @@ export default function AIDialogPanel({ onBack }) {
             ))}
 
             {status === 'loading' && (
-              <div className="aidp-loading">
-                <div className="spinner" style={{ width: 18, height: 18, borderWidth: 2 }} />
-                <span>任务进行中，请稍后...</span>
+              <div className="aidp-msg-row aidp-msg-row--assistant">
+                <div className="aidp-msg-bubble aidp-msg-bubble--assistant aidp-live-bubble">
+                  {progressSteps.length > 0 && (
+                    <div className="aidp-progress-steps">
+                      {progressSteps.map((step) => (
+                        <div key={step.id} className={`aidp-step aidp-step--${step.type}`}>
+                          <span className="aidp-step-icon">
+                            {step.type === 'ok' ? '\u2713' : step.type === 'error' ? '\u2717' : '\u22ef'}
+                          </span>
+                          <span className="aidp-step-label">{step.label}</span>
+                          {step.detail && <span className="aidp-step-detail">{step.detail}</span>}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {liveText && (
+                    <div className="aidp-live-text">
+                      <div className="aidp-live-text-label">文案预览</div>
+                      <div className="aidp-live-text-content">{liveText}</div>
+                    </div>
+                  )}
+
+                  {liveImages.length > 0 && (
+                    <div className="aidp-live-images">
+                      <div className="aidp-live-images-label">生成中图片</div>
+                      <div className="aidp-msg-images">
+                        {liveImages.map((img, i) => (
+                          <div key={i} className="aidp-img-wrap">
+                            <img src={img.url} alt={`图片${img.index}`} className="aidp-img" />
+                            {img.prompt && <div className="aidp-img-overlay">{img.prompt.slice(0, 60)}...</div>}
+                            <div className="aidp-img-badge">{img.index}/{img.total}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {progressSteps.length === 0 && !liveText && liveImages.length === 0 && (
+                    <div className="aidp-loading-inline">
+                      <div className="spinner" style={{ width: 18, height: 18, borderWidth: 2 }} />
+                      <span>任务进行中，请稍候...</span>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
 
@@ -213,7 +402,6 @@ export default function AIDialogPanel({ onBack }) {
             <div ref={messagesEndRef} />
           </div>
 
-          {/* 输入区 */}
           <div className="aidp-input-area">
             <textarea
               ref={inputRef}
@@ -254,7 +442,6 @@ function MessageBubble({ message }) {
     <div className="aidp-msg-row aidp-msg-row--assistant">
       <div className="aidp-msg-bubble aidp-msg-bubble--assistant">
         <div className="aidp-msg-text">{message.content}</div>
-
         {(message.attachments && message.attachments.length > 0) ? (
           <div className="aidp-msg-images">
             {message.attachments.map((att, i) =>

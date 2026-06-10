@@ -228,13 +228,7 @@ async function handleChat(conversationId, userMessage) {
   }
 
   // 4. 构建上下文
-  let contextSection = '';
-  if (knowledgeResult.texts.length > 0) {
-    contextSection = `\n\n## 知识库参考资料\n${knowledgeResult.texts.join('\n\n')}`;
-  }
-  if (knowledgeResult.imageUrls.length > 0) {
-    contextSection += `\n\n## 知识库参考图片 URL（可在生图时作为风格参考）\n${knowledgeResult.imageUrls.join('\n')}`;
-  }
+  const contextSection = buildContextSection(knowledgeResult);
 
   // 5. 生成文案（如果需要）
   let generatedText = '';
@@ -431,6 +425,245 @@ async function generateSingleImage(prompt, model, aspectRatio, referenceUrls = [
   return displayUrl;
 }
 
+// ============ SSE 流式对话处理 ============
+
+/**
+ * SSE 流式对话处理
+ *
+ * 每个步骤完成时通过 emit() 推送进度，前端可以实时展示：
+ * - knowledge_result：知识库检索完成（带摘要）
+ * - intent_result：LLM 意图分析完成
+ * - text_result：文案生成完成（如果有）
+ * - image_progress：单张图片生成进度
+ * - done：全部完成
+ *
+ * @param {object} params
+ * @param {string} params.conversationId
+ * @param {string} params.userMessage
+ * @param {Function} params.emit - SSE 发送函数 emit(event, data)
+ * @param {object} params.signal - { aborted: boolean } 中断信号
+ */
+async function handleChatStream({ conversationId, userMessage, emit, signal }) {
+  const emitSafe = (event, data) => {
+    if (signal?.aborted) return;
+    emit(event, data);
+  };
+
+  // 1. 保存用户消息
+  await Message.create(conversationId, {
+    role: 'user',
+    content: userMessage,
+    attachments: [],
+  });
+
+  // 2. 知识库检索
+  let knowledgeResult;
+  try {
+    knowledgeResult = await searchKnowledge(userMessage);
+    emitSafe('knowledge_result', {
+      textCount: knowledgeResult.texts.length,
+      imageCount: knowledgeResult.imageUrls.length,
+      summary: knowledgeResult.texts.length > 0
+        ? `找到 ${knowledgeResult.texts.length} 条相关文档，${knowledgeResult.imageUrls.length} 张相关图片`
+        : '未在知识库中找到相关内容',
+    });
+  } catch (err) {
+    console.error('[AI-Dialog] 知识库检索失败:', err.message);
+    knowledgeResult = { texts: [], imageUrls: [], total: 0 };
+    emitSafe('knowledge_result', { textCount: 0, imageCount: 0, summary: '知识库检索失败' });
+  }
+
+  if (signal?.aborted) return;
+
+  const llmConfig = await getLLMConfig();
+
+  // 3. LLM 意图分析
+  let intent;
+  try {
+    const intentResult = await llmService.complete(llmConfig, INTENT_ANALYSIS_SYSTEM,
+      `请分析以下用户需求：\n${userMessage}\n\n知识库检索结果：\n${knowledgeResult.texts.length > 0 ? knowledgeResult.texts.join('\n---\n') : '（无相关知识库内容）'}`);
+    const content = intentResult.content.trim();
+    const jsonMatch = content.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      intent = JSON.parse(jsonMatch[0]);
+    } else {
+      intent = { needsText: true, needsImages: false, imageCount: 0, imageAspectRatio: '1:1', taskType: 'general', language: 'zh' };
+    }
+    emitSafe('intent_result', {
+      needsText: intent.needsText,
+      needsImages: intent.needsImages,
+      imageCount: intent.imageCount,
+      summary: intent.summary || `将生成${intent.needsText ? '文案' : ''}${intent.needsText && intent.needsImages ? '和' : ''}${intent.needsImages ? `${intent.imageCount}张图片` : ''}`,
+    });
+  } catch (err) {
+    console.error('[AI-Dialog] 意图分析失败:', err.message);
+    intent = { needsText: true, needsImages: false, imageCount: 0, imageAspectRatio: '1:1', taskType: 'general', language: 'zh' };
+    emitSafe('intent_result', { needsText: true, needsImages: false, imageCount: 0, summary: '意图分析失败，默认生成文案' });
+  }
+
+  const { needsText, needsImages, imageCount = 0, imageAspectRatio = '1:1', taskType = 'general', language = 'zh' } = intent;
+
+  // 无需生成内容，直接用知识库内容回答
+  if (!needsText && !needsImages) {
+    const answerText = knowledgeResult.texts.length > 0
+      ? knowledgeResult.texts.join('\n\n')
+      : '抱歉，我暂时没有找到相关信息，请尝试其他问题或补充知识库内容。';
+
+    await Message.create(conversationId, { role: 'assistant', content: answerText, attachments: [] });
+    return { content: answerText, images: [], knowledgeUsed: knowledgeResult.total };
+  }
+
+  if (signal?.aborted) return;
+
+  // 4. 构建上下文
+  const contextSection = buildContextSection(knowledgeResult);
+
+  // 5. 生成文案（如果需要）
+  let generatedText = '';
+  if (needsText) {
+    const taskLabels = {
+      blog_article: '博客文章', marketing_copy: '营销文案',
+      product_desc: '产品描述', social_post: '社交媒体帖子', general: '内容',
+    };
+    const langLabel = language === 'en' ? '英文' : '中文';
+    const typeLabel = taskLabels[taskType] || '内容';
+
+    emitSafe('status', { phase: 'text', message: `正在生成${langLabel}${typeLabel}...` });
+
+    try {
+      const textResult = await llmService.complete(llmConfig, SYSTEM_PROMPT,
+        `## 任务类型\n请生成一篇${langLabel}${typeLabel}。\n\n## 用户需求\n${userMessage}\n\n## 知识库内容（注意：请只使用与用户指定产品型号精确匹配的内容）\n${knowledgeResult.texts.join('\n\n') || '（无相关知识库内容）'}${contextSection}\n\n⚠️ 重要：如果知识库中包含多个不同型号/变体的内容，请只采用用户明确指定的型号。\n\n请直接输出生成的内容，不要添加额外的说明。`);
+      generatedText = textResult.content;
+      emitSafe('text_result', { content: generatedText });
+    } catch (err) {
+      console.error('[AI-Dialog] 文案生成失败:', err.message);
+      generatedText = `（文案生成失败：${err.message}）`;
+      emitSafe('text_result', { content: generatedText, error: err.message });
+    }
+  }
+
+  if (signal?.aborted) return;
+
+  // 6. 生成图片（如果需要）
+  let generatedImages = [];
+  const actualImageCount = Math.min(imageCount, 5);
+  if (needsImages && actualImageCount > 0) {
+    const refImagesForGeneration = knowledgeResult.imageUrls.slice(0, 3);
+
+    // 6a. LLM 生成生图提示词
+    emitSafe('status', { phase: 'prompt', message: '正在生成图片提示词...' });
+    let imagePrompts = [];
+    try {
+      const promptResult = await llmService.complete(llmConfig, IMAGE_PROMPT_SYSTEM,
+        `## 用户需求\n${userMessage}\n\n## 知识库内容摘要\n${knowledgeResult.texts.slice(0, 3).join('\n\n') || '无'}\n\n## 参考图片URL（可选使用）\n${refImagesForGeneration.join('\n') || '无'}\n\n## 要求图片数量和比例\n数量：${actualImageCount} 张，比例：${imageAspectRatio}\n\n请生成 ${actualImageCount} 个生图提示词（JSON数组）：`);
+      const content = promptResult.content.trim();
+      const jsonMatch = content.match(/\[[\s\S]*\]/);
+      if (jsonMatch) {
+        imagePrompts = JSON.parse(jsonMatch[0]);
+        if (imagePrompts.length < actualImageCount) {
+          for (let i = imagePrompts.length; i < actualImageCount; i++) {
+            imagePrompts.push({ index: i + 1, aspectRatio: imageAspectRatio, prompt: imagePrompts[0]?.prompt || userMessage });
+          }
+        }
+      } else {
+        imagePrompts = parseFlexiblePrompts(content, actualImageCount);
+      }
+      emitSafe('prompt_result', { prompts: imagePrompts.map(p => p.prompt || p) });
+    } catch (err) {
+      console.error('[AI-Dialog] 生图提示词生成失败:', err.message);
+      imagePrompts = Array.from({ length: actualImageCount }, (_, i) => ({
+        index: i + 1, aspectRatio: imageAspectRatio,
+        prompt: `${userMessage} - image ${i + 1}, high quality, professional photography`,
+      }));
+    }
+
+    if (signal?.aborted) return;
+
+    // 6b. 逐张生成图片
+    generatedImages = await generateImagesStream({
+      imagePrompts,
+      refImagesForGeneration,
+      emitSafe,
+      signal,
+    });
+  }
+
+  if (signal?.aborted) return;
+
+  // 7. 组合最终回复
+  const assistantContent = buildFinalResponse(generatedText, generatedImages);
+
+  // 8. 保存助手消息
+  await Message.create(conversationId, {
+    role: 'assistant',
+    content: assistantContent,
+    attachments: generatedImages.map((img) => ({
+      type: 'image', url: img.imageUrl, prompt: img.prompt, index: img.index,
+    })),
+  });
+
+  return { content: assistantContent, images: generatedImages, knowledgeUsed: knowledgeResult.total };
+}
+
+/**
+ * SSE 流式批量生图，每生成完一张立即推送 progress
+ */
+async function generateImagesStream({ imagePrompts, refImagesForGeneration, emitSafe, signal }) {
+  const results = [];
+
+  for (let i = 0; i < imagePrompts.length; i++) {
+    if (signal?.aborted) break;
+
+    const item = imagePrompts[i];
+    const prompt = typeof item === 'string' ? item : item.prompt;
+    const aspectRatio = (item.aspectRatio || '1:1').replace(':', 'x');
+    const model = 'gpt-image-2';
+
+    emitSafe('image_progress', {
+      index: i + 1,
+      total: imagePrompts.length,
+      status: 'generating',
+      prompt: prompt.slice(0, 80),
+    });
+
+    try {
+      const imageUrl = await generateSingleImage(prompt, model, aspectRatio, refImagesForGeneration);
+      results.push({ index: item.index || (i + 1), prompt, imageUrl, aspectRatio: item.aspectRatio || '1:1' });
+      emitSafe('image_progress', {
+        index: i + 1,
+        total: imagePrompts.length,
+        status: 'done',
+        imageUrl,
+        prompt,
+      });
+    } catch (err) {
+      console.error(`[AI-Dialog] 第 ${i + 1} 张图片生成失败:`, err.message);
+      results.push({ index: item.index || (i + 1), prompt, imageUrl: null, error: err.message });
+      emitSafe('image_progress', {
+        index: i + 1,
+        total: imagePrompts.length,
+        status: 'error',
+        error: err.message,
+        prompt,
+      });
+    }
+  }
+
+  return results;
+}
+
+/** 构建知识库上下文 */
+function buildContextSection(knowledgeResult) {
+  let ctx = '';
+  if (knowledgeResult.texts.length > 0) {
+    ctx += `\n\n## 知识库参考资料\n${knowledgeResult.texts.join('\n\n')}`;
+  }
+  if (knowledgeResult.imageUrls.length > 0) {
+    ctx += `\n\n## 知识库参考图片 URL（可在生图时作为风格参考）\n${knowledgeResult.imageUrls.join('\n')}`;
+  }
+  return ctx;
+}
+
 // ============ 工具函数 ============
 
 function parseFlexiblePrompts(content, count) {
@@ -466,6 +699,7 @@ function buildFinalResponse(text, images) {
 
 module.exports = {
   handleChat,
+  handleChatStream,
   searchKnowledge,
   getLLMConfig,
 };
