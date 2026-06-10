@@ -313,7 +313,7 @@ async function handleChat(conversationId, userMessage) {
     let imagePrompts = [];
     try {
       const promptResult = await llmService.complete(llmConfig, IMAGE_PROMPT_SYSTEM,
-        `## 用户需求\n${userMessage}\n\n## 知识库内容摘要\n${knowledgeResult.texts.slice(0, 3).join('\n\n') || '无'}\n\n## 参考图片URL（可选使用，其中可能包含logo等品牌素材）\n${refImagesForGeneration.join('\n') || '无'}\n\n⚠️ 如果用户要求加logo且参考图中有logo图片，请生成包含 "Enbon logo" 的 prompt，logo 放在产品屏幕或机身上。\n\n## 要求图片数量和比例\n数量：${actualImageCount} 张，比例：${imageAspectRatio}\n\n请生成 ${actualImageCount} 个生图提示词（JSON数组）：`);
+        `## 用户需求\n${userMessage}\n\n## 已生成的文案内容（配图需匹配文案场景和氛围）\n${generatedText ? generatedText.slice(0, 800) : '（文案未生成）'}\n\n## 知识库内容摘要\n${knowledgeResult.texts.slice(0, 3).join('\n\n') || '无'}\n\n## 参考图片URL（包含产品图和logo等素材，请综合参考）\n${refImagesForGeneration.join('\n') || '无'}\n\n⚠️ 配图原则：根据文案描述的场景来构图。文案写的是舞台就用舞台场景，写的是会议室就用会议室场景，写的是户外就用户外场景。logo 位置按用户要求，用户没说则酌情放置。\n\n## 要求图片数量和比例\n数量：${actualImageCount} 张，比例：${imageAspectRatio}\n\n请生成 ${actualImageCount} 个生图提示词（JSON数组）：`);
 
       const content = promptResult.content.trim();
       let jsonMatch = content.match(/\[[\s\S]*\]/);
@@ -605,7 +605,7 @@ async function handleChatStream({ conversationId, userMessage, emit, signal }) {
     let imagePrompts = [];
     try {
       const promptResult = await llmService.complete(llmConfig, IMAGE_PROMPT_SYSTEM,
-        `## 用户需求\n${userMessage}\n\n## 知识库内容摘要\n${knowledgeResult.texts.slice(0, 3).join('\n\n') || '无'}\n\n## 参考图片URL（可选使用，其中可能包含logo等品牌素材）\n${refImagesForGeneration.join('\n') || '无'}\n\n⚠️ 如果用户要求加logo且参考图中有logo图片，请生成包含 "Enbon logo" 的 prompt，logo 放在产品屏幕或机身上。\n\n## 要求图片数量和比例\n数量：${actualImageCount} 张，比例：${imageAspectRatio}\n\n请生成 ${actualImageCount} 个生图提示词（JSON数组）：`);
+        `## 用户需求\n${userMessage}\n\n## 已生成的文案内容（配图需匹配文案场景和氛围）\n${generatedText ? generatedText.slice(0, 800) : '（文案未生成）'}\n\n## 知识库内容摘要\n${knowledgeResult.texts.slice(0, 3).join('\n\n') || '无'}\n\n## 参考图片URL（包含产品图和logo等素材，请综合参考）\n${refImagesForGeneration.join('\n') || '无'}\n\n⚠️ 配图原则：根据文案描述的场景来构图。文案写的是舞台就用舞台场景，写的是会议室就用会议室场景，写的是户外就用户外场景。logo 位置按用户要求，用户没说则酌情放置。\n\n## 要求图片数量和比例\n数量：${actualImageCount} 张，比例：${imageAspectRatio}\n\n请生成 ${actualImageCount} 个生图提示词（JSON数组）：`);
       const content = promptResult.content.trim();
       const jsonMatch = content.match(/\[[\s\S]*\]/);
       if (jsonMatch) {
