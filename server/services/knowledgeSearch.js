@@ -524,9 +524,11 @@ function intelligentSearch(knowledgeList, options = {}) {
   }
 
   // 产品型号精确过滤：查询中含英文/数字型号关键词时，排除不包含该型号的文件
-  // 如搜 "R5" 排除 "R5Plus"，搜 "FC Pro" 排除 "BPro"
-  // 仅含字母+数字、至少一位字母、长度>=2 才是型号关键词（排除纯数字如500、纯英文普通词如logo）
-  const modelKeywords = allKeywords.filter(k => /^[a-z0-9\s]+$/i.test(k) && /[a-z]/i.test(k) && k.length >= 2);
+  // 如搜 "R5" 排除 "R5Plus"，搜 "B Pro" 也能匹配 "BPro"
+  // 仅含字母+数字、至少一位字母、长度>=2 才是型号关键词
+  // 注意：必须包含扩展同义词，否则 "B Pro" 搜不到 "BPro-curve-xxx"（pro在BPro内部无边界）
+  const modelKeywords = [...new Set([...allKeywords, ...expandedKeywords])]
+    .filter(k => /^[a-z0-9\s]+$/i.test(k) && /[a-z]/i.test(k) && k.length >= 2);
   if (modelKeywords.length > 0) {
     const beforeModel = candidates.length;
     candidates = candidates.filter(item => {
