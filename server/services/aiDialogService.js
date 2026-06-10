@@ -142,10 +142,15 @@ async function searchKnowledge(userMessage) {
     }
   }
 
+  // 判断是否有实质文本内容（排除纯图片描述）
+  const realTexts = texts.filter(t => !t.startsWith('【') || !t.includes('[图片]'));
+  const hasRealContent = realTexts.length > 0;
+
   return {
     texts,
     imageUrls,
     total: results.length,
+    hasRealContent,
   };
 }
 
@@ -592,7 +597,7 @@ async function handleChatStream({ conversationId, userMessage, emit, signal }) {
 
     try {
       const textResult = await llmService.complete(llmConfig, SYSTEM_PROMPT,
-        `写一篇${langLabel}${typeLabel}。\n\n用户需求：${userMessage}\n${historySection}\n知识库参考资料：\n${knowledgeResult.texts.join('\n\n') || '（无相关知识库内容）'}${contextSection}\n\n提示：如果对话历史显示你在修改已有内容，就在原文基础上调整；只使用知识库中真实的信息来写。\n\n直接输出文案：`);
+        `写一篇${langLabel}${typeLabel}。\n\n用户需求：${userMessage}\n${historySection}\n知识库参考资料：\n${knowledgeResult.texts.join('\n\n') || '（无相关知识库内容）'}${contextSection}\n\n${!knowledgeResult.hasRealContent ? '⚠️ 知识库中没有该产品的文本文档（仅有图片），请不要编造任何参数和规格数字。诚实告诉用户需要补充产品文档到知识库。如果用户需求中提到了具体参数，可以基于用户提供的信息来写。' : ''}\n\n直接输出文案：`);
       generatedText = textResult.content;
       emitSafe('text_result', { content: generatedText });
     } catch (err) {
