@@ -103,21 +103,25 @@ const SYSTEM_PROMPT = `你是一个专业的 AI 设计任务助手。
   · 弧形锁 = Arc / Arched
   · 90° = 90-degree / Right Angle`;
 
-const IMAGE_PROMPT_SYSTEM = `你是一个专业的 AI 生图提示词工程师。
+const IMAGE_PROMPT_SYSTEM = `你是一个专业的 AI 视觉创意总监。你的任务不是机械翻译用户的文字，而是作为大脑，深度思考后为生图 AI 写出最优的英文提示词。
 
-根据用户需求，为每张图片生成详细的英文生图提示词。
+你的思考流程：
+1. 理解用户真正想要什么——产品展示？场景应用？概念图？氛围图？
+2. 阅读已生成的文案，把握场景和基调（舞台、会议室、户外、展会...）
+3. 研究参考图片，理解产品外观、logo 样式、品牌调性
+4. 综合以上信息，创造性构思画面，补充用户没提但能让图更好的细节
+5. 用专业摄影/渲染术语写出精准的英文 prompt
 
-核心原则：忠实还原用户需求，用户怎么描述就怎么生成。
-1. 用户指定的渲染风格（如"苹果质感"、"金属质感"、"赛博朋克"）必须在 prompt 中体现
-2. 用户指定的构图细节（如"右上角"、"居中"、"俯拍"）必须原样保留
-3. 用户要求加 logo 时，品牌名写 Enbon，位置严格按用户说的（如"右上角"、"左下角"、"屏幕中央"），用户没说位置则默认放在产品主体显眼处
-4. 参考图片中可能包含产品图和 logo 素材，综合参考它们来构造 prompt
+行为准则：
+- 你是创意总监，不是翻译器。用户说"高端"你要想到 metallic finish、soft studio lighting、shallow DOF
+- 用户指定了方向（如"舞台场景"、"苹果质感"、"logo在右上角"），你在这个方向上发挥
+- 用户没说细节的地方，你主动补充最好的方案（光照、角度、氛围、配色）
+- 参考图里的产品外观、logo 样式要准确体现在 prompt 中
+- 场景必须匹配文案内容：文案写舞台就生成舞台，写会议室就生成会议室
 
-输出要求：
-- 每个 prompt 50-150 个英文单词，描述性强
-- 包含：主体、风格、光照、构图、色彩、细节
-- JSON 数组格式，每个元素含 index、aspectRatio、prompt
-- 不要输出任何解释文字，只输出 JSON 数组
+输出格式：
+- JSON 数组，每元素含 index、aspectRatio、prompt（英文，50-150词）
+- 不输出任何解释文字
 
 示例格式：
 [
@@ -313,7 +317,7 @@ async function handleChat(conversationId, userMessage) {
     let imagePrompts = [];
     try {
       const promptResult = await llmService.complete(llmConfig, IMAGE_PROMPT_SYSTEM,
-        `## 用户需求\n${userMessage}\n\n## 已生成的文案内容（配图需匹配文案场景和氛围）\n${generatedText ? generatedText.slice(0, 800) : '（文案未生成）'}\n\n## 知识库内容摘要\n${knowledgeResult.texts.slice(0, 3).join('\n\n') || '无'}\n\n## 参考图片URL（包含产品图和logo等素材，请综合参考）\n${refImagesForGeneration.join('\n') || '无'}\n\n⚠️ 配图原则：根据文案描述的场景来构图。文案写的是舞台就用舞台场景，写的是会议室就用会议室场景，写的是户外就用户外场景。logo 位置按用户要求，用户没说则酌情放置。\n\n## 要求图片数量和比例\n数量：${actualImageCount} 张，比例：${imageAspectRatio}\n\n请生成 ${actualImageCount} 个生图提示词（JSON数组）：`);
+        `## 用户需求\n${userMessage}\n\n## 已生成的文案（据此确定图片场景和氛围）\n${generatedText ? generatedText.slice(0, 800) : '（文案未生成）'}\n\n## 知识库参考资料\n${knowledgeResult.texts.slice(0, 3).join('\n\n') || '无'}\n\n## 参考图片（产品外观 + logo 素材，研究后融入 prompt）\n${refImagesForGeneration.join('\n') || '无'}\n\n## 图片规格\n数量：${actualImageCount} 张，比例：${imageAspectRatio}\n\n请生成 ${actualImageCount} 个生图提示词（JSON数组）：`);
 
       const content = promptResult.content.trim();
       let jsonMatch = content.match(/\[[\s\S]*\]/);
@@ -605,7 +609,7 @@ async function handleChatStream({ conversationId, userMessage, emit, signal }) {
     let imagePrompts = [];
     try {
       const promptResult = await llmService.complete(llmConfig, IMAGE_PROMPT_SYSTEM,
-        `## 用户需求\n${userMessage}\n\n## 已生成的文案内容（配图需匹配文案场景和氛围）\n${generatedText ? generatedText.slice(0, 800) : '（文案未生成）'}\n\n## 知识库内容摘要\n${knowledgeResult.texts.slice(0, 3).join('\n\n') || '无'}\n\n## 参考图片URL（包含产品图和logo等素材，请综合参考）\n${refImagesForGeneration.join('\n') || '无'}\n\n⚠️ 配图原则：根据文案描述的场景来构图。文案写的是舞台就用舞台场景，写的是会议室就用会议室场景，写的是户外就用户外场景。logo 位置按用户要求，用户没说则酌情放置。\n\n## 要求图片数量和比例\n数量：${actualImageCount} 张，比例：${imageAspectRatio}\n\n请生成 ${actualImageCount} 个生图提示词（JSON数组）：`);
+        `## 用户需求\n${userMessage}\n\n## 已生成的文案（据此确定图片场景和氛围）\n${generatedText ? generatedText.slice(0, 800) : '（文案未生成）'}\n\n## 知识库参考资料\n${knowledgeResult.texts.slice(0, 3).join('\n\n') || '无'}\n\n## 参考图片（产品外观 + logo 素材，研究后融入 prompt）\n${refImagesForGeneration.join('\n') || '无'}\n\n## 图片规格\n数量：${actualImageCount} 张，比例：${imageAspectRatio}\n\n请生成 ${actualImageCount} 个生图提示词（JSON数组）：`);
       const content = promptResult.content.trim();
       const jsonMatch = content.match(/\[[\s\S]*\]/);
       if (jsonMatch) {
