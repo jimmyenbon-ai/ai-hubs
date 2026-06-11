@@ -12,7 +12,6 @@ const { appConfig } = require('../utils/appConfig');
 const { ensurePublicImageUrl } = require('../utils/imageUtils');
 const { saveImage: saveImageLocal, localPathToUrl } = require('../utils/localStorage');
 const { generateImage: generateGrsImage } = require('../utils/grsaiClient');
-const { generateImage: generateMxImage } = require('../utils/mxapiClient');
 const { deductPoints, confirmDeduct } = require('../utils/pointsService');
 const { Generation } = require('../models');
 const { v4: uuidv4 } = require('uuid');
@@ -35,8 +34,8 @@ const GRSAI_MODELS = Object.keys(MODEL_POINTS);
 
 // AI 对话生图超时：2分钟后无响应自动切换 NanoBanana 兜底
 const IMAGE_GEN_TIMEOUT_MS = 2 * 60 * 1000;
-// 兜底模型：nano-banana-fast（最快、积分消耗最低）
-const FALLBACK_MODEL = 'nano-banana-fast';
+// 兜底模型：nano-banana-pro
+const FALLBACK_MODEL = 'nano-banana-pro';
 
 const getApiBase = () => process.env.API_BASE_URL || 'http://localhost:3007';
 
@@ -456,46 +455,29 @@ async function generateSingleImage(prompt, model, aspectRatio, referenceUrls = [
     ]);
   } catch (grsErr) {
     if (grsErr.message === 'TIMEOUT_FALLBACK') {
-      // 主模型超时 → 无痕切换 NanoBanana 兜底
+      // 主模型超时 → 无痕切换 NanoBanana-pro 兜底
       console.warn(`[AI-Dialog] ${model} 超时(${effectiveTimeout / 1000}s)，切换 ${FALLBACK_MODEL} 兜底`);
       if (emitSafe) emitSafe('image_progress', { index: 0, total: 1, status: 'fallback', message: `${model} 响应较慢，已切换 ${FALLBACK_MODEL} 加速生成` });
-      try {
-        imageUrl = await generateGrsImage({
-          prompt,
-          model: FALLBACK_MODEL,
-          aspectRatio: aspectRatio.replace('x', ':'),
-          imageSize: '1K',
-          referenceImages: validRefs,
-        });
-        actualModel = FALLBACK_MODEL;
-      } catch (fallbackErr) {
-        console.warn('[AI-Dialog] NanoBanana 兜底也失败，尝试 MXAPI:', fallbackErr.message);
-        try {
-          imageUrl = await generateMxImage({
-            prompt,
-            imageSize: '1K',
-            aspectRatio: aspectRatio.replace('x', ':'),
-            referenceImages: validRefs,
-          });
-          apiProvider = 'mxapi';
-        } catch (mxErr) {
-          throw new Error(`生图失败：${model} 超时且兜底模型也失败`);
-        }
-      }
+      imageUrl = await generateGrsImage({
+        prompt,
+        model: FALLBACK_MODEL,
+        aspectRatio: aspectRatio.replace('x', ':'),
+        imageSize: '1K',
+        referenceImages: validRefs,
+      });
+      actualModel = FALLBACK_MODEL;
     } else {
-      // 主模型直接报错 → 尝试 MXAPI
-      console.warn('[AI-Dialog] GRSai 生图失败，尝试 MXAPI 备用:', grsErr.message);
-      try {
-        imageUrl = await generateMxImage({
-          prompt,
-          imageSize: '1K',
-          aspectRatio: aspectRatio.replace('x', ':'),
-          referenceImages: validRefs,
-        });
-        apiProvider = 'mxapi';
-      } catch (mxErr) {
-        throw new Error(`生图失败：${grsErr.message}`);
-      }
+      // 主模型直接报错 → 尝试 NanoBanana-pro 兜底
+      console.warn(`[AI-Dialog] ${model} 失败，切换 ${FALLBACK_MODEL}:`, grsErr.message);
+      if (emitSafe) emitSafe('image_progress', { index: 0, total: 1, status: 'fallback', message: `${model} 失败，已切换 ${FALLBACK_MODEL}` });
+      imageUrl = await generateGrsImage({
+        prompt,
+        model: FALLBACK_MODEL,
+        aspectRatio: aspectRatio.replace('x', ':'),
+        imageSize: '1K',
+        referenceImages: validRefs,
+      });
+      actualModel = FALLBACK_MODEL;
     }
   }
 
