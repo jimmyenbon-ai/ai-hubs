@@ -33,6 +33,11 @@ const MODEL_POINTS = {
 
 const GRSAI_MODELS = Object.keys(MODEL_POINTS);
 
+// AI 对话生图超时：2分钟后无响应自动切换 NanoBanana 兜底
+const IMAGE_GEN_TIMEOUT_MS = 2 * 60 * 1000;
+// 兜底模型：nano-banana-fast（最快、积分消耗最低）
+const FALLBACK_MODEL = 'nano-banana-fast';
+
 const getApiBase = () => process.env.API_BASE_URL || 'http://localhost:3007';
 
 // ============ LLM 配置获取 ============
@@ -408,7 +413,7 @@ async function generateImages(imagePrompts, referenceUrls, originalPrompt) {
   return results;
 }
 
-async function generateSingleImage(prompt, model, aspectRatio, referenceUrls = []) {
+async function generateSingleImage(prompt, model, aspectRatio, referenceUrls = [], { emitSafe, timeoutMs } = {}) {
   const pointsCost = MODEL_POINTS[model] || 1;
 
   // 积分预检查
@@ -430,35 +435,76 @@ async function generateSingleImage(prompt, model, aspectRatio, referenceUrls = [
 
   let imageUrl;
   let apiProvider = 'grsai';
+  let actualModel = model;
+
+  // 尝试生图（带超时兜底）
+  const effectiveTimeout = timeoutMs || IMAGE_GEN_TIMEOUT_MS;
 
   try {
-    imageUrl = await generateGrsImage({
-      prompt,
-      model,
-      aspectRatio: aspectRatio.replace('x', ':'),
-      imageSize: '1K',
-      referenceImages: validRefs,
-    });
-  } catch (grsErr) {
-    console.warn('[AI-Dialog] GRSai 生图失败，尝试 MXAPI 备用:', grsErr.message);
-    try {
-      imageUrl = await generateMxImage({
+    // 主模型 + 超时竞速
+    imageUrl = await Promise.race([
+      generateGrsImage({
         prompt,
-        imageSize: '1K',
+        model,
         aspectRatio: aspectRatio.replace('x', ':'),
+        imageSize: '1K',
         referenceImages: validRefs,
-      });
-      apiProvider = 'mxapi';
-    } catch (mxErr) {
-      throw new Error(`生图失败：${grsErr.message}`);
+      }),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('TIMEOUT_FALLBACK')), effectiveTimeout)
+      ),
+    ]);
+  } catch (grsErr) {
+    if (grsErr.message === 'TIMEOUT_FALLBACK') {
+      // 主模型超时 → 无痕切换 NanoBanana 兜底
+      console.warn(`[AI-Dialog] ${model} 超时(${effectiveTimeout / 1000}s)，切换 ${FALLBACK_MODEL} 兜底`);
+      if (emitSafe) emitSafe('image_progress', { index: 0, total: 1, status: 'fallback', message: `${model} 响应较慢，已切换 ${FALLBACK_MODEL} 加速生成` });
+      try {
+        imageUrl = await generateGrsImage({
+          prompt,
+          model: FALLBACK_MODEL,
+          aspectRatio: aspectRatio.replace('x', ':'),
+          imageSize: '1K',
+          referenceImages: validRefs,
+        });
+        actualModel = FALLBACK_MODEL;
+      } catch (fallbackErr) {
+        console.warn('[AI-Dialog] NanoBanana 兜底也失败，尝试 MXAPI:', fallbackErr.message);
+        try {
+          imageUrl = await generateMxImage({
+            prompt,
+            imageSize: '1K',
+            aspectRatio: aspectRatio.replace('x', ':'),
+            referenceImages: validRefs,
+          });
+          apiProvider = 'mxapi';
+        } catch (mxErr) {
+          throw new Error(`生图失败：${model} 超时且兜底模型也失败`);
+        }
+      }
+    } else {
+      // 主模型直接报错 → 尝试 MXAPI
+      console.warn('[AI-Dialog] GRSai 生图失败，尝试 MXAPI 备用:', grsErr.message);
+      try {
+        imageUrl = await generateMxImage({
+          prompt,
+          imageSize: '1K',
+          aspectRatio: aspectRatio.replace('x', ':'),
+          referenceImages: validRefs,
+        });
+        apiProvider = 'mxapi';
+      } catch (mxErr) {
+        throw new Error(`生图失败：${grsErr.message}`);
+      }
     }
   }
 
   // 下载到本地永久保存
-  const localPath = await saveImageLocal(imageUrl, { model, prompt });
+  const localPath = await saveImageLocal(imageUrl, { model: actualModel, prompt });
   const displayUrl = localPathToUrl(localPath) || imageUrl;
 
   // 记录生成历史
+  const actualPointsCost = MODEL_POINTS[actualModel] || pointsCost;
   await Generation.create({
     originalPrompt: prompt,
     apiPrompt: prompt,
@@ -467,15 +513,15 @@ async function generateSingleImage(prompt, model, aspectRatio, referenceUrls = [
     resultImageUrl: displayUrl,
     referenceImages: validRefs,
     apiProvider,
-    modelName: model,
+    modelName: actualModel,
     userId: null,
-    pointsCost,
+    pointsCost: actualPointsCost,
     rating: null,
     feedback: null,
   });
 
   // 确认积分扣减
-  await confirmDeduct(deductResult.balance, pointsCost, `AI对话生图|模型:${model}`);
+  await confirmDeduct(deductResult.balance, actualPointsCost, `AI对话生图|模型:${actualModel}`);
 
   return displayUrl;
 }
@@ -693,7 +739,7 @@ async function generateImagesStream({ imagePrompts, refImagesForGeneration, emit
     });
 
     try {
-      const imageUrl = await generateSingleImage(prompt, model, aspectRatio, refImagesForGeneration);
+      const imageUrl = await generateSingleImage(prompt, model, aspectRatio, refImagesForGeneration, { emitSafe });
       results.push({ index: item.index || (i + 1), prompt, imageUrl, aspectRatio: item.aspectRatio || '1:1' });
       emitSafe('image_progress', {
         index: i + 1,
