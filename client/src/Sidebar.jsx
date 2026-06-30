@@ -1,0 +1,344 @@
+import { useState } from 'react'
+import RoleSelector from './RoleSelector'
+
+const CONTENT_TYPES = [
+  { value: 'image', label: '图片' },
+  { value: 'video', label: '视频' },
+  { value: 'music', label: '音乐' },
+]
+
+function Sidebar({ currentGroup, currentMode, currentRole, onRoleChange, templates = [], onNavigate, onCreateTemplate, onManageTemplates, onOpenPromptLibrary, onOpenWorkflow, onOpenStoryboard, onOpenProductAutomation, onOpenPreviz, onOpenStyleManager, onOpenSettings, onOpenTutorial, onOpenAIDialog }) {
+  const [expandedGroups, setExpandedGroups] = useState({
+    image: true,
+    video: false,
+    music: false,
+  })
+
+  function toggleGroup(groupId) {
+    setExpandedGroups((prev) => ({
+      ...prev,
+      [groupId]: !prev[groupId],
+    }))
+  }
+
+  // 按 group 分组模板
+  const templatesByGroup = {}
+  templates.forEach((t) => {
+    if (!templatesByGroup[t.group]) templatesByGroup[t.group] = []
+    templatesByGroup[t.group].push(t)
+  })
+
+  const groups = [
+    {
+      id: 'image',
+      label: 'AI 图片生成',
+      icon: (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+          <circle cx="8.5" cy="8.5" r="1.5"/>
+          <polyline points="21,15 16,10 5,21"/>
+        </svg>
+      ),
+    },
+    {
+      id: 'video',
+      label: 'AI 视频生成',
+      icon: (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <polygon points="23,7 16,12 23,17"/>
+          <rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
+        </svg>
+      ),
+    },
+    {
+      id: 'music',
+      label: 'Suno AI音乐生成',
+      icon: (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M9 18V5l12-2v13"/>
+          <circle cx="6" cy="18" r="3"/>
+          <circle cx="18" cy="16" r="3"/>
+        </svg>
+      ),
+    },
+  ]
+
+  return (
+    <aside className="sidebar">
+      <div className="logo">
+        <svg className="logo-svg" viewBox="0 0 2602.75 1330.03" xmlns="http://www.w3.org/2000/svg">
+          <path className="lgcolor" fill="var(--logo-color)" d="M356.94,154.53c8.76.67,17.59.89,26.28,2.11,24.37,3.42,48.87,6.33,73,11.11,49.78,9.87,98.19,24.58,144.66,45.12,18.62,8.22,36.67,17.73,55,26.66l-.87,2c-1.59-.69-3.19-1.35-4.77-2.07C604,218.1,556.5,200.2,507.27,187c-33.69-9-67.78-16-102.47-19.52-37.32-3.82-74.65-4.53-111.38,5-38.73,10.08-69.86,30.51-88.37,67.19-10.16,20.14-13.56,41.67-14.86,64.16-2.65,45.88,13.37,86.75,31.6,127.11,21.21,47,48,90.86,76.73,133.61,21.34,31.77,46.34,60.43,73,87.79.95,1,2,1.8,3.69,3.27,16.68-90.62,33.24-180.55,49.92-271.17H387c1.75-21.23,3.44-41.82,5.11-62.18H839.57c-2.5,8.3-4.7,15.64-6.92,23-8.79,29.08-17.64,58.14-26.3,87.25-.89,3-1.91,4.38-5.28,4.36-27.89-.12-55.79-.06-83.68-.08-.85,0-1.7-.14-3.32-.29l21.7-51.29h-6q-90,0-180.09-.08c-4.18,0-5.87.72-6.71,5.44-9.61,54-19.55,107.86-29.45,161.76-4.06,22.12-8.24,44.21-12.34,66.32-.32,1.71-.39,3.46-.66,6,4-1.13,7.6-2,11.15-3.19,48.37-15.69,91.59-40.11,127.23-76.7,6-6.18,11.66-8.29,20-8.15,31.23.5,62.48.2,95.14.2-1.71,3.61-2.59,5.8-3.74,7.85-16.75,30-41,52.71-70.05,70.51-31.49,19.27-65.92,30.51-102.11,36.82-26.66,4.65-53.55,6.2-80.57,6.25-1,0-2.07.14-3.54.25q-4,21.52-7.91,42.93c-2.67,14.51-5.23,29-8,43.53-.6,3.08-.32,5.14,2.36,7.28,13.95,11.09,27.64,22.5,41.6,33.56a13.22,13.22,0,0,0,7.57,2.71q334.74.12,669.48,0c1.54,0,3.07-.14,6-.29-9.13-19.21-17.92-37.68-27.1-57a15.85,15.85,0,0,1,1.91,2c9.34,15.95,18.62,31.94,28,47.86,1.53,2.59,3.4,6.83,5.35,7,4.86.35,10.47-.07,14.65-2.29,7.17-3.8,10.9-11.19,12.27-19,4.26-24.23,8-48.55,11.88-72.84q6.57-40.86,13.12-81.73,6.68-41.39,13.39-82.75,6.56-40.59,13.08-81.2c3.26-20.12,6.63-40.23,9.84-60.36,1.26-7.92-2.72-12.31-10.86-12.31l-54.55,0h-5.22c3.32-18.38,6.56-36.29,9.91-54.84h306c51.55,0,93.85,34.26,105.82,84.35,12.94,54.15-11.35,123.43-74.62,152.6-5.59,2.58-11.27,4.93-16.9,7.42a10.3,10.3,0,0,0-4.76,3.75c2.92.88,5.84,1.74,8.75,2.65,32.33,10.1,57.51,28.53,70.89,60.75,7.68,18.51,7.69,37.82,5.55,57.21-4,36.42-18.47,68.32-42.71,95.81a26.46,26.46,0,0,0-1.73,2.64h431.61c-2.69,19-5.3,37.56-8,57.06H1235.09c2.81,11.92,5.75,22.75,7.87,33.74,6,31.08,7.59,62.13-1.39,93-12.66,43.6-37.85,76.67-80,95.52-21.07,9.42-43.28,14.21-66.17,16.71-28.27,3.09-56.45,1.89-84.48-1.51-55.54-6.75-109.19-21.42-162.11-39.34-76.6-25.94-147.18-63.92-215-107.17-44.26-28.23-87-58.78-130.57-88.15a14.75,14.75,0,0,0-7.81-2.14q-87.39-.12-174.78,0h-7.25v-58.3h28.29c9.44,0,9.34,0,11-9.26,2.89-16.44,5.78-32.88,9-49.25.8-4.05.17-6.83-2.66-9.94C312.28,667.8,268.86,613.86,231.83,555c-29.83-47.39-55.12-96.93-70.19-151.17-6-21.74-10.34-43.79-11.4-66.39a37.31,37.31,0,0,0-.94-5.07V310.15a41.34,41.34,0,0,0,.93-4c1.49-11,2.44-22,4.49-32.89,7.23-38.29,27.34-67.81,61.14-87.63,29.72-17.44,62.39-25.23,96.27-28.89,8.21-.89,16.45-1.46,24.68-2.17ZM1223.14,846H602c1.7,1.43,2.55,2.23,3.49,2.91,37.84,27.13,76.69,52.71,117.06,75.94,74.08,42.64,151.17,78.24,234.34,99.51,27.49,7,55.25,13.19,83.64,13.81,17.68.39,35.58-1.41,53.11-4,35.08-5.18,67.5-17.65,94.69-41,25.47-21.86,44.81-47,43.08-83.55C1230.35,888.07,1228.49,866.88,1223.14,846Zm142.59-248.12q-4.41,26.67-8.8,53.11-7.17,43.17-14.34,86.33c-2,12.3-4.26,24.59-5.77,37-1.16,9.49,3.2,13.82,12.61,13.82q22,0,44,0c19.38,0,38.64-.25,58-3.31,25.32-4,45.33-15.37,60-36.38,18.87-27.06,25.44-57.38,23.06-89.69a70.93,70.93,0,0,0-7.27-26.13c-8.36-16.51-23.88-23.34-41.28-27.14-38.58-8.41-77.67-8.58-116.84-8.1A22.3,22.3,0,0,0,1365.73,597.83Zm8.71-52.9,30.72-2.85c26.27-2.42,52.54-4.74,78.13-11.73,13.76-3.76,27.61-7.45,39.43-15.79a40.17,40.17,0,0,0,11.46-12,147.91,147.91,0,0,0,19.24-57c1.24-10.26,2.62-21,1.08-31-4.24-27.54-26.15-39.52-46.65-41.71-13.62-1.45-27.48-.8-41.24-.65-17.27.19-34.55.75-51.82,1.31-7.21.23-13.46,4.73-14.38,10.2-2.54,15.06-5,30.15-7.41,45.23q-7.26,44.73-14.48,89.46C1377.14,527,1375.87,535.6,1374.44,544.93Z"/>
+          <path className="lgcolor" fill="var(--logo-color)" d="M2237.45,792.39c-2.43,14-4.69,27.29-7.06,40.57-.73,4.1-.47,9.91-3,11.76-2.92,2.14-8.42.91-12.79.91q-80.78,0-161.53,0h-7c3.1-19.6,6.09-38.48,9.18-58h33.5c7.45,0,9.66-2,10.86-9.21q8.74-52.24,17.62-104.46,8.19-48.87,16.23-97.75c1.1-6.76,1.57-13.62,2.6-20.39.47-3.07-.58-4.88-3.42-5.49-5.3-1.13-10.63-2.71-16-2.9-12.5-.42-25-.13-38-.13,3.16-16.12,6.17-31.77,9.43-47.38.24-1.13,2.29-2.55,3.61-2.68,7.54-.75,15.11-1.23,22.68-1.65,27.65-1.52,55.3-2.94,82.95-4.47,10.72-.59,21.44-1.34,33.06-2.08-2,14.49-3.93,28.59-6,43.82,4.31-3.36,7.71-6.07,11.17-8.7,23-17.45,48.35-29.6,77.06-33.59,24.53-3.4,48.64-.85,71.22,9.87,29,13.73,42.52,38.55,48.42,68.84,3.89,20-.54,39.18-3.78,58.58q-7.14,42.89-14.32,85.78c-3.71,22.18-7.35,44.38-11.21,66.53-1.15,6.58,0,9.74,7.2,9.8,14.43.14,28.85,1.44,43.92,2.29-2.8,17-5.6,33.84-8.46,51.14H2254c1.31-9.53,2.57-18.86,3.88-28.18.89-6.27,2.13-12.5,2.68-18.79.31-3.47,1.69-4.48,4.92-4.55,11.12-.25,22.22-.7,33.33-1.07,1.59-.05,3.2,0,4.76-.16,9.07-1.16,11.87-3.92,13.38-13q14.13-84.75,28.28-169.49c3.74-22.34-4.23-39.62-22.38-47.47-15.24-6.58-30.84-5-46-.13-37.07,11.93-57.19,39.17-64.73,76-6.52,31.82-11.27,64-16.79,96q-4.2,24.42-8.31,48.84c-1,5.9,1,8,6.94,8.35C2208.16,790.55,2222.4,791.47,2237.45,792.39Z"/>
+          <path className="lgcolor" fill="var(--logo-color)" d="M1018,775.54c2.36-14.72,4.58-28.75,6.85-42.76q6.62-40.86,13.27-81.7c4-24.8,8.42-49.56,11.66-74.47,2.42-18.65-9.43-38.88-30.81-41.94-32.42-4.64-58.51,7.44-79.61,31.78-16.44,18.95-23.27,41.73-27.35,65.81-5.67,33.43-11.67,66.8-17.52,100.19-2.69,15.38-5.36,30.76-8,45.86H798.88c3.73-21.4,7.34-42.11,11-62.82q8.2-47,16.43-94c4.41-25.26,8.73-50.55,13.29-75.79,2.49-13.81-2.88-20.78-16.82-20.69-11.47.08-22.93.54-34.4.81-1.71,0-3.43,0-5.67,0,3-16.69,6-32.72,9-49.33l142.41-8.62c-2.19,14.87-4.3,29.23-6.58,44.72,5.27-4.26,9.51-7.87,13.93-11.25,26-19.88,55.13-31.77,88-33.22,21.06-.92,41.65,2.58,60.48,12.14,26.25,13.33,38.48,36.91,44.6,64.59,3.6,16.27,1.18,32.14-1.48,48.15-4.6,27.74-8.94,55.52-13.37,83.28q-6.73,42.17-13.44,84.33c-.45,2.78-1.31,5.56-1.26,8.33.09,5.28-2.06,6.74-7.32,6.68-24.54-.29-49.08-.13-73.61-.13Z"/>
+          <path className="lgcolor" fill="var(--logo-color)" d="M2030.53,583.44c-1.06,60.25-22.68,107.58-65.14,145-25.1,22.11-55.12,34.21-88.07,39-10.45,1.51-21.06,3-31.56,2.84-46.54-.87-86.61-16.27-115.27-54.69-12.26-16.43-18.17-35.57-19.81-56-3.06-38,2.63-74.75,20.24-108.52,24.53-47,62-79.66,114.63-91.75,42.4-9.74,84.49-8.55,124,12.13,33.42,17.49,51.74,46.28,57.91,83C2029.25,565.17,2029.78,576.12,2030.53,583.44Zm-225.24,81.69c1,9.79,1.45,19.67,3.11,29.34,1.95,11.39,6.06,22,14.77,30.32,7.35,7,16.43,7.19,25.92,8.18,17.63,1.85,30.85-4.92,41.93-17.51,10.4-11.82,16.7-26,22.2-40.5,8.07-21.33,12-43.65,15.45-66,3.92-25.45,6.91-51,2.43-76.7-2.13-12.26-5.87-23.87-14.77-33.23-7.15-7.53-16.32-8.88-26-9.5-11.36-.73-21.69,1.86-31,8.32-13.83,9.61-22.1,23.49-28.75,38.45-8.62,19.4-13.2,39.91-16.69,60.77C1810.15,619.59,1805.75,642,1805.29,665.13Z"/>
+        </svg>
+      </div>
+      <div className="logo-name">Enbon AI</div>
+      <div className="logo-subtitle">设计工作台</div>
+      <RoleSelector currentRole={currentRole} onRoleChange={onRoleChange} />
+      <nav className="nav-menu">
+        {groups.map((group) => {
+          const groupTemplates = templatesByGroup[group.id] || []
+          const isExpanded = expandedGroups[group.id]
+          const isActiveGroup = currentGroup === group.id
+
+          return (
+            <div key={group.id} className="nav-group">
+              {/* 分组标题行 */}
+              <div
+                className={`nav-group-header ${isExpanded ? 'expanded' : ''} ${isActiveGroup ? 'active-group' : ''}`}
+                onClick={() => toggleGroup(group.id)}
+              >
+                <span className="nav-group-icon">{group.icon}</span>
+                <span className="nav-group-label">{group.label}</span>
+                <span className={`nav-group-arrow ${isExpanded ? 'rotated' : ''}`}>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <polyline points="6,9 12,15 18,9"/>
+                  </svg>
+                </span>
+              </div>
+
+              {/* 展开内容 */}
+              {isExpanded && (
+                <div className="nav-group-items">
+                  {/* 自由创作入口 */}
+                  <div
+                    className={`nav-item ${isActiveGroup && currentMode === 'free' ? 'active' : ''}`}
+                    onClick={() => onNavigate(group.id, 'free')}
+                  >
+                    <span className="nav-item-dot" />
+                    自由创作
+                  </div>
+
+                  {/* 批量生成入口（仅图片组） */}
+                  {group.id === 'image' && (
+                    <div
+                      className={`nav-item ${isActiveGroup && currentMode === 'batch' ? 'active' : ''}`}
+                      onClick={() => onNavigate(group.id, 'batch')}
+                    >
+                      <span className="nav-item-dot" />
+                      批量生成
+                    </div>
+                  )}
+
+                  {/* 模板列表（仅图片组展示） */}
+                  {group.id === 'image' && (
+                    <>
+                      <div className="nav-divider" />
+                      <div className="nav-section-label-row">
+                        <span className="nav-section-label">一键制作</span>
+                        <div style={{ display: 'flex', gap: 4 }}>
+                          <button
+                            className="nav-add-template-btn"
+                            onClick={(e) => { e.stopPropagation(); if (typeof onCreateTemplate === 'function') onCreateTemplate() }}
+                            title="新建模板"
+                          >
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                              <line x1="12" y1="5" x2="12" y2="19"/>
+                              <line x1="5" y1="12" x2="19" y2="12"/>
+                            </svg>
+                          </button>
+                          <button
+                            className="nav-add-template-btn"
+                            onClick={(e) => { e.stopPropagation(); if (typeof onManageTemplates === 'function') onManageTemplates() }}
+                            title="模板管理"
+                          >
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                              <circle cx="12" cy="12" r="3"/>
+                              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                            </svg>
+                          </button>
+                        </div>
+                      </div>
+                      {groupTemplates.length === 0 && (
+                        <div className="nav-item nav-empty-hint">暂无模板</div>
+                      )}
+                      {groupTemplates.map((tpl) => (
+                        <div
+                          key={tpl.id}
+                          className={`nav-item nav-template-item ${isActiveGroup && currentMode === `tpl_${tpl.id}` ? 'active' : ''}`}
+                          onClick={() => onNavigate(group.id, `tpl_${tpl.id}`)}
+                          title={tpl.description}
+                        >
+                          <span className="nav-item-dot" />
+                          {tpl.icon ? tpl.icon : ''}
+                          <span>{tpl.name}</span>
+                          {tpl.pointsCost && (
+                            <span className="nav-template-points">{tpl.pointsCost}分</span>
+                          )}
+                        </div>
+                      ))}
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </nav>
+      {/* AI 对话入口 */}
+      <div className="nav-library-entry" style={{ padding: '8px 10px' }}>
+        <div
+          className={`nav-group-header ${currentGroup === 'ai-dialog' ? 'active-group' : ''}`}
+          onClick={onOpenAIDialog}
+          style={{ padding: '10px 12px', borderRadius: 8, cursor: 'pointer' }}
+        >
+          <span className="nav-group-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+            </svg>
+          </span>
+          <span className="nav-group-label">AI 智能对话</span>
+        </div>
+      </div>
+
+      {/* 工作流入口 */}
+      <div className="nav-library-entry" style={{ padding: '8px 10px' }}>
+        <div
+          className={`nav-group-header ${currentGroup === 'workflow' ? 'active-group' : ''}`}
+          onClick={onOpenWorkflow}
+          style={{ padding: '10px 12px', borderRadius: 8, cursor: 'pointer' }}
+        >
+          <span className="nav-group-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="12" cy="12" r="3"/>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+            </svg>
+          </span>
+          <span className="nav-group-label">AI 工作流</span>
+        </div>
+      </div>
+
+      {/* AI 视频自动化入口 */}
+      <div className="nav-library-entry" style={{ padding: '8px 10px' }}>
+        <div
+          className={`nav-group-header ${currentGroup === 'storyboard' ? 'active-group' : ''}`}
+          onClick={onOpenStoryboard}
+          style={{ padding: '10px 12px', borderRadius: 8, cursor: 'pointer' }}
+        >
+          <span className="nav-group-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"/>
+              <line x1="7" y1="2" x2="7" y2="22"/>
+              <line x1="17" y1="2" x2="17" y2="22"/>
+              <line x1="2" y1="12" x2="22" y2="12"/>
+              <line x1="2" y1="7" x2="7" y2="7"/>
+              <line x1="2" y1="17" x2="7" y2="17"/>
+              <line x1="17" y1="17" x2="22" y2="17"/>
+              <line x1="17" y1="7" x2="22" y2="7"/>
+            </svg>
+          </span>
+          <span className="nav-group-label">AI 视频自动化</span>
+        </div>
+      </div>
+
+      {/* 产品图自动化入口 */}
+      <div className="nav-library-entry" style={{ padding: '8px 10px' }}>
+        <div
+          className={`nav-group-header ${currentGroup === 'product-automation' ? 'active-group' : ''}`}
+          onClick={onOpenProductAutomation}
+          style={{ padding: '10px 12px', borderRadius: 8, cursor: 'pointer' }}
+        >
+          <span className="nav-group-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+              <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
+              <line x1="12" y1="22.08" x2="12" y2="12"/>
+            </svg>
+          </span>
+          <span className="nav-group-label">产品图自动化</span>
+        </div>
+      </div>
+
+      {/* 3D 预演导演入口 */}
+      <div className="nav-library-entry" style={{ padding: '8px 10px' }}>
+        <div
+          className={`nav-group-header ${currentGroup === 'previz' ? 'active-group' : ''}`}
+          onClick={onOpenPreviz}
+          style={{ padding: '10px 12px', borderRadius: 8, cursor: 'pointer' }}
+        >
+          <span className="nav-group-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <polygon points="12 2 22 8.5 22 15.5 12 22 2 15.5 2 8.5 12 2"/>
+              <line x1="12" y1="22" x2="12" y2="15.5"/>
+              <polyline points="22 8.5 12 15.5 2 8.5"/>
+            </svg>
+          </span>
+          <span className="nav-group-label">3D 预演导演</span>
+        </div>
+      </div>
+
+      {/* 提示词模板库入口 */}
+      <div className="nav-library-entry" style={{ padding: '8px 10px' }}>
+        <div
+          className={`nav-group-header ${currentGroup === 'library' ? 'active-group' : ''}`}
+          onClick={onOpenPromptLibrary}
+          style={{ padding: '10px 12px', borderRadius: 8, cursor: 'pointer' }}
+        >
+          <span className="nav-group-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+              <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+            </svg>
+          </span>
+          <span className="nav-group-label">模板库</span>
+        </div>
+      </div>
+
+      {/* 风格管理入口 */}
+      <div className="nav-library-entry" style={{ padding: '8px 10px' }}>
+        <div
+          className="nav-group-header"
+          onClick={onOpenStyleManager}
+          style={{ padding: '10px 12px', borderRadius: 8, cursor: 'pointer', opacity: 0.7 }}
+          title="风格画像管理"
+        >
+          <span className="nav-group-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/>
+            </svg>
+          </span>
+          <span className="nav-group-label">风格管理</span>
+        </div>
+      </div>
+
+      {/* 教程入口 */}
+      <div className="nav-library-entry" style={{ padding: '8px 10px' }}>
+        <div
+          className="nav-group-header"
+          onClick={onOpenTutorial}
+          style={{ padding: '10px 12px', borderRadius: 8, cursor: 'pointer', opacity: 0.7 }}
+          title="AI 使用教程"
+        >
+          <span className="nav-group-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/>
+              <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>
+            </svg>
+          </span>
+          <span className="nav-group-label">教程</span>
+        </div>
+      </div>
+
+      {/* 系统设置入口 */}
+      <div className="nav-library-entry" style={{ padding: '8px 10px' }}>
+        <div
+          className={`nav-group-header ${currentGroup === 'settings' ? 'active-group' : ''}`}
+          onClick={onOpenSettings}
+          style={{ padding: '10px 12px', borderRadius: 8, cursor: 'pointer', opacity: 0.7 }}
+          title="系统设置"
+        >
+          <span className="nav-group-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="12" cy="12" r="3"/>
+              <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
+            </svg>
+          </span>
+          <span className="nav-group-label">设置</span>
+        </div>
+      </div>
+    </aside>
+  )
+}
+
+export default Sidebar

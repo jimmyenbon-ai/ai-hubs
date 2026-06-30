@@ -1,0 +1,231 @@
+然后我们这个工作台，还有一个AI视频自动化的板块功能，你仔细分析探查下，给出完善完美的解决优化方案，我给deepseek
+
+
+
+
+0:59
+
+
+
+
+
+
+已处理 1m 34s
+
+
+
+我仔细探查了。结论先说清楚：你现在这个“AI 视频自动化”板块，名字叫视频自动化，但实际完成度更像：
+剧本/文案输入 → AI 分镜分析 → 生成关键帧图片 → 打包下载
+它还没有真正做到完整的：
+剧本 → 分镜 → 角色/场景一致性 → 首尾帧/关键帧 → 分镜视频生成 → 自动轮询 → 合成成片 → 字幕/音乐/配音 → 导出
+而且目前前后端都有比较明显的问题，DeepSeek 下一步应该先“修底座”，再做功能扩展，不然越加越乱。
+当前现状
+入口在：
+[StoryboardPanel.jsx](D:/node/ai-hubs-master/client/src/StoryboardPanel.jsx)：侧边栏“AI 视频自动化”主界面
+[VideoGenerate.jsx](D:/node/ai-hubs-master/client/src/VideoGenerate.jsx)：单条 AI 视频生成
+[WorkflowPanel.jsx](D:/node/ai-hubs-master/client/src/WorkflowPanel.jsx)：节点式 AI 工作流
+[storyboardController.js](D:/node/ai-hubs-master/server/controllers/storyboardController.js)：分镜任务接口
+[storyboardService.js](D:/node/ai-hubs-master/server/services/storyboardService.js)：分镜分析、关键帧生成
+[videoController.js](D:/node/ai-hubs-master/server/controllers/videoController.js)：Seedance / Agnes 视频任务
+[workflowExecutor.js](D:/node/ai-hubs-master/server/services/workflowExecutor.js)：工作流执行器
+目前三个模块是割裂的：
+Storyboard 只生成图，不生成视频。
+VideoGenerate 能生成视频，但不接收 Storyboard 的分镜批量任务。
+Workflow 的 video 节点只提交异步任务，不等待最终视频完成，所以最终输出经常没有 videoUrl。
+必须先修的问题
+全量清理乱码
+VideoGenerate.jsx、StoryboardPanel.jsx、WorkflowPanel.jsx、storyboardController.js、storyboardService.js、videoController.js、workflowExecutor.js 里面大量中文乱码，UI 文案、错误提示、注释、部分字符串都被污染。先统一保存为 UTF-8，重写所有中文常量。
+
+修复明确 bug
+[storyboardController.js](D:/node/ai-hubs-master/server/controllers/storyboardController.js) 的 handleRetry 里有 referenceImages: allRefUrls，但 allRefUrls 没定义。单张重试会直接失败。应改成：
+
+referenceImages: refsForGeneration.map((r) => ({ url: r.url, name: r.name }))
+修复视频查询返回本地 URL 不一致
+[videoController.js](D:/node/ai-hubs-master/server/controllers/videoController.js) 查询成功后保存了本地视频 savedVideoUrl，但接口返回仍然是云端 result.video_url。应返回数据库里更新后的本地 URL，避免历史记录和当前任务显示不一致。
+
+工作流视频节点必须等待任务完成
+[workflowExecutor.js](D:/node/ai-hubs-master/server/services/workflowExecutor.js) 现在 handleVideoGenerate 调 /api/video/generate 后直接返回 { taskId, status }，没有轮询 /api/video/query/:taskId。应加 waitVideoTask(taskId, timeoutMs)，成功后返回最终 videoUrl，否则工作流成品永远断在“已提交”。
+
+建议 DeepSeek 的完整开发方案
+第一阶段：稳定现有 AI 视频自动化
+目标：让现有“剧本到关键帧”功能稳定可用。
+要做：
+重写 StoryboardPanel.jsx 的中文 UI，保留现有状态机：INPUT
+STORYBOARD
+CONFIG
+RUNNING
+DONE
+
+修复所有乱码、破损 JSX、异常提示。
+增加任务历史入口：调用 /api/storyboard/list，支持继续查看历史任务。
+分镜卡片支持：编辑标题
+编辑描述
+编辑机位
+编辑光线
+编辑情绪
+勾选是否参与生成
+复制单镜头 prompt
+
+关键帧生成结果卡片支持：预览大图
+重新生成
+下载单张
+查看生成 prompt
+
+验收：
+输入剧本能得到分镜。
+分镜能编辑。
+生成关键帧任务可轮询完成。
+失败分镜可重试。
+没有乱码。
+npm run build 通过。
+第二阶段：真正接通“分镜图 → 分镜视频”
+目标：让 AI 视频自动化从“出图”升级为“出视频片段”。
+后端新增：
+POST /api/storyboard/:jobId/generate-videos
+GET /api/storyboard/:jobId/video-status
+POST /api/storyboard/:jobId/retry-video/:shotNumber
+POST /api/storyboard/:jobId/compose
+数据结构扩展 StoryboardJob.shots[]：
+{
+  shotNumber,
+  sceneTitle,
+  description,
+  resultImageUrl,
+  videoTaskId,
+  videoStatus,
+  videoUrl,
+  videoError,
+  videoPrompt,
+  duration,
+  cameraMotion,
+  transition
+}
+视频生成逻辑：
+每个已完成关键帧作为首帧图。
+调 /api/video/generate：mode: image_to_video_first
+firstFrameImage: shot.resultImageUrl
+prompt: shot.videoPrompt || shot.description
+duration: shotDuration
+ratio: storyboard aspectRatio
+
+后端统一轮询，不依赖前端页面一直开着。
+成功后写入 shot.videoUrl。
+验收：
+一键从所有关键帧生成视频片段。
+每个镜头显示视频任务状态。
+单个镜头失败可重试。
+页面刷新后任务状态不丢。
+第三阶段：成片合成
+目标：多个分镜视频自动拼成一个完整视频。
+建议引入后端 FFmpeg。新增服务：
+server/services/videoComposer.js
+功能：
+下载/读取每个 shot.videoUrl
+按 shot 顺序拼接
+支持转场：hard cut
+crossfade
+fade in/out
+
+统一分辨率、帧率、音频轨
+输出到 server/local_storage/videos/yyyy-mm-dd/final_xxx.mp4
+新增字段：
+job.finalVideoUrl
+job.composeStatus
+job.composeError
+job.composeConfig = {
+  fps: 24,
+  resolution: '1080p',
+  transition: 'cut',
+  addSubtitle: true,
+  addBgm: false
+}
+验收：
+点击“一键合成成片”。
+后端生成最终 MP4。
+前端可预览、下载。
+失败时能看到具体哪个片段有问题。
+第四阶段：字幕 / 配音 / 音乐
+目标：让它接近真正视频生产工具。
+字幕：
+根据每个分镜的 sceneTitle / narration / dialogue 生成 SRT。
+支持烧录字幕或外挂字幕下载。
+后端用 FFmpeg subtitles filter 烧录。
+配音：
+分镜分析阶段让 LLM 输出：
+narration: '旁白文本',
+dialogue: ['角色A：...']
+后续接 TTS 服务。
+每个镜头生成音频，合成时对齐视频。
+音乐：
+复用现有 Suno / Music 模块。
+生成 BGM 后合成进最终视频。
+支持音量 ducking：有人声时 BGM 降低。
+第五阶段：和 3D 导演模式打通
+这是你工作台真正有差异化的地方。
+打通方式：
+Storyboard 每个 shot 可以进入 3D 预演。
+3D 预演导出：首帧图
+尾帧图
+摄影机路径
+角色位置
+构图参考图
+
+AI 视频自动化用这些作为首尾帧/参考图生成视频。
+建议字段：
+shot.previz = {
+  projectId,
+  firstFrameUrl,
+  lastFrameUrl,
+  cameraPath,
+  actors,
+  props,
+  exportedAt
+}
+这样链路会变成：
+剧本 → AI 分镜 → 3D 预演构图 → 首尾帧 → AI 视频 → 合成成片
+这比普通 AI 视频网站强很多。
+推荐最终产品形态
+DeepSeek 可以按这个 UI 结构做：
+左侧：项目配置
+剧本输入 / 上传
+风格选择
+角色参考
+场景参考
+产品参考
+视频参数
+是否生成关键帧
+是否生成视频片段
+是否合成成片
+中间：分镜表
+镜号
+场景标题
+描述
+角色
+机位
+光线
+时长
+关键帧状态
+视频状态
+操作
+右侧：预览区
+当前关键帧
+当前视频片段
+最终成片
+prompt / 错误日志
+底部：任务时间线
+分镜 1、2、3...
+关键帧状态
+视频状态
+合成状态
+给 DeepSeek 的执行顺序
+建议别一次性全做，按这个顺序：
+清理乱码和明显 bug。
+修复 Storyboard 关键帧生成稳定性。
+修复 Workflow 视频节点等待结果。
+给 Storyboard 增加“生成视频片段”。
+增加视频片段轮询和重试。
+增加 FFmpeg 合成。
+增加字幕、BGM、旁白。
+打通 3D 导演模式导出首尾帧。
+一句话定位
+现在它是“AI 分镜关键帧工具”；完善后应该变成“剧本到成片的 AI 视频生产流水线”。DeepSeek 第一优先级不是加花活，而是把 Storyboard → VideoGenerate → Composer 这条主链路接成闭环。

@@ -1,0 +1,5 @@
+- [Project Overview](project-overview.md) — Enbon AI 设计工作台整体架构
+- [3D-Previz-Director](3d-previz-director.md) — 3D 预演导演 v0.4: AI自然语言驱动+18种命令+撤销
+- [AI-Video-Automation](ai-video-automation.md) — AI 视频自动化: 结构化摄影参数(9+5字段)+11条场景连续性铁律
+- [Key-Bug-Fixes](key-bug-fixes.md) — 已修复的关键 Bug 记录
+- [Architecture-Patterns](architecture-patterns.md) — 项目代码模式和约定

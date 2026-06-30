@@ -1,0 +1,54 @@
+# 环境变量（包含敏感信息，如API密钥）
+.env
+.env.local
+.env.*.local
+
+# 依赖目录
+node_modules/
+
+# 构建输出
+dist/
+dist-ssr/
+*.local
+
+# 日志文件
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# IDE
+.vscode/
+!.vscode/extensions.json
+.idea/
+*.sw?
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+
+# 操作系统
+.DS_Store
+Thumbs.db
+
+# PM2
+.pm2/
+
+# 运行时缓存（模板数据、历史记录等）
+cache/
+
+# 用户上传的图片/参考图
+server/uploads/
+!server/uploads/.gitkeep
+
+# 本地自动备份
+server/local_storage/
+
+# Claude Code
+.claude/
+
+# 临时文件
+*.tmp
+*.temp
+.cache/
