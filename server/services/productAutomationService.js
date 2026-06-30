@@ -85,6 +85,33 @@ function normalizePlanItem(item = {}, index = 0, includeText = false) {
   }, index);
 }
 
+function pickFirstArray(...values) {
+  return values.find((value) => Array.isArray(value)) || [];
+}
+
+function normalizeProductPlan(raw) {
+  if (Array.isArray(raw)) {
+    return { strategy: {}, items: raw };
+  }
+  if (!raw || typeof raw !== 'object') {
+    return { strategy: {}, items: [] };
+  }
+
+  const strategy = raw.strategy || raw.analysis || raw.productStrategy || raw.visualStrategy || {};
+  const items = pickFirstArray(
+    raw.items,
+    raw.images,
+    raw.imagePlans,
+    raw.productImages,
+    raw.productImagePlans,
+    raw.plan,
+    raw.shots,
+    raw.frames,
+  );
+
+  return { strategy, items };
+}
+
 function buildProductSystemPrompt(options = {}) {
   const styleDesc = options.visualStyle === 'custom'
     ? options.customStylePrompt
@@ -106,7 +133,14 @@ function buildProductSystemPrompt(options = {}) {
 文字策略：${options.includeText ? '允许生成带短文案的电商图。' : '不在画面中添加任何文字。'}
 语言：${options.language || 'zh-CN'}
 
-输出严格 JSON，不要 markdown，不要解释：
+输出要求：
+1. 必须只输出一个合法 JSON 对象，不能有 markdown，不能有解释，不能有注释。
+2. JSON 必须以 { 开头，以 } 结尾。
+3. 必须包含 strategy 对象和 items 数组；items 不能为空。
+4. 所有字符串必须使用英文双引号，不能使用中文引号或单引号。
+5. 不确定的内容写空字符串或空数组，不要编造产品参数。
+
+JSON 结构如下：
 {
   "strategy": {
     "productPositioning": "...",
@@ -154,28 +188,36 @@ async function analyzeProduct(options = {}) {
     options.referenceSummary ? `参考图备注：${options.referenceSummary}` : '',
   ].filter(Boolean).join('\n\n');
 
-  const result = await llmService.complete(config, systemPrompt, userPrompt);
+  const result = await llmService.complete({ ...config, temperature: 0.2 }, systemPrompt, userPrompt);
   if (!result?.content?.trim()) {
     return { success: false, message: 'LLM 返回空内容，产品方案生成失败。' };
   }
 
   const parsed = extractJsonFromLLMResponse(result.content);
-  if (!parsed || typeof parsed !== 'object') {
+  const normalizedPlan = normalizeProductPlan(parsed);
+  if (!parsed || typeof parsed !== 'object' || normalizedPlan.items.length === 0) {
+    logger.warn('[productAutomation] LLM product plan parse failed', {
+      productName: options.productName || '',
+      contentPreview: result.content.slice(0, 2000),
+      parsedType: parsed ? typeof parsed : 'null',
+      parsedKeys: parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? Object.keys(parsed).slice(0, 20) : [],
+    });
     return {
       success: false,
-      message: 'AI 返回内容无法解析为产品图方案 JSON。',
+      message: parsed
+        ? 'AI 返回内容已解析，但没有找到产品图方案 items 数组。请重试，或减少资料长度后再分析。'
+        : 'AI 返回内容无法解析为产品图方案 JSON。请重试，或减少资料长度后再分析。',
       rawResponse: result.content,
     };
   }
 
-  const itemsRaw = Array.isArray(parsed.items) ? parsed.items : [];
-  const items = itemsRaw
+  const items = normalizedPlan.items
     .slice(0, Math.max(1, Number(options.imageCount) || 6))
     .map((item, index) => normalizePlanItem(item, index, options.includeText));
 
   return {
     success: true,
-    strategy: parsed.strategy || {},
+    strategy: normalizedPlan.strategy || {},
     items,
     rawResponse: result.content,
   };

@@ -203,7 +203,7 @@ function extractJsonFromLLMResponse(content) {
   const originalText = text;
 
   // 1. 优先匹配 markdown 代码块（支持多个代码块，取最后一个完整的JSON）
-  const codeBlocks = [...text.matchAll(/```(?:json)?\s*([\s\S]*?)```/g)];
+  const codeBlocks = [...text.matchAll(/```(?:json|javascript|js)?\s*([\s\S]*?)```/gi)];
   if (codeBlocks.length > 0) {
     // 取最后一个（通常是最终结果），或尝试解析所有
     for (let i = codeBlocks.length - 1; i >= 0; i--) {
@@ -246,16 +246,24 @@ function tryExtractAndParse(text) {
  */
 function tryParseJson(text) {
   if (!text || !text.trim()) return null;
+  const normalized = String(text)
+    .trim()
+    .replace(/^\uFEFF/, '')
+    .replace(/^json\s*/i, '')
+    .replace(/[“”]/g, '"')
+    .replace(/[‘’]/g, "'")
+    .replace(/\/\/.*$/gm, '')
+    .replace(/\/\*[\s\S]*?\*\//g, '');
 
   // 直接解析
   try {
-    const result = JSON.parse(text);
+    const result = JSON.parse(normalized);
     return result;
   } catch (_) { /* continue */ }
 
   // 修复常见问题后重试
   try {
-    const cleaned = text
+    const cleaned = normalized
       .replace(/,\s*}/g, '}')              // 移除对象尾部逗号
       .replace(/,\s*]/g, ']')              // 移除数组尾部逗号
       .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '') // 移除控制字符（保留 \n \t \r）
