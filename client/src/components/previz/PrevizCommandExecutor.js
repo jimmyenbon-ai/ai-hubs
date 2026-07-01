@@ -81,6 +81,8 @@ function clampFov(fov) {
  * @param {Function} callbacks.setActiveCamera - (id) => void
  * @param {Function} callbacks.setCameraFov - (fov) => void
  * @param {Function} callbacks.setAspectRatio - (ratio) => void
+ * @param {Function} callbacks.setTimelineDuration - (seconds) => void
+ * @param {Function} callbacks.recordCameraVideo - ({ duration, delay }) => void
  * @param {Function} callbacks.focusCameraOnActor - (actorId) => void
  * @param {Function} callbacks.resetScene - () => void
  * @param {Function} callbacks.clearAllProps - () => void
@@ -263,6 +265,20 @@ export function applyCommands(commands, callbacks) {
         case 'set_focal_length':
           if (cmd.fov !== undefined) callbacks.setCameraFov(clampFov(cmd.fov));
           break;
+
+        case 'set_timeline_duration': {
+          const seconds = Math.max(1, Math.min(120, Number(cmd.duration) || 30));
+          callbacks.setTimelineDuration?.(seconds);
+          break;
+        }
+
+        case 'record_camera_video': {
+          callbacks.recordCameraVideo?.({
+            duration: cmd.duration !== undefined ? Math.max(1, Math.min(120, Number(cmd.duration) || 30)) : undefined,
+            delay: cmd.delay !== undefined ? Math.max(0, Math.min(10, Number(cmd.delay) || 0)) : undefined,
+          });
+          break;
+        }
 
         case 'set_lighting':
           // 灯光调整 — 目前是信息性的，前端暂不支持动态调光

@@ -361,6 +361,36 @@ export const MovieCameraRig = forwardRef(function MovieCameraRig({ camera, activ
   )
 })
 
+function GroundReference({ showGrid = true, muted = false }) {
+  const floorColor = muted ? '#16231f' : '#1b2a24'
+  const gridPrimary = muted ? '#3f6f61' : '#5f8278'
+  const gridSecondary = muted ? '#28433c' : '#36534b'
+  const laneColor = muted ? '#00d6aa' : '#00ffcc'
+  const depthColor = muted ? '#f5b84b' : '#ffcc66'
+  const markerColor = muted ? '#6ab8ff' : '#8bd3ff'
+
+  return (
+    <>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.012, 0]} receiveShadow>
+        <planeGeometry args={[100, 100]} />
+        <meshStandardMaterial
+          color={floorColor}
+          roughness={0.82}
+          metalness={0}
+          transparent
+          opacity={muted ? 0.86 : 0.92}
+        />
+      </mesh>
+      {showGrid && <gridHelper args={[50, 50, gridPrimary, gridSecondary]} />}
+      <Line points={[[-25, 0.018, 0], [25, 0.018, 0]]} color={laneColor} lineWidth={muted ? 1.4 : 1} transparent opacity={muted ? 0.55 : 0.38} />
+      <Line points={[[0, 0.02, -25], [0, 0.02, 25]]} color={depthColor} lineWidth={muted ? 1.4 : 1} transparent opacity={muted ? 0.52 : 0.34} />
+      {[-4, -2, 2, 4].map((z) => (
+        <Line key={`lane-z-${z}`} points={[[-18, 0.016, z], [18, 0.016, z]]} color={markerColor} lineWidth={0.7} transparent opacity={muted ? 0.22 : 0.18} />
+      ))}
+    </>
+  )
+}
+
 function BackgroundPlane({ image }) {
   const [texture, setTexture] = useState(null)
 
@@ -387,28 +417,30 @@ function BackgroundPlane({ image }) {
 
   if (!image?.url || !texture) return null
   const ratio = texture.image?.width && texture.image?.height ? texture.image.width / texture.image.height : 16 / 9
-  const height = 7
+  const height = image.height || image.size || 7
+  const width = image.width || height * ratio
+  const position = image.position || [0, height / 2 - 0.15, -9]
+  const rotation = image.rotation || [0, 0, 0]
+  const arc = image.arc || 0
+  const radius = arc > 0 ? Math.max(1, width / arc) : 1
+  const segments = arc > 0 ? 64 : 1
+  const geometryArgs = arc > 0
+    ? [radius, radius, height, segments, 1, true, -arc / 2, arc]
+    : [width, height]
   return (
-    <mesh position={[0, height / 2 - 0.15, -9]} receiveShadow={false}>
-      <planeGeometry args={[height * ratio, height]} />
-      <meshBasicMaterial map={texture} toneMapped={false} />
+    <mesh position={position} rotation={rotation} receiveShadow={false}>
+      {arc > 0 ? <cylinderGeometry args={geometryArgs} /> : <planeGeometry args={geometryArgs} />}
+      <meshBasicMaterial map={texture} toneMapped={false} side={THREE.DoubleSide} />
     </mesh>
   )
 }
 
-export function SceneSetup({ showGrid, showGuides, fogColor, lights, backgroundImage }) {
+export function SceneSetup({ showGrid, showGuides, fogColor, lights, backgroundImage, backgroundImages, preview = false }) {
+  const images = backgroundImages || (backgroundImage ? [backgroundImage] : [])
   return (
     <>
-      <BackgroundPlane image={backgroundImage} />
-      {showGrid && (
-        <>
-          <gridHelper args={[50, 50, '#444444', '#2b2b2b']} />
-          <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.01, 0]} receiveShadow>
-            <planeGeometry args={[100, 100]} />
-            <shadowMaterial opacity={0.3} />
-          </mesh>
-        </>
-      )}
+      {images.map((image, index) => <BackgroundPlane key={image.id || image.url || index} image={image} />)}
+      {(showGrid || preview) && <GroundReference showGrid={showGrid || preview} muted={preview} />}
       <fog attach="fog" args={[fogColor || '#1e1e1e', 15, 65]} />
       <ambientLight intensity={lights?.ambient ?? 0.35} />
       <directionalLight position={[5, 10, 7]} intensity={lights?.main ?? 0.85} castShadow shadow-mapSize-width={1024} shadow-mapSize-height={1024} />

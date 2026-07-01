@@ -137,9 +137,12 @@ export default function ControlPanel({
   hasAISnapshot,
   commandHistory,
   onClearAIError,
-  backgroundImage,
+  backgroundImages,
   onBackgroundUpload,
   onClearBackground,
+  onUpdateBackground,
+  onRemoveBackground,
+  onFitBackgroundToCamera,
 }) {
   const [tab, setTab] = useState('actors')
   const [propCat, setPropCat] = useState('indoor')
@@ -162,6 +165,7 @@ export default function ControlPanel({
     { label: '🚀 科幻走廊', prompt: '创建一条科幻走廊，放几个走廊模块排列成通道，一个演员站在走廊中间，用长焦镜头从通道一端拍摄' },
     { label: '🛏️ 卧室场景', prompt: '创建一间卧室，靠墙放一张床，一个演员躺在上面，一个演员站在床边，设置一个中景镜头' },
     { label: '🎬 产品展示', prompt: '放一个圆台展示台在中间，一个演员站在展示台旁边做指向姿势，用特写镜头对准展示台' },
+    { label: '🎥 自动运镜录制', prompt: '10秒一镜到底：两个人并列走动聊天，摄影机从两人后方开始，绕到侧面跟拍，再到前方倒退拍摄；不要平淡，要有推拉变焦，FOV从54逐渐变到40再到28。自动生成场景、人物、摄影机关键帧，并录制10秒摄影机参考片，结束后我查看回放并下载导出。' },
   ]
 
   const handleSendAI = () => {
@@ -271,13 +275,37 @@ export default function ControlPanel({
                 <input
                   type="file"
                   accept="image/*"
+                  multiple
                   style={{ display: 'none' }}
-                  onChange={(event) => onBackgroundUpload?.(event.target.files?.[0])}
+                  onChange={(event) => {
+                    Array.from(event.target.files || []).forEach((file) => onBackgroundUpload?.(file))
+                    event.target.value = ''
+                  }}
                 />
               </label>
-              {backgroundImage && <button className="btn btn-sm" onClick={onClearBackground}>清除</button>}
+              {(backgroundImages || []).length > 0 && <button className="btn btn-sm" onClick={onClearBackground}>清空</button>}
             </div>
-            {backgroundImage && <p className="previz-help-text">已作为3D远景幕布：{backgroundImage.name}</p>}
+            {(backgroundImages || []).length === 0 && <p className="previz-help-text">上传后自动按图片比例放进场景，可做平面背景或180度全景。</p>}
+            {(backgroundImages || []).map((image) => (
+              <div key={image.id} className="previz-bg-card">
+                <div className="previz-bg-card-head">
+                  <span title={image.name}>{image.name}</span>
+                  <button className="btn-back" onClick={() => onRemoveBackground?.(image.id)}>X</button>
+                </div>
+                <div className="previz-bg-grid">
+                  <label>宽<input type="number" className="input-field small" value={Number(image.width || 1).toFixed(1)} step="0.5" onChange={(event) => onUpdateBackground?.(image.id, { width: Number(event.target.value) || image.width })} /></label>
+                  <label>高<input type="number" className="input-field small" value={Number(image.height || 1).toFixed(1)} step="0.5" onChange={(event) => onUpdateBackground?.(image.id, { height: Number(event.target.value) || image.height })} /></label>
+                  <label>X<input type="number" className="input-field small" value={Number(image.position?.[0] || 0).toFixed(1)} step="0.5" onChange={(event) => onUpdateBackground?.(image.id, { position: [Number(event.target.value) || 0, image.position?.[1] || 0, image.position?.[2] || 0] })} /></label>
+                  <label>Y<input type="number" className="input-field small" value={Number(image.position?.[1] || 0).toFixed(1)} step="0.5" onChange={(event) => onUpdateBackground?.(image.id, { position: [image.position?.[0] || 0, Number(event.target.value) || 0, image.position?.[2] || 0] })} /></label>
+                  <label>Z<input type="number" className="input-field small" value={Number(image.position?.[2] || 0).toFixed(1)} step="0.5" onChange={(event) => onUpdateBackground?.(image.id, { position: [image.position?.[0] || 0, image.position?.[1] || 0, Number(event.target.value) || 0] })} /></label>
+                  <label>转<input type="number" className="input-field small" value={Math.round(((image.rotation?.[1] || 0) * 180) / Math.PI)} step="5" onChange={(event) => onUpdateBackground?.(image.id, { rotation: [image.rotation?.[0] || 0, (Number(event.target.value) * Math.PI) / 180, image.rotation?.[2] || 0] })} /></label>
+                </div>
+                <div className="previz-wrap-row">
+                  <button className="btn btn-sm" onClick={() => onFitBackgroundToCamera?.(image.id)}>适配机位</button>
+                  <button className="btn btn-sm" onClick={() => onUpdateBackground?.(image.id, { arc: image.arc ? 0 : Math.PI })}>{image.arc ? '平面图' : '180全景'}</button>
+                </div>
+              </div>
+            ))}
           </div>
           {placementMode ? (
             <div className="previz-placement-card">
@@ -371,6 +399,9 @@ export default function ControlPanel({
           <p className="previz-help-text" style={{ marginBottom: 8 }}>
             可写：两个人边走边对话，摄影机侧面跟拍，书架和桌子在摄影机与人物之间形成前景遮挡，并添加0秒和5秒关键帧。
           </p>
+          <p className="previz-help-text" style={{ marginBottom: 8 }}>
+            也可以直接写：搭好场景后自动录制6秒摄影机参考片。
+          </p>
 
           <textarea
             className="previz-ai-input"
@@ -456,7 +487,7 @@ export default function ControlPanel({
       {tab === 'export' && (
         <div className="previz-tab-content">
           <button className="btn previz-full-btn" onClick={onScreenshot}>截图 PNG</button>
-          <button className="btn previz-full-btn" onClick={onRecordVideo}>{isVideoRecording ? '停止摄影机录制' : '录制摄影机 WebM'}</button>
+          <button className="btn previz-full-btn" onClick={onRecordVideo}>{isVideoRecording ? '停止摄影机录制' : '录制摄影机 MP4'}</button>
           <button className="btn previz-full-btn" onClick={() => onExportMode('depth')}>深度图</button>
           <button className="btn previz-full-btn" onClick={() => onExportMode('skeleton')}>骨骼线</button>
           <button className="btn previz-full-btn" onClick={() => onExportMode('mask')}>角色遮罩</button>

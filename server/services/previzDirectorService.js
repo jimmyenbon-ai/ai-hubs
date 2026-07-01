@@ -25,6 +25,7 @@ const VALID_COMMAND_TYPES = [
   'configure_camera', 'set_aspect_ratio', 'set_focal_length',
   'set_lighting', 'reset_scene', 'clear_props', 'clear_actors',
   'focus_camera_on_actor', 'add_keyframe',
+  'set_timeline_duration', 'record_camera_video',
 ];
 
 const VALID_PROP_TYPES = [
@@ -100,6 +101,7 @@ function buildSystemPrompt() {
 1. **演员（Actors）**：创建、删除、移动、旋转、缩放、应用姿势
 2. **道具（Props）**：可创建、删除、移动、旋转、缩放，包含桌椅、书架、墙体、走廊、城市建筑等预演常用模块
 3. **摄影机（Cameras）**：创建、删除、移动、配置焦距和FOV、设置运镜模式
+4. **时间线与录制**：添加关键帧、设置时间线时长，并在用户明确要求“录制/导出/生成参考片”时触发摄影机录制
 
 ## 空间坐标系（重要！）
 - X轴：左右方向，正值=右侧，负值=左侧
@@ -151,6 +153,16 @@ function buildSystemPrompt() {
 - 摄影机放在人物侧面，例如 [0,1.55,-4]，lookAt=[0,1.1,0.45]，fov=40 或 54，mode=follow
 - 如果用户要求“摄影机和人物中间是书架/桌子”，把 bookshelf/table/desk 放在 camera 和 actors 之间，例如 Z=-1.6 到 -2.4，形成前景遮挡；不要把遮挡物直接压到人物身上
 - 同一运动需要创建起点与终点关系：先用 move_actor / move_camera 摆出最终构图；如果需要动作录制，则保持 actors/camera 的路径方向一致，方便用户一键打关键帧
+
+**自动一镜到底预演 / 自动录制参考片**：
+- 当用户说“自动、只需等待结果、查看回放、录制、导出、下载、参考片、生成素材”时，必须输出完整自动执行链：set_timeline_duration → 场景搭建 → 起点 add_keyframe → 中段 move_actor/move_camera/configure_camera/add_keyframe → 终点 move_actor/move_camera/configure_camera/add_keyframe → record_camera_video。
+- 用户指定时长（如10秒运镜）时，必须 set_timeline_duration duration=10，并让 record_camera_video duration=10。
+- 一镜到底不要只输出起点和终点，至少输出 3 个关键帧：time=0、time=duration*0.45~0.6、time=duration。复杂运镜可输出4个关键帧。
+- “从后到侧面再到前方”参考：人物并排行走沿 X 轴或 Z 轴移动；摄影机 time=0 在人物后方，time=中段移动到侧面，time=终点移动到人物前方；lookAt 始终对准两人脸部/头部中间。
+- “不要平淡、有变焦”必须让 fov 随关键帧变化，例如 54 → 40 → 28，形成从环境到更紧张中近景/近景的压缩感。
+- “两个人并列走动聊天”必须创建两个演员、给他们并排行走的起点和终点，并在每个关键帧前移动演员位置；可用 wave/point/stand 姿势体现交谈。
+- 当用户说“对准人脸、看脸、脸部、表情、聊天、说话、对话”时，摄影机 lookAt 必须瞄准演员脸部高度：单人用 [actor.x, 1.75, actor.z]；双人用两人 x/z 中点且 y=1.7~1.9。不要瞄脚、地面或胸口。
+- 如果场景上下文提示已有用户上传背景图，必须保留这些背景图，把它们当作锁定资产；不要用 reset_scene、clear_props、clear_actors 来清空它们，也不要假设需要重新上传。运镜、人物和道具应围绕已有背景图继续构图。
 
 ## 道具类型完整列表
 **基础**：box(方块)、cylinder(圆柱)、platform(圆台)、wall(墙体)
@@ -263,6 +275,12 @@ function buildSystemPrompt() {
 **add_keyframe** — 在时间线上记录当前演员和活动摄影机状态，用于形成可播放/可录制的运动预演
 参数：time(秒)。典型运动镜头至少输出两次：time=0 记录起点，移动演员/摄影机后 time=4~6 记录终点。
 
+**set_timeline_duration** — 设置预演时间线总时长
+参数：duration(秒，1-120)。如果用户要求录制 6 秒参考片，应先设置 duration=6。
+
+**record_camera_video** — 从活动摄影机视图开始录制参考视频
+参数：duration(秒，可选，默认使用时间线时长), delay(秒，可选，默认0.5)。仅当用户明确要求录制、导出视频、生成参考片时输出。必须放在所有 create/move/add_keyframe 命令之后。
+
 **reset_scene** — 清空整个场景（保留默认摄影机）
 无额外参数
 
@@ -361,6 +379,19 @@ function validateCommands(commands) {
     if (cmd.rotation && (!Array.isArray(cmd.rotation) || cmd.rotation.length !== 3)) {
       errors.push(`命令${i}: rotation 必须是 [rx, ry, rz] 三元素数组`);
     }
+    if (cmd.type === 'set_timeline_duration') {
+      if (cmd.duration === undefined || typeof cmd.duration !== 'number' || cmd.duration <= 0 || cmd.duration > 120) {
+        errors.push(`命令${i}(set_timeline_duration): duration 必须是 1-120 秒的数字`);
+      }
+    }
+    if (cmd.type === 'record_camera_video') {
+      if (cmd.duration !== undefined && (typeof cmd.duration !== 'number' || cmd.duration <= 0 || cmd.duration > 120)) {
+        errors.push(`命令${i}(record_camera_video): duration 必须是 1-120 秒的数字`);
+      }
+      if (cmd.delay !== undefined && (typeof cmd.delay !== 'number' || cmd.delay < 0 || cmd.delay > 10)) {
+        errors.push(`命令${i}(record_camera_video): delay 必须是 0-10 秒的数字`);
+      }
+    }
   }
 
   return { valid: errors.length === 0, errors, warnings };
@@ -415,6 +446,12 @@ async function processDirective({ sceneContext, prompt } = {}) {
     }
     if (pc !== undefined && pc > 0) ctxParts.push(`${pc} 个道具`);
     if (cc !== undefined) ctxParts.push(`${cc} 个摄影机`);
+    if (sceneContext.backgroundImageCount > 0) {
+      const names = Array.isArray(sceneContext.backgroundImageNames) && sceneContext.backgroundImageNames.length > 0
+        ? sceneContext.backgroundImageNames.join('、')
+        : '未命名背景图';
+      ctxParts.push(`已有 ${sceneContext.backgroundImageCount} 张用户上传背景图：${names}。这些背景图必须保留，AI 只调整人物、道具、摄影机和关键帧来配合它们`);
+    }
 
     if (ctxParts.length > 0) {
       userMessage = `[场景上下文] ${ctxParts.join('；')}。\n\n用户指令：${userMessage}`;
