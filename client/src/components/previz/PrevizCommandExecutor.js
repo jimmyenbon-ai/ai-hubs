@@ -44,11 +44,11 @@ function resolveTarget(target, nameToId, getAll) {
 /**
  * 对数组值做安全钳制（确保在合理范围内）
  */
-function clampPosition(pos) {
+function clampPosition(pos, groundLocked = true) {
   if (!pos || !Array.isArray(pos)) return pos;
   return [
     Math.max(-20, Math.min(20, Number(pos[0]) || 0)),
-    0, // Y 轴强制为 0（由回调 snapToGround 处理）
+    groundLocked ? 0 : Math.max(-20, Math.min(20, Number(pos[1]) || 0)),
     Math.max(-20, Math.min(20, Number(pos[2]) || 0)),
   ];
 }
@@ -56,6 +56,15 @@ function clampPosition(pos) {
 function clampFov(fov) {
   if (fov === undefined || fov === null) return undefined;
   return Math.max(15, Math.min(90, Number(fov) || 45));
+}
+
+function clampCameraPosition(pos, freeY = false) {
+  if (!pos || !Array.isArray(pos)) return pos;
+  return [
+    Math.max(-20, Math.min(20, Number(pos[0]) || 0)),
+    freeY ? Math.max(-40, Math.min(40, Number(pos[1]) || 0)) : Math.max(0.2, Math.min(20, Number(pos[1]) || 0.2)),
+    Math.max(-40, Math.min(40, Number(pos[2]) || 0)),
+  ];
 }
 
 /**
@@ -81,6 +90,7 @@ function clampFov(fov) {
  * @param {Function} callbacks.setActiveCamera - (id) => void
  * @param {Function} callbacks.setCameraFov - (fov) => void
  * @param {Function} callbacks.setAspectRatio - (ratio) => void
+ * @param {Function} callbacks.setEnvironment - (mode) => void
  * @param {Function} callbacks.setTimelineDuration - (seconds) => void
  * @param {Function} callbacks.recordCameraVideo - ({ duration, delay }) => void
  * @param {Function} callbacks.focusCameraOnActor - (actorId) => void
@@ -99,6 +109,7 @@ export function applyCommands(commands, callbacks) {
 
   const errors = [];
   const nameToId = {}; // 本批次中新建元素的 name → id 映射
+  let environmentMode = 'ground';
 
   for (let i = 0; i < commands.length; i++) {
     const cmd = commands[i];
@@ -130,7 +141,7 @@ export function applyCommands(commands, callbacks) {
         case 'create_prop': {
           callbacks.createProp(
             cmd.prop_type,
-            clampPosition(cmd.position),
+            clampPosition(cmd.position, false),
             cmd.rotation,
             cmd.scale
           );
@@ -140,7 +151,7 @@ export function applyCommands(commands, callbacks) {
         case 'create_camera': {
           const camId = callbacks.createCamera({
             name: cmd.name,
-            position: cmd.position,
+            position: clampCameraPosition(cmd.position, environmentMode === 'space' || environmentMode === 'air'),
             rotation: cmd.rotation,
             fov: clampFov(cmd.fov),
             lookAt: cmd.lookAt,
@@ -178,7 +189,7 @@ export function applyCommands(commands, callbacks) {
           if (id) {
             callbacks.moveCamera(
               id,
-              cmd.position,
+              clampCameraPosition(cmd.position, environmentMode === 'space' || environmentMode === 'air'),
               cmd.rotation,
               cmd.lookAt,
               clampFov(cmd.fov)
@@ -192,7 +203,7 @@ export function applyCommands(commands, callbacks) {
           if (id) {
             callbacks.moveProp(
               id,
-              cmd.position ? clampPosition(cmd.position) : undefined,
+              cmd.position ? clampPosition(cmd.position, false) : undefined,
               cmd.rotation,
               cmd.scale
             );
@@ -264,6 +275,11 @@ export function applyCommands(commands, callbacks) {
 
         case 'set_focal_length':
           if (cmd.fov !== undefined) callbacks.setCameraFov(clampFov(cmd.fov));
+          break;
+
+        case 'set_environment':
+          environmentMode = cmd.mode || environmentMode;
+          if (cmd.mode) callbacks.setEnvironment?.(cmd.mode);
           break;
 
         case 'set_timeline_duration': {

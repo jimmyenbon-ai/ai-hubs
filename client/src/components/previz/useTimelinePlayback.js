@@ -63,7 +63,7 @@ function getPoseAtTime(keyframes, time) {
   return result
 }
 
-export default function useTimelinePlayback({ actors, setActors, cameras, setCameras, tracks, currentTime, isPlaying }) {
+export default function useTimelinePlayback({ actors, setActors, props = [], setProps, cameras, setCameras, tracks, currentTime, isPlaying }) {
   const prevTimeRef = useRef(currentTime)
 
   useEffect(() => {
@@ -75,6 +75,7 @@ export default function useTimelinePlayback({ actors, setActors, cameras, setCam
     prevTimeRef.current = currentTime
 
     let actorsChanged = false
+    let propsChanged = false
     let camerasChanged = false
     const nextActors = actors.map((actor) => ({
       ...actor,
@@ -84,6 +85,12 @@ export default function useTimelinePlayback({ actors, setActors, cameras, setCam
       pose: actor.pose ? { ...actor.pose } : {},
     }))
     const nextCameras = cameras.map((camera) => ({ ...camera, position: [...(camera.position || [0, 2.2, 8])], rotation: [...(camera.rotation || [0, 0, 0])] }))
+    const nextProps = props.map((prop) => ({
+      ...prop,
+      position: [...(prop.position || [0, 0, 0])],
+      rotation: [...(prop.rotation || [0, 0, 0])],
+      scale: [...(prop.scale || [1, 1, 1])],
+    }))
 
     for (const track of tracks) {
       if (!track.keyframes?.length) continue
@@ -111,17 +118,30 @@ export default function useTimelinePlayback({ actors, setActors, cameras, setCam
         if (lookAt) { nextCameras[index].lookAt = lookAt; camerasChanged = true }
         if (fov != null) { nextCameras[index].fov = fov; camerasChanged = true }
       }
+      if (track.targetType === 'prop') {
+        const index = nextProps.findIndex((prop) => prop.id === track.targetId)
+        if (index < 0) continue
+        const position = getValueAtTime(track.keyframes, currentTime, 'position')
+        const rotation = getValueAtTime(track.keyframes, currentTime, 'rotation')
+        const scale = getValueAtTime(track.keyframes, currentTime, 'scale')
+        if (position) { nextProps[index].position = position; propsChanged = true }
+        if (rotation) { nextProps[index].rotation = rotation; propsChanged = true }
+        if (scale) { nextProps[index].scale = scale; propsChanged = true }
+      }
     }
 
     if (actorsChanged) setActors(nextActors)
+    if (propsChanged && setProps) setProps(nextProps)
     if (camerasChanged) setCameras(nextCameras)
-  }, [actors, cameras, currentTime, isPlaying, setActors, setCameras, tracks])
+  }, [actors, cameras, currentTime, isPlaying, props, setActors, setCameras, setProps, tracks])
 
   const resetToStart = useCallback(() => {
     let actorsChanged = false
+    let propsChanged = false
     let camerasChanged = false
     const nextActors = actors.map((actor) => ({ ...actor, position: [...actor.position], rotation: [...actor.rotation], scale: [...(actor.scale || [1, 1, 1])], pose: actor.pose ? { ...actor.pose } : {} }))
     const nextCameras = cameras.map((camera) => ({ ...camera, position: [...(camera.position || [0, 2.2, 8])], rotation: [...(camera.rotation || [0, 0, 0])] }))
+    const nextProps = props.map((prop) => ({ ...prop, position: [...(prop.position || [0, 0, 0])], rotation: [...(prop.rotation || [0, 0, 0])], scale: [...(prop.scale || [1, 1, 1])] }))
 
     for (const track of tracks) {
       if (!track.keyframes?.length) continue
@@ -146,11 +166,21 @@ export default function useTimelinePlayback({ actors, setActors, cameras, setCam
           camerasChanged = true
         }
       }
+      if (track.targetType === 'prop') {
+        const index = nextProps.findIndex((prop) => prop.id === track.targetId)
+        if (index >= 0) {
+          if (keyframe.position) nextProps[index].position = keyframe.position
+          if (keyframe.rotation) nextProps[index].rotation = keyframe.rotation
+          if (keyframe.scale) nextProps[index].scale = keyframe.scale
+          propsChanged = true
+        }
+      }
     }
 
     if (actorsChanged) setActors(nextActors)
+    if (propsChanged && setProps) setProps(nextProps)
     if (camerasChanged) setCameras(nextCameras)
-  }, [actors, cameras, setActors, setCameras, tracks])
+  }, [actors, cameras, props, setActors, setCameras, setProps, tracks])
 
   return { resetToStart }
 }

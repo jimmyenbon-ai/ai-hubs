@@ -1,4 +1,5 @@
 ﻿import { useCallback, useEffect, useRef, useState } from 'react'
+import { flushSync } from 'react-dom'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { OrbitControls } from '@react-three/drei'
 import * as THREE from 'three'
@@ -23,7 +24,7 @@ import { downloadDataURL, renderExportFrame } from './components/previz/ExportRe
 import { applyCommands } from './components/previz/PrevizCommandExecutor'
 
 const RECORD_INTERVAL = 500
-const FPS = 24
+const FPS = 60
 const MOVE_STEP = 0.18
 const FAST_MOVE_STEP = 0.55
 const ROTATE_STEP = 0.08
@@ -155,6 +156,7 @@ function PrevizScene({
   showCameraRigs = true,
   backgroundImages,
   isPreview = false,
+  environmentMode = 'ground',
 }) {
   const aspect = getAspectValue(aspectRatio)
   return (
@@ -165,6 +167,7 @@ function PrevizScene({
         fogColor="#1e1e1e"
         backgroundImages={backgroundImages}
         preview={isPreview}
+        environmentMode={environmentMode}
       />
       <GroundClickHandler placementMode={placementMode} onPlace={onPlaceProp} enabled={!!placementMode} />
       {actors.map((actor) => (
@@ -239,6 +242,7 @@ export default function DirectorPreviz({ onBack }) {
   const [showGuides, setShowGuides] = useState(true)
   const [backgroundImage, setBackgroundImage] = useState(null)
   const [backgroundImages, setBackgroundImages] = useState([])
+  const [environmentMode, setEnvironmentMode] = useState('ground')
   const [placementMode, setPlacementMode] = useState(null)
   const [duration, setDuration] = useState(30)
   const [currentTime, setCurrentTime] = useState(0)
@@ -253,6 +257,9 @@ export default function DirectorPreviz({ onBack }) {
   const [aiStatus, setAiStatus] = useState(null)
   const [aiError, setAiError] = useState(null)
   const [commandHistory, setCommandHistory] = useState([])
+  const [shotPlan, setShotPlan] = useState(null)
+  const [shotPlanLoading, setShotPlanLoading] = useState(false)
+  const [selectedShotId, setSelectedShotId] = useState(null)
 
   const playbackRef = useRef(null)
   const videoRecordTimerRef = useRef(null)
@@ -289,7 +296,7 @@ export default function DirectorPreviz({ onBack }) {
   }, [])
 
   const { exportStatus, exportScreenshot, startRecording, stopRecording } = usePrevizExport()
-  const { resetToStart } = useTimelinePlayback({ actors, setActors, cameras, setCameras, tracks, currentTime, isPlaying })
+  const { resetToStart } = useTimelinePlayback({ actors, setActors, props, setProps, cameras, setCameras, tracks, currentTime, isPlaying })
 
   const activeCamera = cameras.find((camera) => camera.id === activeCameraId)
   const selectedActorRoot = selectedActor ? sceneTargets.actors[selectedActor] : null
@@ -407,6 +414,109 @@ export default function DirectorPreviz({ onBack }) {
     )))
   }, [activeCameraId, selectedActor, selectedCamera])
 
+  const getSceneFocusPoint = useCallback(() => {
+    const actorPoints = actorsRef.current.map((actor) => [
+      Number(actor.position?.[0]) || 0,
+      FACE_LOOK_AT_Y,
+      Number(actor.position?.[2]) || 0,
+    ])
+    const propPoints = propsRef.current
+      .filter((prop) => prop.type !== 'starfield')
+      .map((prop) => [
+        Number(prop.position?.[0]) || 0,
+        Math.max(0.8, Number(prop.position?.[1]) || 0.8),
+        Number(prop.position?.[2]) || 0,
+      ])
+    const points = actorPoints.length ? actorPoints : propPoints
+    if (!points.length) return [0, FACE_LOOK_AT_Y, 0]
+
+    const focus = points.reduce((sum, point) => [
+      sum[0] + point[0],
+      sum[1] + point[1],
+      sum[2] + point[2],
+    ], [0, 0, 0]).map((value) => value / points.length)
+
+    if (actorPoints.length) focus[1] = FACE_LOOK_AT_Y
+    return focus
+  }, [])
+
+  const sanitizeActiveCameraForRecording = useCallback(() => {
+    const focus = getSceneFocusPoint()
+    const currentCameras = camerasRef.current.length
+      ? camerasRef.current
+      : [{ id: 'cam1', name: '主机位', fov: cameraFovRef.current || 45, position: [0, 2.2, 8], rotation: [0, 0, 0], lookAt: focus }]
+    const cameraId = currentCameras.some((camera) => camera.id === activeCameraIdRef.current)
+      ? activeCameraIdRef.current
+      : currentCameras[0].id
+    const isFreeSpace = environmentMode === 'space' || environmentMode === 'air'
+    let activeFov = cameraFovRef.current || 45
+
+    const nextCameras = currentCameras.map((camera) => {
+      if (camera.id !== cameraId) return camera
+
+      const rawPosition = Array.isArray(camera.position) ? camera.position : [focus[0], focus[1] + 1.2, focus[2] + 7]
+      const rawLookAt = Array.isArray(camera.lookAt) ? camera.lookAt : focus
+      const validPosition = rawPosition.every((value) => Number.isFinite(Number(value)))
+      const validLookAt = rawLookAt.every((value) => Number.isFinite(Number(value)))
+      let position = validPosition ? rawPosition.map(Number) : [focus[0], focus[1] + 1.2, focus[2] + 7]
+      let lookAt = validLookAt ? rawLookAt.map(Number) : focus
+
+      const distanceToFocus = Math.hypot(position[0] - focus[0], position[1] - focus[1], position[2] - focus[2])
+      const lookAtDrift = Math.hypot(lookAt[0] - focus[0], lookAt[1] - focus[1], lookAt[2] - focus[2])
+      if (!validPosition || distanceToFocus < 1 || distanceToFocus > 80) {
+        const distance = isFreeSpace ? 10 : 7
+        position = [focus[0], focus[1] + (isFreeSpace ? 2 : 1.25), focus[2] + distance]
+      }
+      if (!validLookAt || lookAtDrift > 30) lookAt = focus
+      if (!isFreeSpace && position[1] < 0.9) position[1] = 1.6
+
+      activeFov = Math.max(18, Math.min(90, Number(camera.fov || cameraFovRef.current || 45)))
+      return { ...camera, position, lookAt, rotation: camera.rotation || [0, 0, 0], fov: activeFov }
+    })
+    const activeCameraAfterSanitize = nextCameras.find((camera) => camera.id === cameraId)
+    const repairCameraKeyframe = (keyframe) => {
+      const fallbackPosition = activeCameraAfterSanitize?.position || [focus[0], focus[1] + 1.25, focus[2] + 7]
+      const rawPosition = Array.isArray(keyframe.position) ? keyframe.position : fallbackPosition
+      const rawLookAt = Array.isArray(keyframe.lookAt) ? keyframe.lookAt : focus
+      const validPosition = rawPosition.every((value) => Number.isFinite(Number(value)))
+      const validLookAt = rawLookAt.every((value) => Number.isFinite(Number(value)))
+      let position = validPosition ? rawPosition.map(Number) : fallbackPosition
+      let lookAt = validLookAt ? rawLookAt.map(Number) : focus
+      const distanceToFocus = Math.hypot(position[0] - focus[0], position[1] - focus[1], position[2] - focus[2])
+      const lookAtDrift = Math.hypot(lookAt[0] - focus[0], lookAt[1] - focus[1], lookAt[2] - focus[2])
+
+      if (!validPosition || distanceToFocus < 1 || distanceToFocus > 80) {
+        const distance = isFreeSpace ? 10 : 7
+        position = [focus[0], focus[1] + (isFreeSpace ? 2 : 1.25), focus[2] + distance]
+      }
+      if (!validLookAt || lookAtDrift > 30) lookAt = focus
+      if (!isFreeSpace && position[1] < 0.9) position[1] = 1.6
+
+      return {
+        ...keyframe,
+        position,
+        lookAt,
+        fov: keyframe.fov == null ? activeFov : Math.max(18, Math.min(90, Number(keyframe.fov) || activeFov)),
+      }
+    }
+    const nextTracks = tracksRef.current.map((track) => {
+      if (track.targetType !== 'camera' || track.targetId !== cameraId || !track.keyframes?.length) return track
+      return { ...track, keyframes: track.keyframes.map(repairCameraKeyframe) }
+    })
+
+    camerasRef.current = nextCameras
+    tracksRef.current = nextTracks
+    activeCameraIdRef.current = cameraId
+    cameraFovRef.current = activeFov
+    flushSync(() => {
+      setCameras(nextCameras)
+      setTracks(nextTracks)
+      setActiveCameraId(cameraId)
+      setCameraFov(activeFov)
+    })
+    return activeCameraAfterSanitize
+  }, [environmentMode, getSceneFocusPoint])
+
   const nudgeSelected = useCallback((key, fast) => {
     const moveStep = fast ? FAST_MOVE_STEP : MOVE_STEP
     const rotateStep = fast ? ROTATE_STEP * 2 : ROTATE_STEP
@@ -520,6 +630,7 @@ export default function DirectorPreviz({ onBack }) {
 
   const addKeyframeAt = useCallback((time) => {
     const actorSnapshot = actorsRef.current
+    const propSnapshot = propsRef.current
     const cameraSnapshot = camerasRef.current
     const activeCamId = activeCameraIdRef.current
     const fov = cameraFovRef.current
@@ -531,6 +642,18 @@ export default function DirectorPreviz({ onBack }) {
         const keyframe = { time, position: [...actor.position], rotation: [...actor.rotation], scale: [...actor.scale], pose: { ...actor.pose } }
         if (index >= 0) next[index] = { ...next[index], keyframes: [...next[index].keyframes, keyframe].sort((a, b) => a.time - b.time) }
         else next.push({ targetType: 'actor', targetId: actor.id, keyframes: [keyframe] })
+      })
+
+      propSnapshot.forEach((prop) => {
+        const index = next.findIndex((track) => track.targetType === 'prop' && track.targetId === prop.id)
+        const keyframe = {
+          time,
+          position: [...(prop.position || [0, 0, 0])],
+          rotation: [...(prop.rotation || [0, 0, 0])],
+          scale: [...(prop.scale || [1, 1, 1])],
+        }
+        if (index >= 0) next[index] = { ...next[index], keyframes: [...next[index].keyframes, keyframe].sort((a, b) => a.time - b.time) }
+        else next.push({ targetType: 'prop', targetId: prop.id, keyframes: [keyframe] })
       })
 
       const cam = cameraSnapshot.find((item) => item.id === activeCamId)
@@ -554,6 +677,7 @@ export default function DirectorPreviz({ onBack }) {
     }
 
     const nextActors = actorsRef.current.map((actor) => ({ ...actor, pose: actor.pose ? { ...actor.pose } : {} }))
+    const nextProps = propsRef.current.map((prop) => ({ ...prop }))
     const nextCameras = camerasRef.current.map((camera) => ({ ...camera }))
     for (const track of currentTracks) {
       const first = track.keyframes?.[0]
@@ -582,10 +706,23 @@ export default function DirectorPreviz({ onBack }) {
           }
         }
       }
+      if (track.targetType === 'prop') {
+        const index = nextProps.findIndex((prop) => prop.id === track.targetId)
+        if (index >= 0) {
+          nextProps[index] = {
+            ...nextProps[index],
+            position: first.position ? [...first.position] : nextProps[index].position,
+            rotation: first.rotation ? [...first.rotation] : nextProps[index].rotation,
+            scale: first.scale ? [...first.scale] : nextProps[index].scale,
+          }
+        }
+      }
     }
     actorsRef.current = nextActors
+    propsRef.current = nextProps
     camerasRef.current = nextCameras
     setActors(nextActors)
+    setProps(nextProps)
     setCameras(nextCameras)
     setCurrentTime(0)
   }, [])
@@ -673,6 +810,7 @@ export default function DirectorPreviz({ onBack }) {
       videoRecordTimerRef.current = null
     }
     resetToTimelineStart()
+    sanitizeActiveCameraForRecording()
     const recorder = startRecording('.previz-record-canvas canvas')
     if (!recorder) return false
     setIsVideoRecording(true)
@@ -683,7 +821,7 @@ export default function DirectorPreviz({ onBack }) {
       }, Math.max(1, autoStopAfter) * 1000 + 350)
     }
     return true
-  }, [play, resetToTimelineStart, startRecording, stopVideoRecord])
+  }, [play, resetToTimelineStart, sanitizeActiveCameraForRecording, startRecording, stopVideoRecord])
 
   const handleVideoRecord = () => {
     if (isVideoRecording) {
@@ -808,8 +946,47 @@ export default function DirectorPreviz({ onBack }) {
   // ==========================================
   // AI 自然语言导演
   // ==========================================
-  const handleAIDirect = useCallback(async (prompt) => {
-    if (!prompt || !prompt.trim() || aiLoading) return
+  const handleAIShotPlan = useCallback(async (input) => {
+    const payload = typeof input === 'string' ? { prompt: input } : (input || {})
+    const prompt = payload.prompt || ''
+    if (!prompt.trim() || shotPlanLoading) return
+
+    setShotPlanLoading(true)
+    setAiError(null)
+    setAiStatus({ phase: 'planning', message: 'AI 正在拆分镜头，生成可审核分镜表...' })
+
+    try {
+      const resp = await fetch('/api/previz/plan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prompt: prompt.trim(),
+          director_profile: payload.directorProfile,
+          material_type: payload.materialType,
+          source_title: payload.sourceTitle,
+          preferred_shot_count: payload.preferredShotCount,
+        }),
+      })
+      const data = await resp.json()
+      if (!data.success) {
+        setAiError(data.message || 'AI 分镜计划生成失败')
+        return
+      }
+      const plan = data.data?.plan
+      setShotPlan(plan)
+      setSelectedShotId(plan?.shots?.[0]?.id || null)
+      setAiStatus(null)
+    } catch (err) {
+      setAiError(`分镜生成失败：${err.message || '请检查后端服务是否启动'}`)
+    } finally {
+      setShotPlanLoading(false)
+    }
+  }, [shotPlanLoading])
+
+  const handleAIDirect = useCallback(async (input) => {
+    const payload = typeof input === 'string' ? { prompt: input } : (input || {})
+    const prompt = payload.prompt || ''
+    if (!prompt || !prompt.trim() || aiLoading) return false
 
     // 保存快照以便撤销
     aiSnapshotRef.current = {
@@ -821,6 +998,7 @@ export default function DirectorPreviz({ onBack }) {
       cameraFov,
       cameraMode,
       duration,
+      environmentMode,
     }
 
     setAiLoading(true)
@@ -846,6 +1024,7 @@ export default function DirectorPreviz({ onBack }) {
           arc: image.arc || 0,
         })),
         hasBackgroundImage: backgroundImages.length > 0,
+        environmentMode,
       }
 
       setAiStatus({ phase: 'analyzing', message: 'AI 正在分析场景指令...' })
@@ -854,7 +1033,13 @@ export default function DirectorPreviz({ onBack }) {
       const resp = await fetch('/api/previz/direct', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ scene_context: sceneContext, prompt: prompt.trim() }),
+        body: JSON.stringify({
+          scene_context: sceneContext,
+          prompt: prompt.trim(),
+          director_profile: payload.directorProfile,
+          material_type: payload.materialType,
+          source_title: payload.sourceTitle,
+        }),
       })
 
       const data = await resp.json()
@@ -862,14 +1047,14 @@ export default function DirectorPreviz({ onBack }) {
       if (!data.success) {
         setAiError(data.message || 'AI 指令生成失败')
         setAiStatus(null)
-        return
+        return false
       }
 
       const { commands, explanation } = data.data
       if (!commands || commands.length === 0) {
         setAiError('AI 未生成有效的场景命令，请尝试更具体的描述。')
         setAiStatus(null)
-        return
+        return false
       }
 
       setAiStatus({ phase: 'executing', message: `正在执行 ${commands.length} 条场景命令...` })
@@ -907,15 +1092,17 @@ export default function DirectorPreviz({ onBack }) {
         createProp: (type, position, rotation, scale) => {
           propCounter.current += 1
           const id = `prop_${propCounter.current}`
+          const groundY = getPropGroundY(type)
+          const hasFreeY = Array.isArray(position) && Math.abs((position[1] || 0) - groundY) > 0.05
           const newProp = {
             id,
             type,
-            position: position || [0, getPropGroundY(type), 0],
+            position: position || [0, groundY, 0],
             rotation: rotation || [0, 0, 0],
             scale: scale || [1, 1, 1],
             color: '#666666',
             locked: false,
-            snapToGround: true,
+            snapToGround: !hasFreeY,
           }
           propsRef.current = [...propsRef.current, newProp]
           setProps((prev) => [...prev, newProp])
@@ -1005,22 +1192,28 @@ export default function DirectorPreviz({ onBack }) {
           propsRef.current = propsRef.current.map((p) => {
             if (p.id !== id) return p
             const type = p.type
+            const groundY = getPropGroundY(type)
+            const hasFreeY = Array.isArray(position) && Math.abs((position[1] || 0) - groundY) > 0.05
             return {
               ...p,
-              position: position ? [position[0], getPropGroundY(type), position[2]] : p.position,
+              position: position ? (hasFreeY || p.snapToGround === false ? position : [position[0], groundY, position[2]]) : p.position,
               rotation: rotation || p.rotation,
               scale: scale || p.scale,
+              snapToGround: position ? !(hasFreeY || p.snapToGround === false) : p.snapToGround,
             }
           })
           setProps((prev) =>
             prev.map((p) => {
               if (p.id !== id) return p
               const type = p.type
+              const groundY = getPropGroundY(type)
+              const hasFreeY = Array.isArray(position) && Math.abs((position[1] || 0) - groundY) > 0.05
               return {
                 ...p,
-                position: position ? [position[0], getPropGroundY(type), position[2]] : p.position,
+                position: position ? (hasFreeY || p.snapToGround === false ? position : [position[0], groundY, position[2]]) : p.position,
                 rotation: rotation || p.rotation,
                 scale: scale || p.scale,
+                snapToGround: position ? !(hasFreeY || p.snapToGround === false) : p.snapToGround,
               }
             })
           )
@@ -1072,6 +1265,9 @@ export default function DirectorPreviz({ onBack }) {
           }, waitMs)
         },
         setAspectRatio,
+        setEnvironment: (mode) => {
+          if (['ground', 'air', 'space', 'studio'].includes(mode)) setEnvironmentMode(mode)
+        },
         focusCameraOnActor: (actorId) => {
           const target = actorsRef.current.find((a) => a.id === actorId)
           if (!target) return
@@ -1143,17 +1339,86 @@ export default function DirectorPreviz({ onBack }) {
           ...prev,
         ].slice(0, 20)
       )
+      return true
     } catch (err) {
       setAiError(`网络错误：${err.message || '请检查后端服务是否启动'}`)
       setAiStatus(null)
+      return false
     } finally {
       setAiLoading(false)
     }
   }, [
     aiLoading, props, tracks, aspectRatio, cameraFov, cameraMode,
     selectedActor, selectedCamera, selectedProp, activeCameraId,
-    addKeyframeAt, backgroundImage, backgroundImages, duration, startVideoRecord, updateActiveCameraFov,
+    addKeyframeAt, backgroundImage, backgroundImages, duration, environmentMode, startVideoRecord, updateActiveCameraFov,
   ])
+
+  const updateShotPlanItem = useCallback((shotId, patch) => {
+    setShotPlan((prev) => {
+      if (!prev?.shots) return prev
+      const shots = prev.shots.map((shot) => (shot.id === shotId ? { ...shot, ...patch } : shot))
+      return {
+        ...prev,
+        shots,
+        total_duration: shots.reduce((sum, shot) => sum + (Number(shot.duration) || 0), 0),
+      }
+    })
+  }, [])
+
+  const markShotStatus = useCallback((shotId, status) => {
+    updateShotPlanItem(shotId, { status })
+  }, [updateShotPlanItem])
+
+  const generateShotPreview = useCallback(async (shot) => {
+    if (!shot || aiLoading) return
+    setSelectedShotId(shot.id)
+    markShotStatus(shot.id, 'generating')
+    const shotIndex = shotPlan?.shots?.findIndex((item) => item.id === shot.id) ?? -1
+    const previousShot = shotIndex > 0 ? shotPlan.shots[shotIndex - 1] : null
+    const nextShot = shotIndex >= 0 ? shotPlan.shots[shotIndex + 1] : null
+    const prompt = `
+只生成并录制当前分镜，不要生成整段故事。
+
+[整段衔接]
+${shotPlan?.continuity || '保持电影化连续剪辑。'}
+上一镜：${previousShot ? `${previousShot.id} ${previousShot.title}，出场：${previousShot.transition_out || ''}` : '无'}
+下一镜：${nextShot ? `${nextShot.id} ${nextShot.title}，入场：${nextShot.transition_in || ''}` : '无'}
+
+[当前分镜]
+编号：${shot.id}
+标题：${shot.title}
+时长：${shot.duration}秒
+场景：${shot.scene}
+画面目标：${shot.visual_goal}
+角色：${(shot.characters || []).join('、')}
+道具：${(shot.props || []).join('、')}
+动作：${shot.action}
+景别：${shot.shot_size}
+机位角度：${shot.camera_angle}
+焦段/FOV：${shot.focal}${shot.fov ? ` / FOV ${shot.fov}` : ''}
+运镜：${shot.camera_movement}
+入场衔接：${shot.transition_in}
+出场衔接：${shot.transition_out}
+
+[执行要求]
+1. 先 reset_scene 清理上一镜的演员和道具，但必须保留用户上传的背景图、画幅和当前工程。
+2. 只搭建这一条分镜需要的灰模资产，地面场景必须 set_environment mode="ground"，并放置清晰地面参照物或地毯/路面/桌椅来体现运动距离。
+3. set_timeline_duration 必须等于 ${shot.duration}。
+4. 至少建立 time=0、中段、time=${shot.duration} 三个关键帧。
+5. 摄影机必须用 lookAt 对准主体脸部/头胸区域，双人镜头 lookAt 对准两人中点的脸部高度；构图要符合景别，不要让人物过小或出画。
+6. 摄影机、人物/产品/道具动作必须符合上面的机位、焦段和运镜；如果有变焦，关键帧里必须体现 FOV 变化。
+7. 最后 record_camera_video duration=${shot.duration}。
+
+${shot.previz_prompt || ''}
+`
+    const ok = await handleAIDirect({
+      prompt,
+      directorProfile: 'cinematographer',
+      materialType: 'script',
+      sourceTitle: `${shot.id} ${shot.title}`,
+    })
+    markShotStatus(shot.id, ok ? 'generated' : 'failed')
+  }, [aiLoading, handleAIDirect, markShotStatus, shotPlan])
 
   /** 撤销 AI 操作：恢复到 AI 执行前的快照 */
   const undoAI = useCallback(() => {
@@ -1168,6 +1433,7 @@ export default function DirectorPreviz({ onBack }) {
     setCameraFov(snap.cameraFov)
     setCameraMode(snap.cameraMode)
     setDuration(snap.duration || 30)
+    setEnvironmentMode(snap.environmentMode || 'ground')
     durationRef.current = snap.duration || 30
     aiSnapshotRef.current = null
     setAiError(null)
@@ -1232,6 +1498,13 @@ export default function DirectorPreviz({ onBack }) {
         aiStatus={aiStatus}
         aiError={aiError}
         onAIDirect={handleAIDirect}
+        onAIShotPlan={handleAIShotPlan}
+        shotPlan={shotPlan}
+        shotPlanLoading={shotPlanLoading}
+        selectedShotId={selectedShotId}
+        onSelectShot={setSelectedShotId}
+        onUpdateShot={updateShotPlanItem}
+        onGenerateShotPreview={generateShotPreview}
         onUndoAI={undoAI}
         hasAISnapshot={hasAISnapshot}
         commandHistory={commandHistory}
@@ -1275,6 +1548,7 @@ export default function DirectorPreviz({ onBack }) {
             placementMode={placementMode}
             onPlaceProp={placeProp}
             backgroundImages={backgroundImages}
+            environmentMode={environmentMode}
           />
           <OrbitControls makeDefault enabled={!isTransforming} />
           {selectedActor && selectedActorTarget && (
@@ -1308,7 +1582,7 @@ export default function DirectorPreviz({ onBack }) {
 
         <div className="previz-preview-window">
           <div className="previz-preview-label">{activeCamera?.name || 'CAM'} | {activeCamera?.fov || cameraFov} | {aspectRatio}{isVideoRecording ? ' | REC' : ''}</div>
-          <Canvas style={{ width: '100%', height: '100%' }} camera={{ position: activeCamera?.position || [0, 2.2, 8], fov: activeCamera?.fov || cameraFov }} gl={{ antialias: true, preserveDrawingBuffer: true }}>
+          <Canvas style={{ width: '100%', height: '100%' }} camera={{ position: activeCamera?.position || [0, 2.2, 8], fov: activeCamera?.fov || cameraFov, near: 0.05, far: 2000 }} gl={{ antialias: true, preserveDrawingBuffer: true }}>
             <color attach="background" args={['#000000']} />
             <MoviePreviewCamera cameraConfig={activeCamera} aspectRatio={aspectRatio} fallbackFov={cameraFov} />
             <PrevizScene
@@ -1334,6 +1608,7 @@ export default function DirectorPreviz({ onBack }) {
               showCameraRigs={false}
               backgroundImages={backgroundImages}
               isPreview
+              environmentMode={environmentMode}
             />
           </Canvas>
         </div>
@@ -1342,7 +1617,7 @@ export default function DirectorPreviz({ onBack }) {
           <Canvas
             style={{ width: '1920px', height: '1080px' }}
             dpr={1}
-            camera={{ position: activeCamera?.position || [0, 2.2, 8], fov: activeCamera?.fov || cameraFov }}
+            camera={{ position: activeCamera?.position || [0, 2.2, 8], fov: activeCamera?.fov || cameraFov, near: 0.05, far: 2000 }}
             gl={{ antialias: true, preserveDrawingBuffer: true }}
           >
             <color attach="background" args={['#000000']} />
@@ -1370,6 +1645,7 @@ export default function DirectorPreviz({ onBack }) {
               showCameraRigs={false}
               backgroundImages={backgroundImages}
               isPreview
+              environmentMode={environmentMode}
             />
           </Canvas>
         </div>
@@ -1390,6 +1666,7 @@ export default function DirectorPreviz({ onBack }) {
         onDeleteKeyframe={deleteKeyframe}
         onMoveKeyframe={moveKeyframe}
         actors={actors}
+        props={props}
         cameras={cameras}
         fps={FPS}
       />

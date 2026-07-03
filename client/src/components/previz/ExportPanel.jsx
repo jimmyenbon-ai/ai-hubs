@@ -1,16 +1,25 @@
 import { useState, useRef, useCallback } from 'react'
 
-const RECORDING_FPS = 30
-const RECORDING_BITRATE = 16_000_000
+const RECORDING_FPS = 60
+const RECORDING_BITRATE = 50_000_000
 
 /**
  * Export utilities for AI video generation:
- * screenshot, processed stills, keyframe images, and WebM recording.
+ * screenshot, processed stills, keyframe images, and high quality camera recording.
  */
 export function usePrevizExport() {
   const [exportStatus, setExportStatus] = useState('')
   const mediaRecorderRef = useRef(null)
   const recordingChunksRef = useRef([])
+  const streamRef = useRef(null)
+  const framePumpRef = useRef(null)
+
+  const stopFramePump = useCallback(() => {
+    if (framePumpRef.current) {
+      clearInterval(framePumpRef.current)
+      framePumpRef.current = null
+    }
+  }, [])
 
   const getCanvas = useCallback((selector = '.previz-canvas-wrap canvas') => {
     return document.querySelector(selector)
@@ -19,7 +28,7 @@ export function usePrevizExport() {
   const exportScreenshot = useCallback((width = 1920, height = 1080) => {
     const canvas = getCanvas()
     if (!canvas) {
-      setExportStatus('未找到可截图的画布')
+      setExportStatus('没有找到可截图的画布')
       return false
     }
 
@@ -41,7 +50,7 @@ export function usePrevizExport() {
     try {
       const canvas = getCanvas(selector)
       if (!canvas) {
-        setExportStatus('未找到预览画布，无法录制')
+        setExportStatus('没有找到预览画布，无法录制')
         return null
       }
       if (!canvas.captureStream || typeof MediaRecorder === 'undefined') {
@@ -49,7 +58,17 @@ export function usePrevizExport() {
         return null
       }
 
+      stopFramePump()
       const stream = canvas.captureStream(RECORDING_FPS)
+      const [videoTrack] = stream.getVideoTracks()
+      videoTrack?.applyConstraints?.({ frameRate: RECORDING_FPS }).catch(() => {})
+      if (videoTrack?.requestFrame) {
+        videoTrack.requestFrame()
+        framePumpRef.current = window.setInterval(() => {
+          if (mediaRecorderRef.current?.state === 'recording') videoTrack.requestFrame()
+        }, 1000 / RECORDING_FPS)
+      }
+
       const candidates = [
         { mimeType: 'video/mp4;codecs=avc1.42E01E', ext: 'mp4' },
         { mimeType: 'video/mp4', ext: 'mp4' },
@@ -63,6 +82,8 @@ export function usePrevizExport() {
         mimeType: selectedFormat.mimeType,
         videoBitsPerSecond: RECORDING_BITRATE,
       })
+
+      streamRef.current = stream
       recordingChunksRef.current = []
       recorder.ondataavailable = (event) => {
         if (event.data.size > 0) recordingChunksRef.current.push(event.data)
@@ -71,6 +92,10 @@ export function usePrevizExport() {
         setExportStatus('录制失败，请重试')
       }
       recorder.onstop = () => {
+        stopFramePump()
+        stream.getTracks().forEach((track) => track.stop())
+        streamRef.current = null
+
         const blob = new Blob(recordingChunksRef.current, { type: selectedFormat.mimeType })
         if (!blob.size) {
           setExportStatus('录制结束，但没有捕获到视频帧')
@@ -83,32 +108,40 @@ export function usePrevizExport() {
         link.href = url
         link.click()
         setTimeout(() => URL.revokeObjectURL(url), 1000)
-        setExportStatus(selectedFormat.ext === 'mp4' ? 'MP4录制完成' : '当前浏览器不支持MP4编码，已导出WebM')
+        setExportStatus(selectedFormat.ext === 'mp4' ? '60fps MP4 录制完成' : '浏览器不支持 MP4 编码，已导出 60fps WebM')
       }
 
-      recorder.start(250)
+      recorder.start(100)
       mediaRecorderRef.current = recorder
-      setExportStatus(selectedFormat.ext === 'mp4' ? 'MP4录制中...' : 'WebM录制中（浏览器不支持MP4时自动降级）')
+      setExportStatus(selectedFormat.ext === 'mp4' ? '60fps MP4 录制中...' : '60fps WebM 录制中...')
       return recorder
     } catch (err) {
       setExportStatus(`录制失败：${err.message || '未知错误'}`)
       return null
     }
-  }, [getCanvas])
+  }, [getCanvas, stopFramePump])
 
   const stopRecording = useCallback(() => {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+      try {
+        mediaRecorderRef.current.requestData?.()
+      } catch {
+        // Some MediaRecorder implementations throw if no chunk is ready yet.
+      }
       mediaRecorderRef.current.stop()
       mediaRecorderRef.current = null
       return true
     }
+    stopFramePump()
+    streamRef.current?.getTracks().forEach((track) => track.stop())
+    streamRef.current = null
     return false
-  }, [])
+  }, [stopFramePump])
 
   const exportWithOverride = useCallback((mode) => {
     const canvas = getCanvas()
     if (!canvas) {
-      setExportStatus('未找到可导出的画布')
+      setExportStatus('没有找到可导出的画布')
       return false
     }
 
@@ -161,7 +194,7 @@ export function usePrevizExport() {
     setExportStatus('正在导出关键帧包...')
     const canvas = getCanvas()
     if (!canvas) {
-      setExportStatus('未找到可导出的画布')
+      setExportStatus('没有找到可导出的画布')
       return false
     }
 

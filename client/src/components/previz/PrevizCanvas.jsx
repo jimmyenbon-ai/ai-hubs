@@ -24,6 +24,8 @@ const PROP_GROUND_Y = {
   corridor: 1.5, elevator: 2, console: 0.75, cockpit: 1, hatch: 1.25,
   med_bed: 0.35, lab_table: 0.55,
   building: 4, street: 0.05, lamp: 2, billboard: 2, bridge: 1,
+  led_screen: 1.5, product_box: 0.5, product_panel: 1, airplane: 0, spacecraft: 0,
+  planet: 0, asteroid: 0, starfield: 0, hologram: 1,
 }
 
 export function snapToGround(position) {
@@ -288,6 +290,84 @@ function Furniture({ type, color }) {
           <meshStandardMaterial color={c} roughness={0.6} />
         </mesh>
       )
+    case 'led_screen':
+      return (
+        <>
+          <PropMesh args={[3.2, 1.8, 0.12]} position={[0, 0, 0]} color="#111827" />
+          <PropMesh args={[3.45, 2.05, 0.08]} position={[0, 0, 0.08]} color="#3f3f46" />
+          {[-1.2, -0.6, 0, 0.6, 1.2].map((x) => <PropMesh key={`led-v-${x}`} args={[0.025, 1.72, 0.04]} position={[x, 0, -0.08]} color="#22d3ee" />)}
+          {[-0.6, -0.3, 0, 0.3, 0.6].map((y) => <PropMesh key={`led-h-${y}`} args={[3.05, 0.025, 0.04]} position={[0, y, -0.08]} color="#22d3ee" />)}
+          <PropMesh args={[0.18, 1.4, 0.18]} position={[0, -1.35, 0.18]} color="#52525b" />
+          <PropMesh args={[1.25, 0.16, 0.75]} position={[0, -2.1, 0.18]} color="#52525b" />
+        </>
+      )
+    case 'product_box':
+      return (
+        <>
+          <PropMesh args={[1.8, 1, 1.2]} position={[0, 0, 0]} color={c} />
+          <Line points={[[-0.9, 0.52, -0.62], [0.9, 0.52, -0.62], [0.9, 0.52, 0.62], [-0.9, 0.52, 0.62], [-0.9, 0.52, -0.62]]} color="#00ffcc" lineWidth={1} />
+        </>
+      )
+    case 'product_panel':
+    case 'hologram':
+      return (
+        <mesh castShadow receiveShadow>
+          <boxGeometry args={[2.4, 1.35, 0.06]} />
+          <meshStandardMaterial color={type === 'hologram' ? '#22d3ee' : c} transparent opacity={type === 'hologram' ? 0.45 : 1} roughness={0.35} />
+        </mesh>
+      )
+    case 'airplane':
+      return (
+        <>
+          <mesh rotation={[0, 0, Math.PI / 2]} castShadow receiveShadow>
+            <cylinderGeometry args={[0.18, 0.32, 2.6, 12]} />
+            <meshStandardMaterial color={c} roughness={0.5} />
+          </mesh>
+          <PropMesh args={[2.4, 0.08, 0.42]} position={[0, 0, 0]} color="#94a3b8" />
+          <PropMesh args={[0.6, 0.06, 0.8]} position={[-1.0, 0.05, 0]} color="#94a3b8" />
+        </>
+      )
+    case 'spacecraft':
+      return (
+        <>
+          <mesh rotation={[0, 0, Math.PI / 2]} castShadow receiveShadow>
+            <coneGeometry args={[0.45, 1.6, 5]} />
+            <meshStandardMaterial color={c} roughness={0.42} metalness={0.18} />
+          </mesh>
+          <PropMesh args={[0.9, 0.16, 1.6]} position={[0.15, 0, 0]} color="#64748b" />
+          <PropMesh args={[0.2, 0.2, 0.8]} position={[-0.75, 0, 0]} color="#f97316" />
+        </>
+      )
+    case 'planet':
+      return (
+        <mesh castShadow receiveShadow>
+          <sphereGeometry args={[1, 32, 16]} />
+          <meshStandardMaterial color={c || '#3b82f6'} roughness={0.7} />
+        </mesh>
+      )
+    case 'asteroid':
+      return (
+        <mesh castShadow receiveShadow rotation={[0.5, 0.2, 0.8]}>
+          <icosahedronGeometry args={[0.55, 1]} />
+          <meshStandardMaterial color={c || '#78716c'} roughness={0.9} />
+        </mesh>
+      )
+    case 'starfield':
+      return (
+        <>
+          {Array.from({ length: 36 }).map((_, index) => {
+            const x = ((index * 7) % 17) - 8
+            const y = ((index * 5) % 9) + 1
+            const z = -10 - ((index * 3) % 12)
+            return (
+              <mesh key={`star-${index}`} position={[x, y, z]}>
+                <sphereGeometry args={[0.035 + (index % 3) * 0.015, 8, 6]} />
+                <meshBasicMaterial color="#ffffff" />
+              </mesh>
+            )
+          })}
+        </>
+      )
     case 'cylinder':
       return (
         <mesh castShadow receiveShadow>
@@ -362,12 +442,12 @@ export const MovieCameraRig = forwardRef(function MovieCameraRig({ camera, activ
 })
 
 function GroundReference({ showGrid = true, muted = false }) {
-  const floorColor = muted ? '#16231f' : '#1b2a24'
-  const gridPrimary = muted ? '#3f6f61' : '#5f8278'
-  const gridSecondary = muted ? '#28433c' : '#36534b'
-  const laneColor = muted ? '#00d6aa' : '#00ffcc'
-  const depthColor = muted ? '#f5b84b' : '#ffcc66'
-  const markerColor = muted ? '#6ab8ff' : '#8bd3ff'
+  const floorColor = muted ? '#20352d' : '#263b34'
+  const gridPrimary = muted ? '#7bd7c1' : '#9fd7c9'
+  const gridSecondary = muted ? '#45675d' : '#536f66'
+  const laneColor = muted ? '#00e6b8' : '#00ffcc'
+  const depthColor = muted ? '#ffd36a' : '#ffcc66'
+  const markerColor = muted ? '#8bd3ff' : '#a8ddff'
 
   return (
     <>
@@ -378,14 +458,21 @@ function GroundReference({ showGrid = true, muted = false }) {
           roughness={0.82}
           metalness={0}
           transparent
-          opacity={muted ? 0.86 : 0.92}
+          opacity={muted ? 0.94 : 0.98}
         />
       </mesh>
-      {showGrid && <gridHelper args={[50, 50, gridPrimary, gridSecondary]} />}
-      <Line points={[[-25, 0.018, 0], [25, 0.018, 0]]} color={laneColor} lineWidth={muted ? 1.4 : 1} transparent opacity={muted ? 0.55 : 0.38} />
-      <Line points={[[0, 0.02, -25], [0, 0.02, 25]]} color={depthColor} lineWidth={muted ? 1.4 : 1} transparent opacity={muted ? 0.52 : 0.34} />
-      {[-4, -2, 2, 4].map((z) => (
-        <Line key={`lane-z-${z}`} points={[[-18, 0.016, z], [18, 0.016, z]]} color={markerColor} lineWidth={0.7} transparent opacity={muted ? 0.22 : 0.18} />
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.006, 0]} receiveShadow>
+        <ringGeometry args={[0.95, 1.03, 64]} />
+        <meshBasicMaterial color="#00ffcc" transparent opacity={muted ? 0.32 : 0.24} side={THREE.DoubleSide} />
+      </mesh>
+      {showGrid && <gridHelper args={[60, 60, gridPrimary, gridSecondary]} />}
+      <Line points={[[-30, 0.026, 0], [30, 0.026, 0]]} color={laneColor} lineWidth={muted ? 1.8 : 1.4} transparent opacity={muted ? 0.82 : 0.64} />
+      <Line points={[[0, 0.028, -30], [0, 0.028, 30]]} color={depthColor} lineWidth={muted ? 1.8 : 1.4} transparent opacity={muted ? 0.8 : 0.6} />
+      {[-8, -6, -4, -2, 2, 4, 6, 8].map((z) => (
+        <Line key={`lane-z-${z}`} points={[[-22, 0.02, z], [22, 0.02, z]]} color={markerColor} lineWidth={0.9} transparent opacity={muted ? 0.36 : 0.28} />
+      ))}
+      {[-8, -6, -4, -2, 2, 4, 6, 8].map((x) => (
+        <Line key={`lane-x-${x}`} points={[[x, 0.019, -22], [x, 0.019, 22]]} color={markerColor} lineWidth={0.7} transparent opacity={muted ? 0.24 : 0.18} />
       ))}
     </>
   )
@@ -435,14 +522,15 @@ function BackgroundPlane({ image }) {
   )
 }
 
-export function SceneSetup({ showGrid, showGuides, fogColor, lights, backgroundImage, backgroundImages, preview = false }) {
+export function SceneSetup({ showGrid, showGuides, fogColor, lights, backgroundImage, backgroundImages, preview = false, environmentMode = 'ground' }) {
   const images = backgroundImages || (backgroundImage ? [backgroundImage] : [])
+  const hasGround = environmentMode !== 'space' && environmentMode !== 'air'
   return (
     <>
       {images.map((image, index) => <BackgroundPlane key={image.id || image.url || index} image={image} />)}
-      {(showGrid || preview) && <GroundReference showGrid={showGrid || preview} muted={preview} />}
-      <fog attach="fog" args={[fogColor || '#1e1e1e', 15, 65]} />
-      <ambientLight intensity={lights?.ambient ?? 0.35} />
+      {hasGround && <GroundReference showGrid={showGrid || preview} muted={preview} />}
+      <fog attach="fog" args={[environmentMode === 'space' ? '#030712' : (fogColor || '#1e1e1e'), 15, environmentMode === 'space' ? 140 : 65]} />
+      <ambientLight intensity={lights?.ambient ?? (environmentMode === 'space' ? 0.55 : 0.35)} />
       <directionalLight position={[5, 10, 7]} intensity={lights?.main ?? 0.85} castShadow shadow-mapSize-width={1024} shadow-mapSize-height={1024} />
       <directionalLight position={[-3, 5, -5]} intensity={lights?.rim ?? 0.5} color="#00ffcc" />
       {showGuides && <CompositionGuides />}

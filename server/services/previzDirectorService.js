@@ -25,7 +25,7 @@ const VALID_COMMAND_TYPES = [
   'configure_camera', 'set_aspect_ratio', 'set_focal_length',
   'set_lighting', 'reset_scene', 'clear_props', 'clear_actors',
   'focus_camera_on_actor', 'add_keyframe',
-  'set_timeline_duration', 'record_camera_video',
+  'set_timeline_duration', 'record_camera_video', 'set_environment',
 ];
 
 const VALID_PROP_TYPES = [
@@ -33,11 +33,122 @@ const VALID_PROP_TYPES = [
   'bed', 'table', 'desk', 'chair', 'sofa', 'cabinet', 'bookshelf', 'shelf', 'door', 'window', 'screen', 'carpet',
   'corridor', 'elevator', 'console', 'cockpit', 'hatch', 'med_bed', 'lab_table',
   'building', 'street', 'lamp', 'billboard', 'bridge',
+  'led_screen', 'product_box', 'product_panel', 'hologram',
+  'airplane', 'spacecraft', 'planet', 'asteroid', 'starfield',
 ];
 
 const VALID_POSES = ['stand', 'sit', 'lie', 'wave', 'point', 'bow', 'crouch'];
 const VALID_CAMERA_MODES = ['fixed', 'follow', 'orbit', 'drone', 'handheld'];
 const VALID_ASPECT_RATIOS = ['16:9', '2.35:1', '9:16', '1:1'];
+const VALID_ENVIRONMENT_MODES = ['ground', 'air', 'space', 'studio'];
+
+const DIRECTOR_PROFILE_PROMPTS = {
+  film_director: '你现在以资深电影导演身份工作，优先判断戏剧冲突、场面调度、节奏、镜头动机和一镜到底/分镜结构。',
+  cinematographer: '你现在以专业电影摄影师身份工作，优先设计焦段、机位高度、构图、景别、推拉摇移跟、变焦和空间压缩关系。',
+  '3d_animator': '你现在以专业3D动画设计师身份工作，优先设计灰模资产、动作弧线、关键帧节奏、运动缓入缓出和空间可读性。',
+  product_animator: '你现在以专业产品动画师身份工作，优先突出产品结构、材质层级、旋转展示、展开/升起/点亮等产品动作和清晰参考画面。',
+  commercial_director: '你现在以商业广告导演身份工作，优先设计高识别度产品卖点、节奏强的镜头段落、干净背景和可交付参考视频。',
+};
+
+const MATERIAL_TYPE_PROMPTS = {
+  prompt: '输入是手动需求，请直接转成可执行3D灰模预演。',
+  script: '输入包含剧本/脚本，请先理解场次、人物、动作、情绪和对白，再抽取1个最适合当前3D预演的镜头段落执行。',
+  novel: '输入包含小说段落，请先把叙事转成可视动作、空间关系和镜头语言，再生成灰模预演。',
+  product: '输入是产品动画需求，请优先创建产品灰模和产品动作，道具本身可以成为动画主体，摄影机可以固定或配合运镜。',
+  space_air: '输入是空中/太空/飞行需求，请允许物体悬空，不要默认依赖地面，使用 airplane/spacecraft/planet/asteroid/starfield 等灰模道具。',
+};
+
+function buildShotPlanPrompt() {
+  return `你是一位专业电影分镜导演、3D预演导演和虚拟摄影指导。你的任务不是直接生成3D命令，而是把用户文本拆成可人工审核的分镜计划。
+
+## 核心要求
+- 输入可能是小说、剧本、广告脚本或产品动画需求。
+- 你必须把它拆成 6-12 个连续分镜，除非用户明确要求其他数量。
+- 每个分镜是一段独立3D预演视频，通常 3-8 秒，除非特别需要，不要超过12秒。
+- 所有分镜加起来要能衔接成完整视频，像正常电影电视一样切镜头、切机位。
+- 不要输出一个60秒大镜头。长文本必须拆镜。
+- 每个分镜都要让人能审核：景别、机位角度、焦段/FOV、运镜、时长、主体动作、场景道具、衔接方式。
+- 每个分镜必须是可单独生成的3D预演任务，previz_prompt 要写清楚是否保留上传背景、是否需要地面、相机 lookAt 对准哪里、关键帧时间点。
+- 地面/室内/城市场景必须给出地面参照物或地面纹理/网格/道路/地毯，避免摄影机里看不出运动距离。
+- 人物镜头必须说明摄影机对准脸部/头胸区域；双人镜头必须说明两人脸部中点或过肩关系。
+- 必须保留用户文本中的核心名词和设定，不得新增用户没有要求的核心叙事物件或场景，例如星门、未来实验室、驾驶舱、科学家、全息地球等。
+- 输出仅限 JSON，不要输出解释性散文。
+
+## 输出JSON格式
+\`\`\`json
+{
+  "title": "分镜计划标题",
+  "total_duration": 45,
+  "continuity": "整体衔接说明",
+  "shots": [
+    {
+      "id": "S01",
+      "title": "镜头标题",
+      "duration": 5,
+      "scene": "场景空间",
+      "visual_goal": "这个镜头要让观众看懂什么",
+      "characters": ["角色A"],
+      "props": ["床", "全息投影"],
+      "action": "主体动作",
+      "shot_size": "特写/近景/中景/全景/远景",
+      "camera_angle": "正面/侧面/俯拍/仰拍/过肩/低机位等",
+      "focal": "24mm广角 / 35mm / 50mm / 85mm长焦",
+      "fov": 40,
+      "camera_movement": "固定/推镜/拉镜/侧移/环绕/摇镜/希区柯克变焦等",
+      "transition_in": "从上一个镜头如何衔接",
+      "transition_out": "如何切到下一个镜头",
+      "review_notes": "给人工审核看的风险点或可调项",
+      "previz_prompt": "用于生成这一条3D预演的完整自然语言提示词，必须包含时长、人物、道具、场景、摄影机、焦段、运镜、关键帧和录制要求"
+    }
+  ]
+}
+\`\`\`
+
+请根据用户文本生成分镜计划：`;
+}
+
+function normalizeShotPlan(parsed) {
+  const data = parsed && typeof parsed === 'object' ? parsed : {};
+  const shots = Array.isArray(data.shots) ? data.shots : [];
+  const normalizedShots = shots.slice(0, 20).map((shot, index) => {
+    const duration = Math.max(1, Math.min(12, Number(shot.duration) || 5));
+    const id = shot.id || `S${String(index + 1).padStart(2, '0')}`;
+    const characters = Array.isArray(shot.characters) ? shot.characters : [];
+    const aimLine = characters.length
+      ? '摄影机 lookAt 必须对准人物脸部/头胸区域，双人镜头对准两人脸部中点。'
+      : '摄影机 lookAt 必须对准产品、飞船、道具或当前画面主体中心。';
+    const previzPrompt = shot.previz_prompt || '';
+    return {
+      id,
+      title: shot.title || `分镜 ${index + 1}`,
+      duration,
+      scene: shot.scene || '',
+      visual_goal: shot.visual_goal || '',
+      characters,
+      props: Array.isArray(shot.props) ? shot.props : [],
+      action: shot.action || '',
+      shot_size: shot.shot_size || '',
+      camera_angle: shot.camera_angle || '',
+      focal: shot.focal || '',
+      fov: typeof shot.fov === 'number' ? Math.max(15, Math.min(90, shot.fov)) : undefined,
+      camera_movement: shot.camera_movement || '',
+      transition_in: shot.transition_in || '',
+      transition_out: shot.transition_out || '',
+      review_notes: shot.review_notes || '',
+      previz_prompt: /lookAt|对准|脸|头胸|面部|中点|主体中心/.test(previzPrompt)
+        ? previzPrompt
+        : `${previzPrompt}\n${aimLine}`.trim(),
+      status: 'pending',
+    };
+  });
+
+  return {
+    title: data.title || 'AI分镜计划',
+    total_duration: normalizedShots.reduce((sum, shot) => sum + shot.duration, 0),
+    continuity: data.continuity || '',
+    shots: normalizedShots,
+  };
+}
 
 // 道具中文名→英文key映射
 const PROP_CN_TO_EN = {
@@ -169,6 +280,7 @@ function buildSystemPrompt() {
 **室内**：bed(床)、table(桌子)、desk(书桌)、chair(椅子)、sofa(沙发)、cabinet(柜子)、bookshelf(书架)、shelf(置物架)、door(门)、window(窗户)、screen(屏幕)、carpet(地毯)
 **科幻**：corridor(走廊)、elevator(电梯)、console(控制台)、cockpit(驾驶舱)、hatch(舱门)、med_bed(医疗床)、lab_table(实验台)
 **城市**：building(建筑)、street(街道)、lamp(路灯)、billboard(广告牌)、bridge(天桥)
+**产品/空天**：led_screen(LED显示屏)、product_box(产品盒体)、product_panel(产品面板)、hologram(全息透明板)、airplane(飞机)、spacecraft(飞船)、planet(星球)、asteroid(小行星)、starfield(星空)
 
 **道具摆放规则**：
 - 椅子紧挨桌子：如果table在[0,0,0]，椅子应放在桌子边缘Z=±(1.3~1.8)或X=±(0.8~1.2)的位置
@@ -205,6 +317,33 @@ function buildSystemPrompt() {
 - orbit：围绕目标旋转——适合展示产品/人物
 - drone：无人机自由视角——适合大场景俯拍
 - handheld：模拟手持晃动——适合纪实/紧张感
+
+## 剧本/小说/产品自动化工作流
+- 如果用户上传或粘贴剧本、小说、脚本，你必须先在内部完成“场次理解 → 主体/道具抽取 → 镜头目标 → 灰模资产 → 摄影机/焦段 → 关键帧 → 录制”的规划，但输出仍然只能是 commands JSON。
+- 不要试图完整还原长篇文本。选择最适合做3D预演参考片的一个段落或一个连续镜头，优先做成可读、可录制、能给AI视频平台参考的灰模动画。
+- 对电影/剧情镜头：必须明确人物站位、动作方向、镜头景别、lookAt、FOV变化和关键帧时间。
+- 对产品动画：可以没有演员。把产品道具作为动画主体，使用 create_prop + move_prop + add_keyframe 形成升起、旋转、展开、点亮、悬浮、定格等动作。LED显示屏优先使用 led_screen，并可用 product_panel/hologram 做屏幕内容层、像素层或发光参考层。
+- 对空中、飞机、太空场景：道具和摄影机允许 Y>0 悬空；使用 airplane/spacecraft/planet/asteroid/starfield；不要把飞机、飞船、小行星强行贴地。
+- 空中场景必须先输出 set_environment mode="air"；太空场景必须先输出 set_environment mode="space"；普通地面/室内/城市使用 mode="ground"。
+- 如果用户要求“摄影机不动，产品自己动”，必须让 camera 保持 fixed，给产品 prop 在不同时间 move_prop 并 add_keyframe。
+- 自动化请求默认至少输出：set_timeline_duration、必要灰模资产、活动摄影机、time=0关键帧、中段关键帧、结束关键帧、record_camera_video。
+
+## 常用运镜语言映射
+- 一镜到底：同一活动摄影机贯穿全段，至少3个关键帧。
+- 推镜/拉镜：move_camera 沿目标方向靠近/远离，并保持 lookAt。
+- 摇镜/移镜/侧移/轨道：camera 横向或弧线移动，lookAt 跟随主体。
+- 希区柯克变焦/滑动变焦：camera 与目标距离变化，同时 FOV 反向变化，形成空间压缩或拉伸。
+- 芬奇式：稳定、精准、低抖动、构图居中或对称，FOV多用35mm/50mm。
+- 迈克尔贝式：低机位广角、强透视、环绕主体、前景/背景运动层次明显。
+
+## 摄影机和构图硬性要求
+- 人物镜头必须让 camera lookAt 对准脸部或头胸区域，常用高度 y=1.45~1.75；不要默认看脚下或地面中心。
+- 双人对话/并排行走时，lookAt 应取两人位置中点且 y=1.55，镜头距离按景别控制：近景 2-3m，中景 3-5m，全景 6-9m。
+- 侧拍、后拍、前方倒退拍都必须体现主体朝向、摄影机方位和运动路径，不能只创建静态机位。
+- 如果要求变焦或推拉，必须在不同关键帧使用不同 fov，并同时移动 camera 或改变距离。
+- 地面/室内/城市场景必须保留地面可见性，可创建 carpet/street/platform/table/chair 等参照物，避免人物漂浮在黑场。
+- 每个需要录制的镜头必须输出 set_timeline_duration、time=0 关键帧、中段关键帧、结束关键帧、record_camera_video。
+- 逐镜生成时，如果用户要求“只生成当前分镜”，先 reset_scene 清理上一镜演员和道具，但不要删除上传背景图。
 
 ## 输出规则（严格遵守！）
 1. **只输出纯JSON**，不要有任何解释、说明、markdown标记以外的文字
@@ -269,11 +408,14 @@ function buildSystemPrompt() {
 **set_focal_length** — 调整活动摄影机焦距
 参数：fov(15-90)
 
+**set_environment** — 设置预演环境
+参数：mode("ground"/"air"/"space"/"studio")。air/space 会隐藏地面参照，允许悬空飞行或太空构图。
+
 **focus_camera_on_actor** — 将活动摄影机对准某个演员
 参数：target(演员ID或名称)
 
-**add_keyframe** — 在时间线上记录当前演员和活动摄影机状态，用于形成可播放/可录制的运动预演
-参数：time(秒)。典型运动镜头至少输出两次：time=0 记录起点，移动演员/摄影机后 time=4~6 记录终点。
+**add_keyframe** — 在时间线上记录当前演员、道具/产品和活动摄影机状态，用于形成可播放/可录制的运动预演
+参数：time(秒)。典型运动镜头至少输出两次：time=0 记录起点，移动演员/道具/摄影机后 time=4~6 记录终点。产品动画必须通过 move_prop 后 add_keyframe 来记录产品动作。
 
 **set_timeline_duration** — 设置预演时间线总时长
 参数：duration(秒，1-120)。如果用户要求录制 6 秒参考片，应先设置 duration=6。
@@ -370,6 +512,9 @@ function validateCommands(commands) {
     if (cmd.value && cmd.type === 'set_aspect_ratio' && !VALID_ASPECT_RATIOS.includes(cmd.value)) {
       errors.push(`命令${i}(set_aspect_ratio): 无效的宽高比 "${cmd.value}"`);
     }
+    if (cmd.type === 'set_environment' && (!cmd.mode || !VALID_ENVIRONMENT_MODES.includes(cmd.mode))) {
+      errors.push(`命令${i}(set_environment): mode 必须是 ground/air/space/studio`);
+    }
     if (cmd.fov !== undefined && (typeof cmd.fov !== 'number' || cmd.fov < 15 || cmd.fov > 90)) {
       warnings.push(`命令${i}: fov=${cmd.fov} 超出合理范围(15-90)，将钳制`);
     }
@@ -414,7 +559,129 @@ function validateCommands(commands) {
  * @param {string} options.prompt - 用户自然语言指令
  * @returns {Object} { success, data?, message?, needConfig? }
  */
-async function processDirective({ sceneContext, prompt } = {}) {
+const PLAN_GENERIC_NGRAMS = new Set([
+  '一个', '一种', '这个', '那个', '要求', '镜头', '摄影', '相机', '生成', '场景', '分镜', '可以',
+  '整体', '参考', '预演', '视频', '动作', '焦段', '运镜', '地面', '人物', '角色', '道具',
+  '画面', '用户', '文本', '输出', '需要', '进行', '通过', '最后', '开始',
+]);
+
+const PLAN_REQUIRED_TERMS = [
+  '刑警', '雨夜', '天桥', '路灯', '照片', '争论',
+  'LED', '显示屏', '像素', '边框', '厚度',
+  '展厅', '访客', '大屏', '讲解员', '玻璃', '展台',
+  '飞船', '小行星', '行星', '星空', '太空',
+  '飞机', '机场', '宇宙', '屏幕',
+];
+
+const PLAN_SUSPICIOUS_INSERTIONS = [
+  '未知场景', '示例', '样例', '未来实验室', '科学家', '全息地球', '星门', '驾驶舱', '另一个维度',
+];
+
+function collectCjkBigrams(text) {
+  const result = new Set();
+  const chunks = String(text || '').match(/[\u4e00-\u9fff]{2,}/g) || [];
+  for (const chunk of chunks) {
+    for (let index = 0; index < chunk.length - 1; index += 1) {
+      const gram = chunk.slice(index, index + 2);
+      if (!PLAN_GENERIC_NGRAMS.has(gram)) result.add(gram);
+    }
+  }
+  return result;
+}
+
+function assessShotPlanAlignment(sourceText, plan) {
+  const title = plan?.title || '';
+  if (/未知|示例|样例|模板/.test(title)) {
+    return { ok: false, reason: '分镜标题像模板或示例，可能跑题' };
+  }
+  const planText = JSON.stringify(plan || {});
+  const suspicious = PLAN_SUSPICIOUS_INSERTIONS.filter((term) => planText.includes(term) && !String(sourceText).includes(term));
+  if (suspicious.length) {
+    return { ok: false, reason: `分镜新增了原文没有的核心设定：${suspicious.join('、')}` };
+  }
+  const required = PLAN_REQUIRED_TERMS.filter((term) => String(sourceText).includes(term));
+  const missing = required.filter((term) => !planText.includes(term));
+  if (missing.length) {
+    return { ok: false, reason: `分镜遗漏原文核心名词：${missing.join('、')}` };
+  }
+  const sourceTerms = collectCjkBigrams(sourceText);
+  if (sourceTerms.size < 8) return { ok: true, reason: 'source too short' };
+  let hits = 0;
+  for (const term of sourceTerms) {
+    if (planText.includes(term)) hits += 1;
+  }
+  const denominator = Math.min(sourceTerms.size, 80);
+  const ratio = hits / denominator;
+  if (hits < 4 || ratio < 0.08) {
+    return { ok: false, reason: `分镜与原文关键词重合过低 hits=${hits}, ratio=${ratio.toFixed(2)}` };
+  }
+  return { ok: true, reason: `hits=${hits}, ratio=${ratio.toFixed(2)}` };
+}
+
+function clampCameraPosition(position, freeY = false) {
+  if (!Array.isArray(position)) return position;
+  return [
+    Math.max(-20, Math.min(20, Number(position[0]) || 0)),
+    freeY ? Math.max(-40, Math.min(40, Number(position[1]) || 0)) : Math.max(0.2, Math.min(20, Number(position[1]) || 0.2)),
+    Math.max(-40, Math.min(40, Number(position[2]) || 0)),
+  ];
+}
+
+function postProcessPrevizCommands(commands) {
+  if (!Array.isArray(commands)) return commands;
+  const cameraLookAts = new Map();
+  let activeCamera = null;
+  let lastLookAt = [0, 1.55, 0];
+  let environmentMode = 'ground';
+
+  const processed = commands.map((command) => {
+    if (!command || typeof command !== 'object') return command;
+    const next = { ...command };
+    if (next.type === 'set_environment' && next.mode) {
+      environmentMode = next.mode;
+    }
+    const freeCameraY = environmentMode === 'space' || environmentMode === 'air';
+    if (next.type === 'create_camera') {
+      next.position = clampCameraPosition(next.position, freeCameraY);
+      if (!Array.isArray(next.lookAt)) next.lookAt = lastLookAt;
+      lastLookAt = next.lookAt;
+      if (next.name) cameraLookAts.set(next.name, next.lookAt);
+      if (next.set_active || !activeCamera) activeCamera = next.name || activeCamera;
+    }
+    if (next.type === 'move_camera') {
+      next.position = clampCameraPosition(next.position, freeCameraY);
+      if (!Array.isArray(next.lookAt)) {
+        next.lookAt = cameraLookAts.get(next.target) || cameraLookAts.get(activeCamera) || lastLookAt;
+      }
+      lastLookAt = next.lookAt;
+      if (next.target) cameraLookAts.set(next.target, next.lookAt);
+    }
+    if (next.type === 'configure_camera') {
+      if (!Array.isArray(next.lookAt)) next.lookAt = cameraLookAts.get(next.target) || lastLookAt;
+      lastLookAt = next.lookAt;
+      if (next.target) cameraLookAts.set(next.target, next.lookAt);
+    }
+    return next;
+  });
+
+  if (!processed.some((command) => command?.type === 'set_timeline_duration')) {
+    const record = processed.find((command) => command?.type === 'record_camera_video');
+    const lastKeyframe = processed
+      .filter((command) => command?.type === 'add_keyframe')
+      .map((command) => Number(command.time) || 0)
+      .sort((a, b) => b - a)[0];
+    const duration = Math.max(1, Math.min(120, Number(record?.duration || lastKeyframe || 5)));
+    const insertAt = Math.max(
+      0,
+      processed.findIndex((command) => !['reset_scene', 'set_environment', 'set_aspect_ratio'].includes(command?.type))
+    );
+    processed.splice(insertAt < 0 ? 0 : insertAt, 0, { type: 'set_timeline_duration', duration });
+  }
+
+  return processed;
+}
+
+async function processDirective({ sceneContext, prompt, directorProfile, materialType, sourceTitle } = {}) {
   if (!prompt || !prompt.trim()) {
     return { success: false, message: '请输入场景指令。' };
   }
@@ -434,6 +701,9 @@ async function processDirective({ sceneContext, prompt } = {}) {
 
   // 3. 构建用户消息（含场景上下文）
   let userMessage = prompt.trim();
+  const profilePrompt = DIRECTOR_PROFILE_PROMPTS[directorProfile] || DIRECTOR_PROFILE_PROMPTS.film_director;
+  const materialPrompt = MATERIAL_TYPE_PROMPTS[materialType] || MATERIAL_TYPE_PROMPTS.prompt;
+  userMessage = `[导演身份] ${profilePrompt}\n[素材类型] ${materialPrompt}${sourceTitle ? `\n[素材标题] ${sourceTitle}` : ''}\n\n${userMessage}`;
   if (sceneContext) {
     const ctxParts = [];
     const ac = sceneContext.actorCount;
@@ -501,6 +771,15 @@ async function processDirective({ sceneContext, prompt } = {}) {
       };
     }
 
+    commands = postProcessPrevizCommands(commands);
+    if (materialType === 'product' && !/太空|宇宙|飞船|星球|行星/.test(prompt)) {
+      commands = commands.map((command) => (
+        command?.type === 'set_environment' && command.mode === 'space'
+          ? { ...command, mode: 'studio' }
+          : command
+      ));
+    }
+
     // 6. 验证命令
     const validation = validateCommands(commands);
     if (!validation.valid) {
@@ -537,12 +816,99 @@ async function processDirective({ sceneContext, prompt } = {}) {
   }
 }
 
+async function generateShotPlan({ prompt, directorProfile, materialType, sourceTitle, preferredShotCount } = {}) {
+  if (!prompt || !prompt.trim()) {
+    return { success: false, message: '请输入需要拆分镜的文本。' };
+  }
+
+  const config = await getLLMConfig();
+  if (!config) {
+    return {
+      success: false,
+      needConfig: true,
+      message: '未配置 LLM API Key。请先配置 DeepSeek API 密钥。',
+    };
+  }
+
+  const profilePrompt = DIRECTOR_PROFILE_PROMPTS[directorProfile] || DIRECTOR_PROFILE_PROMPTS.film_director;
+  const materialPrompt = MATERIAL_TYPE_PROMPTS[materialType] || MATERIAL_TYPE_PROMPTS.script;
+  const shotCountLine = preferredShotCount
+    ? `\n[期望分镜数量] ${Math.max(1, Math.min(20, Number(preferredShotCount) || 10))} 个`
+    : '\n[期望分镜数量] 由AI判断，通常 6-12 个';
+  const buildUserMessage = (retryReason) => `[导演身份] ${profilePrompt}
+[素材类型] ${materialPrompt}${sourceTitle ? `\n[素材标题] ${sourceTitle}` : ''}${shotCountLine}
+
+[强制锚定规则]
+- 必须使用下面用户文本中的原始地点、人物/主体、动作、情绪、产品或空间关系。
+- 不允许改写成无关示例，不允许出现“未知场景”“示例”“未来实验室”等用户没有提供的设定。
+- title、continuity、shots 必须能明显看出来自用户文本。
+- 每个 previz_prompt 都必须写明 camera lookAt 对准哪里。
+${retryReason ? `\n[上次失败原因] ${retryReason}\n请纠偏后重新输出严格 JSON。` : ''}
+
+[用户文本]
+${prompt.trim()}`;
+
+  try {
+    let lastRaw = '';
+    let lastReason = '';
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const result = await llmService.complete(config, buildShotPlanPrompt(), buildUserMessage(lastReason));
+      lastRaw = result?.content || '';
+      if (!result || !result.content || !result.content.trim()) {
+        lastReason = 'AI 未返回分镜内容';
+        continue;
+      }
+
+      const parsed = extractJsonFromLLMResponse(result.content);
+      if (!parsed) {
+        lastReason = 'AI 返回的分镜格式无法解析';
+        continue;
+      }
+
+      const plan = normalizeShotPlan(parsed);
+      if (!plan.shots.length) {
+        lastReason = 'AI 没有生成有效分镜';
+        continue;
+      }
+
+      const alignment = assessShotPlanAlignment(`${sourceTitle || ''}\n${prompt}`, plan);
+      if (!alignment.ok) {
+        lastReason = alignment.reason;
+        logger.warn('[previzDirector] shot plan alignment retry:', alignment.reason);
+        continue;
+      }
+
+      return {
+        success: true,
+        data: {
+          plan,
+          model: result.model,
+          alignment,
+        },
+      };
+    }
+
+    return {
+      success: false,
+      message: `AI 分镜未通过质量检查：${lastReason || '未知原因'}，请重试或补充更具体的文本。`,
+      rawResponse: lastRaw.slice(0, 1000),
+    };
+  } catch (err) {
+    logger.error('[previzDirector] generateShotPlan error:', err.message);
+    return {
+      success: false,
+      message: `AI 分镜生成失败：${err.message || '未知错误'}`,
+    };
+  }
+}
+
 // ============================================================
 // 导出
 // ============================================================
 
 module.exports = {
   processDirective,
+  generateShotPlan,
   buildSystemPrompt,
   validateCommands,
   getLLMConfig,

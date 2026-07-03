@@ -12,6 +12,7 @@ export default function TimelinePanel({
   onDeleteKeyframe,
   onMoveKeyframe,
   actors,
+  props,
   cameras,
   fps,
 }) {
@@ -110,6 +111,21 @@ export default function TimelinePanel({
                 </div>
                 <div className="timeline-track-canvas" onClick={handleScrub} style={{ width: duration * PIXELS_PER_SECOND }}>
                   {(actorTrack?.keyframes || []).map((keyframe, index) => renderKeyframe(actorTrack, keyframe, index))}
+                </div>
+              </div>
+            )
+          })}
+
+          {(props || []).map((prop) => {
+            const propTrack = displayTracks.find((track) => track.targetType === 'prop' && track.targetId === prop.id)
+            return (
+              <div key={prop.id} className="timeline-track" style={{ height: TRACK_HEIGHT }}>
+                <div className="timeline-track-label" style={{ width: LABEL_WIDTH }}>
+                  <span className="actor-color-dot" style={{ background: prop.color || '#888' }} />
+                  {prop.type}
+                </div>
+                <div className="timeline-track-canvas" onClick={handleScrub} style={{ width: duration * PIXELS_PER_SECOND }}>
+                  {(propTrack?.keyframes || []).map((keyframe, index) => renderKeyframe(propTrack, keyframe, index, 'prop-keyframe'))}
                 </div>
               </div>
             )

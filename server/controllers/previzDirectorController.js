@@ -1,17 +1,13 @@
 /**
- * PrevizDirectorController — 处理 AI 导演指令请求
+ * PrevizDirectorController - handles AI director requests.
  */
 
-const { processDirective } = require('../services/previzDirectorService');
+const { processDirective, generateShotPlan } = require('../services/previzDirectorService');
 const logger = require('../utils/logger');
 
-/**
- * POST /api/previz/direct
- * 标准请求-响应模式
- */
 async function handleDirect(req, res, next) {
   try {
-    const { scene_context, prompt } = req.body;
+    const { scene_context, prompt, director_profile, material_type, source_title } = req.body;
 
     if (!prompt || !prompt.trim()) {
       return res.status(400).json({
@@ -23,28 +19,56 @@ async function handleDirect(req, res, next) {
     const result = await processDirective({
       sceneContext: scene_context,
       prompt,
+      directorProfile: director_profile,
+      materialType: material_type,
+      sourceTitle: source_title,
     });
 
     if (result.success) {
       return res.json(result);
     }
 
-    // 区分"未配置"和其他错误
     const status = result.needConfig ? 400 : 500;
     return res.status(status).json(result);
-
   } catch (err) {
     logger.error('[previzDirectorController] handleDirect error:', err.message);
     next(err);
   }
 }
 
-/**
- * POST /api/previz/direct-stream
- * SSE 流式模式 — 预留（Phase 4 实现）
- */
+async function handlePlan(req, res, next) {
+  try {
+    const { prompt, director_profile, material_type, source_title, preferred_shot_count } = req.body;
+
+    if (!prompt || !prompt.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: '请输入需要拆分镜的文本。',
+      });
+    }
+
+    const result = await generateShotPlan({
+      prompt,
+      directorProfile: director_profile,
+      materialType: material_type,
+      sourceTitle: source_title,
+      preferredShotCount: preferred_shot_count,
+    });
+
+    if (result.success) {
+      return res.json(result);
+    }
+
+    const status = result.needConfig ? 400 : 500;
+    return res.status(status).json(result);
+  } catch (err) {
+    logger.error('[previzDirectorController] handlePlan error:', err.message);
+    next(err);
+  }
+}
+
 async function handleDirectStream(req, res) {
-  const { scene_context, prompt } = req.body;
+  const { scene_context, prompt, director_profile, material_type, source_title } = req.body;
 
   if (!prompt || !prompt.trim()) {
     return res.status(400).json({
@@ -53,11 +77,10 @@ async function handleDirectStream(req, res) {
     });
   }
 
-  // SSE 头
   res.writeHead(200, {
     'Content-Type': 'text/event-stream',
     'Cache-Control': 'no-cache',
-    'Connection': 'keep-alive',
+    Connection: 'keep-alive',
     'X-Accel-Buffering': 'no',
   });
 
@@ -71,6 +94,9 @@ async function handleDirectStream(req, res) {
     const result = await processDirective({
       sceneContext: scene_context,
       prompt,
+      directorProfile: director_profile,
+      materialType: material_type,
+      sourceTitle: source_title,
     });
 
     if (result.success) {
@@ -90,5 +116,6 @@ async function handleDirectStream(req, res) {
 
 module.exports = {
   handleDirect,
+  handlePlan,
   handleDirectStream,
 };

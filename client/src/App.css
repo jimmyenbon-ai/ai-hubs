@@ -4998,8 +4998,8 @@ code {
 
 .previz-panel {
   display: grid;
-  grid-template-columns: 300px minmax(0, 1fr);
-  grid-template-rows: minmax(0, 1fr) 180px;
+  grid-template-columns: 460px minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) 168px;
   height: 100%;
   overflow: hidden;
 }
@@ -5029,11 +5029,21 @@ code {
 .previz-timeline {
   grid-column: 2;
   grid-row: 2;
-  height: 180px;
+  height: 168px;
   min-width: 0;
 }
 
-.previz-control-panel h3 { margin: 0 0 10px; color: #fff; font-size: 13px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 8px; }
+.previz-control-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(255,255,255,0.1);
+}
+.previz-control-panel h3 { margin: 0; color: #fff; font-size: 15px; line-height: 1.25; }
+.previz-control-head small { display: block; margin-top: 2px; color: #7f8b99; font-size: 11px; }
 .previz-control-panel .control-group { margin-bottom: 12px; }
 .previz-control-panel label { display: block; font-size: 11px; color: #aaa; margin-bottom: 4px; }
 .previz-control-panel input[type="range"] { width: 100%; accent-color: #00ffcc; }
@@ -5054,9 +5064,9 @@ code {
 .previz-back-btn:hover { background: rgba(0, 0, 0, 0.7); }
 
 .previz-panel.previz-recording { box-shadow: inset 0 0 0 3px rgba(255,0,0,0.5); }
-.previz-rec-bar { display: flex; gap: 6px; padding: 8px 10px; margin-bottom: 10px; border-radius: 8px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); }
+.previz-rec-bar { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 5px; padding: 8px; margin-bottom: 10px; border-radius: 8px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); }
 .previz-rec-bar.active { background: rgba(255,0,0,0.08); border-color: rgba(255,0,0,0.3); }
-.previz-rec-btn { padding: 6px 12px; border: 1px solid #555; border-radius: 6px; background: #2a2a2a; color: #ddd; cursor: pointer; font-size: 13px; transition: all 0.15s; }
+.previz-rec-btn { min-width: 0; padding: 7px 4px; border: 1px solid #555; border-radius: 6px; background: #2a2a2a; color: #ddd; cursor: pointer; font-size: 11px; white-space: nowrap; transition: all 0.15s; }
 .previz-rec-btn:hover { border-color: #00ffcc; color: #fff; }
 .previz-rec-btn.active { background: #ff4444; color: #fff; border-color: #ff4444; }
 .previz-rec-indicator { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); z-index: 30; background: rgba(255,0,0,0.85); color: #fff; padding: 6px 16px; border-radius: 20px; font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 8px; pointer-events: none; }
@@ -5070,8 +5080,8 @@ code {
   bottom: 24px;
   left: auto;
   transform: none;
-  width: 360px;
-  height: 202px;
+  width: 320px;
+  height: 180px;
   border: 2px solid #555;
   background: #000;
   box-shadow: 0 8px 30px rgba(0,0,0,0.6);
@@ -5095,13 +5105,16 @@ code {
 }
 
 .previz-record-canvas {
-  position: absolute;
-  left: -10000px;
-  top: 0;
+  position: fixed;
+  right: 0;
+  bottom: 0;
   width: 1920px;
   height: 1080px;
-  opacity: 0;
+  transform: scale(0.02);
+  transform-origin: bottom right;
+  opacity: 0.001;
   pointer-events: none;
+  z-index: 1;
   overflow: hidden;
 }
 
@@ -5236,6 +5249,267 @@ code {
   margin-bottom: 0;
 }
 
+.previz-ai-workflow {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.previz-step-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  color: #e9eef5;
+  font-size: 12px;
+}
+
+.previz-step-title span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  background: rgba(0,255,204,0.12);
+  color: #00ffcc;
+  font-weight: 800;
+  font-size: 11px;
+}
+
+.previz-ai-workflow label,
+.previz-script-box {
+  color: #aaa;
+  font-size: 11px;
+}
+
+.previz-ai-workflow .input-field {
+  width: 100%;
+  margin-top: 4px;
+  margin-bottom: 0;
+}
+
+.previz-script-box {
+  padding: 8px;
+  margin-bottom: 8px;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 6px;
+  background: rgba(255,255,255,0.035);
+}
+
+.previz-script-meta {
+  margin-top: 6px;
+  color: #00ffcc;
+  font-size: 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.previz-script-chip {
+  min-width: 0;
+  color: #00ffcc;
+  font-size: 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.previz-ai-compact {
+  padding: 8px;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 6px;
+  background: rgba(255,255,255,0.025);
+}
+
+.previz-shot-plan {
+  margin-top: 10px;
+  padding: 8px;
+  border: 1px solid rgba(0,255,204,0.16);
+  border-radius: 6px;
+  background: rgba(0,255,204,0.035);
+}
+
+.previz-shot-plan-head,
+.previz-shot-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: #ddd;
+  font-size: 11px;
+}
+
+.previz-shot-plan-head span,
+.previz-shot-card-head span {
+  color: #00ffcc;
+  font-size: 10px;
+  flex-shrink: 0;
+}
+
+.previz-shot-continuity {
+  margin: 6px 0 0;
+  color: #98a2ad;
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.previz-shot-queue {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-top: 8px;
+  max-height: 300px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.previz-shot-row {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+  padding: 7px 8px;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 6px;
+  background: rgba(255,255,255,0.035);
+  color: #ddd;
+  cursor: pointer;
+  text-align: left;
+}
+
+.previz-shot-row:hover {
+  border-color: rgba(0,255,204,0.32);
+  background: rgba(255,255,255,0.055);
+}
+
+.previz-shot-row.active {
+  border-color: rgba(0,255,204,0.55);
+  background: rgba(0,255,204,0.075);
+}
+
+.previz-shot-index {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 22px;
+  border-radius: 5px;
+  background: rgba(0,0,0,0.28);
+  color: #00ffcc;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.previz-shot-main {
+  min-width: 0;
+}
+
+.previz-shot-main strong,
+.previz-shot-main small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.previz-shot-main strong {
+  color: #e8e8e8;
+  font-size: 11px;
+}
+
+.previz-shot-main small {
+  margin-top: 2px;
+  color: #8c96a3;
+  font-size: 10px;
+}
+
+.previz-shot-status {
+  padding: 2px 5px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.08);
+  color: #aab2bd;
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.previz-shot-status.generated { color: #75f0b2; background: rgba(0,255,128,0.1); }
+.previz-shot-status.generating { color: #ffd166; background: rgba(255,209,102,0.12); }
+.previz-shot-status.failed { color: #ff8b8b; background: rgba(255,90,90,0.12); }
+.previz-shot-status.tuned { color: #8bd3ff; background: rgba(80,160,255,0.12); }
+
+.previz-shot-detail {
+  margin-top: 8px;
+  padding: 10px;
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 6px;
+  background: rgba(0,0,0,0.18);
+}
+
+.previz-shot-detail-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  color: #e6e6e6;
+  font-size: 11px;
+  margin-bottom: 8px;
+}
+
+.previz-shot-actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.previz-shot-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.previz-shot-card {
+  padding: 8px;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 6px;
+  background: rgba(255,255,255,0.035);
+  cursor: pointer;
+}
+
+.previz-shot-card.active {
+  border-color: rgba(0,255,204,0.45);
+  background: rgba(0,255,204,0.07);
+}
+
+.previz-shot-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.previz-shot-grid label,
+.previz-shot-field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  color: #999;
+  font-size: 10px;
+}
+
+.previz-shot-field {
+  margin-top: 6px;
+}
+
+.previz-shot-grid .input-field.small,
+.previz-shot-field .input-field.small {
+  width: 100%;
+  margin-bottom: 0;
+}
+
 /* ======================== Previz v2-v5 Extended Styles ======================== */
 
 /* Tab system */
@@ -5243,7 +5517,22 @@ code {
 .previz-tab { flex: 1; padding: 6px 0; font-size: 11px; color: #888; background: none; border: none; border-bottom: 2px solid transparent; cursor: pointer; transition: all 0.15s; }
 .previz-tab:hover { color: #ccc; }
 .previz-tab.active { color: #00ffcc; border-bottom-color: #00ffcc; }
-.previz-tab-content { max-height: calc(100vh - 300px); overflow-y: auto; padding-right: 2px; }
+.previz-tab-content { max-height: calc(100vh - 250px); overflow-y: auto; padding-right: 4px; }
+
+.previz-details {
+  margin-top: 10px;
+  padding: 8px;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 6px;
+  background: rgba(255,255,255,0.025);
+}
+
+.previz-details summary {
+  cursor: pointer;
+  color: #a8b0bb;
+  font-size: 12px;
+  font-weight: 700;
+}
 
 /* Actor list */
 .previz-actor-list { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; }
@@ -5303,7 +5592,14 @@ code {
 .previz-ai-input:focus { border-color: rgba(0,255,204,0.4); outline: none; }
 .previz-ai-input:disabled { opacity: 0.5; }
 
-.previz-ai-actions { display: flex; align-items: center; margin-top: 8px; }
+.previz-ai-actions { display: flex; align-items: center; gap: 6px; margin-top: 8px; }
+.previz-ai-actions .btn {
+  min-width: 0;
+  white-space: nowrap;
+}
+.previz-ai-actions .previz-ai-send {
+  flex: 1;
+}
 .previz-ai-send:hover:not(:disabled) { background: #00cc77 !important; }
 
 .previz-ai-status {
@@ -5361,6 +5657,8 @@ code {
   display: flex;
   align-items: center;
   gap: 6px;
+  width: 100%;
+  border: 0;
   padding: 5px 8px;
   border-radius: 4px;
   cursor: pointer;
@@ -5375,11 +5673,11 @@ code {
 
 @media (max-width: 980px) {
   .previz-panel {
-    grid-template-columns: 260px minmax(0, 1fr);
+    grid-template-columns: 360px minmax(0, 1fr);
   }
   .previz-preview-window {
-    width: 280px;
-    height: 158px;
+    width: 260px;
+    height: 146px;
   }
 }
 
