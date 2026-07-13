@@ -1,18 +1,29 @@
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 
 const RECORDING_FPS = 60
-const RECORDING_BITRATE = 50_000_000
+const RECORDING_BITRATE = 12_000_000
 
 /**
  * Export utilities for AI video generation:
  * screenshot, processed stills, keyframe images, and high quality camera recording.
  */
-export function usePrevizExport() {
+export function usePrevizExport({ onRecordingComplete } = {}) {
   const [exportStatus, setExportStatus] = useState('')
+  const [lastRecording, setLastRecording] = useState(null)
   const mediaRecorderRef = useRef(null)
   const recordingChunksRef = useRef([])
   const streamRef = useRef(null)
   const framePumpRef = useRef(null)
+  const onRecordingCompleteRef = useRef(onRecordingComplete)
+  const recordingUrlRef = useRef(null)
+
+  useEffect(() => {
+    onRecordingCompleteRef.current = onRecordingComplete
+  }, [onRecordingComplete])
+
+  useEffect(() => () => {
+    if (recordingUrlRef.current) URL.revokeObjectURL(recordingUrlRef.current)
+  }, [])
 
   const stopFramePump = useCallback(() => {
     if (framePumpRef.current) {
@@ -46,7 +57,7 @@ export function usePrevizExport() {
     return true
   }, [getCanvas])
 
-  const startRecording = useCallback((selector = '.previz-preview-window canvas') => {
+  const startRecording = useCallback((selector = '.previz-preview-window canvas', options = {}) => {
     try {
       const canvas = getCanvas(selector)
       if (!canvas) {
@@ -58,29 +69,46 @@ export function usePrevizExport() {
         return null
       }
 
+      const actualWidth = canvas.width
+      const actualHeight = canvas.height
+      // Supported export ratios are 16:9, 9:16, 1:1 and 2.35:1. The rendered
+      // canvas is authoritative because an AI command may change aspect ratio
+      // immediately before its deferred recording command runs.
+      if (actualWidth < 1000 || actualHeight < 800) {
+        setExportStatus(`录制画布分辨率过低：${actualWidth}×${actualHeight}，请重新录制`)
+        return null
+      }
+
+      const recordingFps = Math.max(24, Math.min(60, Number(options.fps) || RECORDING_FPS))
+      const recordingBitrate = Math.max(4_000_000, Number(options.videoBitsPerSecond) || RECORDING_BITRATE)
+
       stopFramePump()
-      const stream = canvas.captureStream(RECORDING_FPS)
+      const stream = canvas.captureStream(recordingFps)
       const [videoTrack] = stream.getVideoTracks()
-      videoTrack?.applyConstraints?.({ frameRate: RECORDING_FPS }).catch(() => {})
+      videoTrack?.applyConstraints?.({
+        width: actualWidth,
+        height: actualHeight,
+        frameRate: recordingFps,
+      }).catch(() => {})
       if (videoTrack?.requestFrame) {
         videoTrack.requestFrame()
         framePumpRef.current = window.setInterval(() => {
           if (mediaRecorderRef.current?.state === 'recording') videoTrack.requestFrame()
-        }, 1000 / RECORDING_FPS)
+        }, 1000 / recordingFps)
       }
 
       const candidates = [
-        { mimeType: 'video/mp4;codecs=avc1.42E01E', ext: 'mp4' },
-        { mimeType: 'video/mp4', ext: 'mp4' },
         { mimeType: 'video/webm;codecs=vp9', ext: 'webm' },
         { mimeType: 'video/webm;codecs=vp8', ext: 'webm' },
         { mimeType: 'video/webm', ext: 'webm' },
+        { mimeType: 'video/mp4;codecs=avc1.42E01E', ext: 'mp4' },
+        { mimeType: 'video/mp4', ext: 'mp4' },
       ]
       const selectedFormat = candidates.find((item) => MediaRecorder.isTypeSupported(item.mimeType)) || candidates[candidates.length - 1]
 
       const recorder = new MediaRecorder(stream, {
         mimeType: selectedFormat.mimeType,
-        videoBitsPerSecond: RECORDING_BITRATE,
+        videoBitsPerSecond: recordingBitrate,
       })
 
       streamRef.current = stream
@@ -91,7 +119,7 @@ export function usePrevizExport() {
       recorder.onerror = () => {
         setExportStatus('录制失败，请重试')
       }
-      recorder.onstop = () => {
+      recorder.onstop = async () => {
         stopFramePump()
         stream.getTracks().forEach((track) => track.stop())
         streamRef.current = null
@@ -103,23 +131,84 @@ export function usePrevizExport() {
         }
 
         const url = URL.createObjectURL(blob)
-        const link = document.createElement('a')
-        link.download = `previz-video-${Date.now()}.${selectedFormat.ext}`
-        link.href = url
-        link.click()
-        setTimeout(() => URL.revokeObjectURL(url), 1000)
-        setExportStatus(selectedFormat.ext === 'mp4' ? '60fps MP4 录制完成' : '浏览器不支持 MP4 编码，已导出 60fps WebM')
+        if (recordingUrlRef.current) URL.revokeObjectURL(recordingUrlRef.current)
+        recordingUrlRef.current = url
+        const filename = `previz-video-${actualWidth}x${actualHeight}-${recordingFps}fps-${Date.now()}.${selectedFormat.ext}`
+        setLastRecording({
+          url,
+          filename,
+          size: blob.size,
+          width: actualWidth,
+          height: actualHeight,
+          fps: recordingFps,
+          ext: selectedFormat.ext,
+          mimeType: selectedFormat.mimeType,
+          converting: true,
+        })
+        setExportStatus(`${actualWidth}×${actualHeight} 已录制，正在转换为标准 H.264 MP4…`)
+        try {
+          const normalized = await onRecordingCompleteRef.current?.({
+            blob,
+            ext: selectedFormat.ext,
+            mimeType: selectedFormat.mimeType,
+            durationHint: null,
+            width: actualWidth,
+            height: actualHeight,
+            fps: recordingFps,
+            filename,
+          })
+          if (normalized?.url) {
+            if (recordingUrlRef.current) URL.revokeObjectURL(recordingUrlRef.current)
+            recordingUrlRef.current = null
+            setLastRecording({
+              ...normalized,
+              filename: normalized.filename || filename.replace(/\.webm$/i, '.mp4'),
+              width: normalized.width || actualWidth,
+              height: normalized.height || actualHeight,
+              fps: normalized.fps || recordingFps,
+              size: normalized.size || blob.size,
+              ext: normalized.ext || 'mp4',
+              mimeType: normalized.mimeType || 'video/mp4',
+              converting: false,
+            })
+            setExportStatus(`${normalized.width || actualWidth}×${normalized.height || actualHeight} H.264 MP4 转换完成，可预览或下载`)
+            return
+          }
+          setLastRecording((current) => current ? { ...current, converting: false } : current)
+          setExportStatus('MP4转换未返回文件，已保留WebM备用视频')
+        } catch (error) {
+          setLastRecording((current) => current ? { ...current, converting: false } : current)
+          setExportStatus(`MP4转换失败，已保留WebM备用：${error.message || '未知错误'}`)
+        }
       }
 
       recorder.start(100)
       mediaRecorderRef.current = recorder
-      setExportStatus(selectedFormat.ext === 'mp4' ? '60fps MP4 录制中...' : '60fps WebM 录制中...')
+      setExportStatus(`${actualWidth}×${actualHeight} / ${recordingFps}fps / ${Math.round(recordingBitrate / 1_000_000)}Mbps 录制中…`)
       return recorder
     } catch (err) {
       setExportStatus(`录制失败：${err.message || '未知错误'}`)
       return null
     }
   }, [getCanvas, stopFramePump])
+
+  const downloadLastRecording = useCallback(() => {
+    if (!lastRecording?.url || lastRecording.converting) return false
+    const link = document.createElement('a')
+    link.href = lastRecording.url
+    link.download = lastRecording.filename
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    setExportStatus(`已请求下载 ${lastRecording.filename}`)
+    return true
+  }, [lastRecording])
+
+  const clearLastRecording = useCallback(() => {
+    if (recordingUrlRef.current) URL.revokeObjectURL(recordingUrlRef.current)
+    recordingUrlRef.current = null
+    setLastRecording(null)
+  }, [])
 
   const stopRecording = useCallback(() => {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
@@ -219,10 +308,13 @@ export function usePrevizExport() {
 
   return {
     exportStatus,
+    lastRecording,
     setExportStatus,
     exportScreenshot,
     startRecording,
     stopRecording,
+    downloadLastRecording,
+    clearLastRecording,
     exportWithOverride,
     exportKeyframePack,
   }

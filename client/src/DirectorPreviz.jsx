@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useRef, useState } from 'react'
+﻿import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { OrbitControls } from '@react-three/drei'
@@ -21,7 +21,14 @@ import TransformGizmo from './components/previz/TransformGizmo'
 import useTimelinePlayback from './components/previz/useTimelinePlayback'
 import { usePrevizExport } from './components/previz/ExportPanel'
 import { downloadDataURL, renderExportFrame } from './components/previz/ExportRenderers'
-import { applyCommands } from './components/previz/PrevizCommandExecutor'
+import { applyCommands, ensureCameraTrackForRecording } from './components/previz/PrevizCommandExecutor'
+import { assessExecutableTimeline, optimizeCinematicTracks } from './components/previz/CinematicMotion'
+import ShotPackagePanel from './components/previz/ShotPackagePanel'
+import {
+  buildFrameSynthesisPrompt,
+  buildVideoHandoffPrompt,
+  mergeShotPackage,
+} from './components/previz/ShotPackageTools'
 
 const RECORD_INTERVAL = 500
 const FPS = 60
@@ -30,6 +37,7 @@ const FAST_MOVE_STEP = 0.55
 const ROTATE_STEP = 0.08
 const FACE_LOOK_AT_Y = 1.75
 const AUTO_RECORD_KEYWORDS = ['录制', '导出', '下载', '参考片', '素材', '等待结果', '查看回放', '回放']
+const HANDOFF_STORAGE_KEY = 'aihub:previz-handoff:v1'
 
 const POSE_PRESETS = {
   stand: () => ({ ...DEFAULT_POSE }),
@@ -83,6 +91,71 @@ function extractDurationFromPrompt(prompt = '', fallback = 10) {
   const match = prompt.match(/(\d+(?:\.\d+)?)\s*(秒|s|S)/)
   if (!match) return fallback
   return Math.max(1, Math.min(120, Number(match[1]) || fallback))
+}
+
+function loadHandoffState() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(HANDOFF_STORAGE_KEY) || '{}')
+    if (parsed.version !== 1) return { shotPackages: {}, references: [] }
+    return {
+      shotPackages: parsed.shotPackages && typeof parsed.shotPackages === 'object' ? parsed.shotPackages : {},
+      references: Array.isArray(parsed.references) ? parsed.references : [],
+    }
+  } catch {
+    return { shotPackages: {}, references: [] }
+  }
+}
+
+async function uploadPrevizAsset(file) {
+  const formData = new FormData()
+  formData.append('files', file)
+  const response = await fetch('/api/upload', { method: 'POST', body: formData })
+  const data = await response.json().catch(() => ({}))
+  if (!response.ok || !data.success || !data.files?.[0]?.url) {
+    throw new Error(data.message || '素材上传失败')
+  }
+  return data.files[0]
+}
+
+function waitForCanvasFrame(selector, timeoutMs = 1500) {
+  return new Promise((resolve) => {
+    const startedAt = performance.now()
+    const check = () => {
+      const canvas = selector ? document.querySelector(selector) : null
+      const hasExpectedSize = !selector || (canvas && canvas.width >= 1000 && canvas.height >= 800)
+      if (hasExpectedSize || performance.now() - startedAt >= timeoutMs) {
+        requestAnimationFrame(() => resolve(canvas))
+        return
+      }
+      requestAnimationFrame(check)
+    }
+    requestAnimationFrame(check)
+  })
+}
+
+function canvasToPngBlob(canvas, width, height) {
+  return new Promise((resolve, reject) => {
+    if (!canvas) {
+      reject(new Error('没有找到活动机位画布'))
+      return
+    }
+    const output = document.createElement('canvas')
+    output.width = width || canvas.width || 1920
+    output.height = height || canvas.height || 1080
+    const context = output.getContext('2d')
+    context.drawImage(canvas, 0, 0, output.width, output.height)
+    output.toBlob((blob) => {
+      if (blob) resolve(blob)
+      else reject(new Error('镜头帧编码失败'))
+    }, 'image/png')
+  })
+}
+
+function getRenderDimensions(aspectRatio) {
+  if (aspectRatio === '9:16') return { width: 1080, height: 1920 }
+  if (aspectRatio === '1:1') return { width: 1080, height: 1080 }
+  if (aspectRatio === '2.35:1') return { width: 1920, height: 816 }
+  return { width: 1920, height: 1080 }
 }
 
 function GroundClickHandler({ placementMode, onPlace, enabled }) {
@@ -219,7 +292,7 @@ function PrevizScene({
   )
 }
 
-export default function DirectorPreviz({ onBack }) {
+export default function DirectorPreviz({ onBack, onSendToVideo }) {
   const [actors, setActors] = useState([
     { id: 'actor_1', name: '演员 A', color: '#3366ff', position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1], pose: { ...DEFAULT_POSE }, footLock: true },
   ])
@@ -236,6 +309,7 @@ export default function DirectorPreviz({ onBack }) {
   const [cameraMode, setCameraMode] = useState('fixed')
   const [aspectRatio, setAspectRatio] = useState('16:9')
   const [activeCameraId, setActiveCameraId] = useState('cam1')
+  const [viewportMode, setViewportMode] = useState('director')
   const [transformMode, setTransformMode] = useState('translate')
   const [isTransforming, setIsTransforming] = useState(false)
   const [showGrid, setShowGrid] = useState(true)
@@ -252,14 +326,20 @@ export default function DirectorPreviz({ onBack }) {
   const [tracks, setTracks] = useState([])
   const [showProject, setShowProject] = useState(false)
   const [isVideoRecording, setIsVideoRecording] = useState(false)
+  const [recordSurfaceActive, setRecordSurfaceActive] = useState(false)
   const [sceneTargets, setSceneTargets] = useState({ actors: {}, props: {}, cameras: {} })
   const [aiLoading, setAiLoading] = useState(false)
   const [aiStatus, setAiStatus] = useState(null)
   const [aiError, setAiError] = useState(null)
+  const [shotQuality, setShotQuality] = useState(null)
   const [commandHistory, setCommandHistory] = useState([])
   const [shotPlan, setShotPlan] = useState(null)
   const [shotPlanLoading, setShotPlanLoading] = useState(false)
   const [selectedShotId, setSelectedShotId] = useState(null)
+  const [shotPackages, setShotPackages] = useState(() => loadHandoffState().shotPackages)
+  const [referenceLibrary, setReferenceLibrary] = useState(() => loadHandoffState().references)
+  const [packageBusy, setPackageBusy] = useState(null)
+  const [packageError, setPackageError] = useState(null)
 
   const playbackRef = useRef(null)
   const videoRecordTimerRef = useRef(null)
@@ -280,6 +360,7 @@ export default function DirectorPreviz({ onBack }) {
   const durationRef = useRef(duration)
   const backgroundUrlRef = useRef(null)
   const backgroundUrlsRef = useRef(new Set())
+  const recordingPackageKeyRef = useRef('free')
 
   useEffect(() => { actorsRef.current = actors }, [actors])
   useEffect(() => { propsRef.current = props }, [props])
@@ -295,10 +376,110 @@ export default function DirectorPreviz({ onBack }) {
     if (videoRecordTimerRef.current) clearTimeout(videoRecordTimerRef.current)
   }, [])
 
-  const { exportStatus, exportScreenshot, startRecording, stopRecording } = usePrevizExport()
+  const currentShot = useMemo(() => {
+    if (!shotPlan?.shots?.length) return null
+    return shotPlan.shots.find((shot) => shot.id === selectedShotId) || shotPlan.shots[0]
+  }, [selectedShotId, shotPlan])
+  const shotPackageKey = currentShot?.id || 'free'
+  const currentShotPackage = useMemo(
+    () => mergeShotPackage(shotPackages[shotPackageKey], currentShot),
+    [currentShot, shotPackageKey, shotPackages],
+  )
+
+  const updateShotPackage = useCallback((patch, targetKey = shotPackageKey) => {
+    setShotPackages((previous) => {
+      const targetShot = shotPlan?.shots?.find((shot) => shot.id === targetKey) || (targetKey === shotPackageKey ? currentShot : null)
+      const current = mergeShotPackage(previous[targetKey], targetShot)
+      const resolvedPatch = typeof patch === 'function' ? patch(current) : patch
+      return {
+        ...previous,
+        [targetKey]: {
+          ...current,
+          ...resolvedPatch,
+          updatedAt: new Date().toISOString(),
+        },
+      }
+    })
+  }, [currentShot, shotPackageKey, shotPlan])
+
+  useEffect(() => {
+    const payload = JSON.stringify({ version: 1, shotPackages, references: referenceLibrary })
+    localStorage.setItem(HANDOFF_STORAGE_KEY, payload)
+  }, [referenceLibrary, shotPackages])
+
+  const handleRecordingComplete = useCallback(async ({ blob, ext, mimeType, width, height, fps }) => {
+    const targetKey = recordingPackageKeyRef.current
+    setRecordSurfaceActive(false)
+    setPackageBusy('upload-video')
+    setPackageError(null)
+    try {
+      const file = new File([blob], `previz-${targetKey}-${Date.now()}.${ext}`, { type: mimeType })
+      let videoAsset
+      try {
+        const formData = new FormData()
+        formData.append('video', file)
+        formData.append('width', String(width || 1920))
+        formData.append('height', String(height || 1080))
+        formData.append('fps', String(fps || 60))
+        const response = await fetch('/api/previz/normalize-video', { method: 'POST', body: formData })
+        const data = await response.json().catch(() => ({}))
+        if (!response.ok || !data.success || !data.data?.url) {
+          throw new Error(data.message || 'H.264 MP4转换失败')
+        }
+        videoAsset = data.data
+      } catch (normalizeError) {
+        const uploaded = await uploadPrevizAsset(file)
+        videoAsset = {
+          url: uploaded.url,
+          filename: uploaded.filename || file.name,
+          size: blob.size,
+          mimeType,
+          ext,
+          width,
+          height,
+          fps,
+        }
+        setPackageError(`MP4转换失败，已保留${String(ext).toUpperCase()}备用：${normalizeError.message}`)
+      }
+      updateShotPackage({
+        previzVideo: {
+          kind: 'video',
+          url: videoAsset.url,
+          name: videoAsset.filename || file.name,
+          size: videoAsset.size || blob.size,
+          mimeType: videoAsset.mimeType || mimeType,
+        },
+      }, targetKey)
+      return videoAsset
+    } catch (err) {
+      setPackageError(`3D预演视频上传失败：${err.message}`)
+      throw err
+    } finally {
+      setPackageBusy(null)
+    }
+  }, [updateShotPackage])
+
+  const {
+    exportStatus,
+    lastRecording,
+    exportScreenshot,
+    startRecording,
+    stopRecording,
+    downloadLastRecording,
+    clearLastRecording,
+  } = usePrevizExport({ onRecordingComplete: handleRecordingComplete })
   const { resetToStart } = useTimelinePlayback({ actors, setActors, props, setProps, cameras, setCameras, tracks, currentTime, isPlaying })
 
   const activeCamera = cameras.find((camera) => camera.id === activeCameraId)
+  const packageSceneContext = useMemo(() => ({
+    actors,
+    props,
+    cameras,
+    tracks,
+    duration,
+    activeCameraId,
+  }), [activeCameraId, actors, cameras, duration, props, tracks])
+  const recordDimensions = useMemo(() => getRenderDimensions(aspectRatio), [aspectRatio])
   const selectedActorRoot = selectedActor ? sceneTargets.actors[selectedActor] : null
   const selectedPropRoot = selectedProp ? sceneTargets.props[selectedProp] : null
   const selectedCameraRoot = selectedCamera ? sceneTargets.cameras[selectedCamera] : null
@@ -639,9 +820,9 @@ export default function DirectorPreviz({ onBack }) {
       const next = [...prev]
       actorSnapshot.forEach((actor) => {
         const index = next.findIndex((track) => track.targetType === 'actor' && track.targetId === actor.id)
-        const keyframe = { time, position: [...actor.position], rotation: [...actor.rotation], scale: [...actor.scale], pose: { ...actor.pose } }
-        if (index >= 0) next[index] = { ...next[index], keyframes: [...next[index].keyframes, keyframe].sort((a, b) => a.time - b.time) }
-        else next.push({ targetType: 'actor', targetId: actor.id, keyframes: [keyframe] })
+        const keyframe = { time, position: [...actor.position], rotation: [...actor.rotation], scale: [...actor.scale], pose: { ...actor.pose }, easing: 'easeInOutSine' }
+        if (index >= 0) next[index] = { ...next[index], interpolation: 'cinematic', keyframes: [...next[index].keyframes, keyframe].sort((a, b) => a.time - b.time) }
+        else next.push({ targetType: 'actor', targetId: actor.id, interpolation: 'cinematic', keyframes: [keyframe] })
       })
 
       propSnapshot.forEach((prop) => {
@@ -651,17 +832,18 @@ export default function DirectorPreviz({ onBack }) {
           position: [...(prop.position || [0, 0, 0])],
           rotation: [...(prop.rotation || [0, 0, 0])],
           scale: [...(prop.scale || [1, 1, 1])],
+          easing: 'easeInOutSine',
         }
-        if (index >= 0) next[index] = { ...next[index], keyframes: [...next[index].keyframes, keyframe].sort((a, b) => a.time - b.time) }
-        else next.push({ targetType: 'prop', targetId: prop.id, keyframes: [keyframe] })
+        if (index >= 0) next[index] = { ...next[index], interpolation: 'cinematic', keyframes: [...next[index].keyframes, keyframe].sort((a, b) => a.time - b.time) }
+        else next.push({ targetType: 'prop', targetId: prop.id, interpolation: 'cinematic', keyframes: [keyframe] })
       })
 
       const cam = cameraSnapshot.find((item) => item.id === activeCamId)
       if (cam) {
         const index = next.findIndex((track) => track.targetType === 'camera' && track.targetId === cam.id)
-        const keyframe = { time, position: [...cam.position], rotation: [...(cam.rotation || [0, 0, 0])], lookAt: cam.lookAt ? [...cam.lookAt] : null, fov: cam.fov || fov }
-        if (index >= 0) next[index] = { ...next[index], keyframes: [...next[index].keyframes, keyframe].sort((a, b) => a.time - b.time) }
-        else next.push({ targetType: 'camera', targetId: cam.id, keyframes: [keyframe] })
+        const keyframe = { time, position: [...cam.position], rotation: [...(cam.rotation || [0, 0, 0])], lookAt: cam.lookAt ? [...cam.lookAt] : null, fov: cam.fov || fov, easing: 'easeInOutCubic' }
+        if (index >= 0) next[index] = { ...next[index], interpolation: 'cinematic', keyframes: [...next[index].keyframes, keyframe].sort((a, b) => a.time - b.time) }
+        else next.push({ targetType: 'camera', targetId: cam.id, interpolation: 'cinematic', keyframes: [keyframe] })
       }
 
       tracksRef.current = next
@@ -756,31 +938,50 @@ export default function DirectorPreviz({ onBack }) {
     }
   }
 
-  const play = useCallback(() => {
-    if (isPlaying || isRecording) return
+  const startPlaybackAt = useCallback((fromTime = 0, { allowLoop = false, endTime, onComplete } = {}) => {
+    if (playbackRef.current) cancelAnimationFrame(playbackRef.current)
+    const limit = Math.max(0.1, Number(endTime) || Number(durationRef.current) || 1)
+    const safeStart = Math.max(0, Math.min(Number(fromTime) || 0, limit))
+    let startedAt = performance.now() / 1000 - safeStart
+    setCurrentTime(safeStart)
     setIsPlaying(true)
-    const start = performance.now() / 1000 - currentTime
-    playbackRef.current = setInterval(() => {
-      const elapsed = performance.now() / 1000 - start
-      if (elapsed >= duration) {
-        if (loopMode) {
+
+    const tick = (now) => {
+      const elapsed = now / 1000 - startedAt
+      if (elapsed >= limit) {
+        if (allowLoop) {
+          startedAt = now / 1000
           setCurrentTime(0)
-        } else {
-          setIsPlaying(false)
-          clearInterval(playbackRef.current)
-          playbackRef.current = null
-          resetToStart()
+          playbackRef.current = requestAnimationFrame(tick)
+          return
         }
+        setCurrentTime(limit)
+        setIsPlaying(false)
+        playbackRef.current = null
+        onComplete?.()
         return
       }
-      setCurrentTime(Math.min(elapsed, duration))
-    }, 1000 / FPS)
-  }, [currentTime, duration, isPlaying, isRecording, loopMode, resetToStart])
+      setCurrentTime(elapsed)
+      playbackRef.current = requestAnimationFrame(tick)
+    }
+    playbackRef.current = requestAnimationFrame(tick)
+    return true
+  }, [])
+
+  const play = useCallback(() => {
+    if (isPlaying || isRecording || isVideoRecording) return
+    const fromTime = currentTime >= duration ? 0 : currentTime
+    startPlaybackAt(fromTime, {
+      allowLoop: loopMode,
+      endTime: duration,
+      onComplete: loopMode ? undefined : resetToStart,
+    })
+  }, [currentTime, duration, isPlaying, isRecording, isVideoRecording, loopMode, resetToStart, startPlaybackAt])
 
   const pause = () => {
     setIsPlaying(false)
     if (playbackRef.current) {
-      clearInterval(playbackRef.current)
+      cancelAnimationFrame(playbackRef.current)
       playbackRef.current = null
     }
   }
@@ -789,47 +990,65 @@ export default function DirectorPreviz({ onBack }) {
     setIsPlaying(false)
     stopRecord()
     if (playbackRef.current) {
-      clearInterval(playbackRef.current)
+      cancelAnimationFrame(playbackRef.current)
       playbackRef.current = null
     }
     resetToTimelineStart()
   }
 
   const stopVideoRecord = useCallback(() => {
+    if (playbackRef.current) {
+      cancelAnimationFrame(playbackRef.current)
+      playbackRef.current = null
+    }
+    setIsPlaying(false)
     stopRecording()
     setIsVideoRecording(false)
     if (videoRecordTimerRef.current) {
       clearTimeout(videoRecordTimerRef.current)
       videoRecordTimerRef.current = null
     }
+    window.setTimeout(() => setRecordSurfaceActive(false), 750)
   }, [stopRecording])
 
-  const startVideoRecord = useCallback(({ autoStopAfter } = {}) => {
+  const startVideoRecord = useCallback(async ({ autoStopAfter } = {}) => {
     if (videoRecordTimerRef.current) {
       clearTimeout(videoRecordTimerRef.current)
       videoRecordTimerRef.current = null
     }
     resetToTimelineStart()
     sanitizeActiveCameraForRecording()
-    const recorder = startRecording('.previz-record-canvas canvas')
-    if (!recorder) return false
-    setIsVideoRecording(true)
-    setTimeout(() => play(), 80)
-    if (autoStopAfter) {
-      videoRecordTimerRef.current = setTimeout(() => {
-        stopVideoRecord()
-      }, Math.max(1, autoStopAfter) * 1000 + 350)
+    flushSync(() => setRecordSurfaceActive(true))
+    const selector = '.previz-record-canvas canvas'
+    const recordingCanvas = await waitForCanvasFrame(selector)
+    const renderedWidth = recordingCanvas?.width || recordDimensions.width
+    const renderedHeight = recordingCanvas?.height || recordDimensions.height
+    const recorder = startRecording(selector, {
+      width: renderedWidth,
+      height: renderedHeight,
+      fps: 60,
+      videoBitsPerSecond: 12_000_000,
+    })
+    if (!recorder) {
+      setRecordSurfaceActive(false)
+      return false
     }
+    setIsVideoRecording(true)
+    const seconds = Math.max(1, Number(autoStopAfter) || Number(durationRef.current) || 1)
+    startPlaybackAt(0, { allowLoop: false, endTime: seconds, onComplete: stopVideoRecord })
+    videoRecordTimerRef.current = setTimeout(() => {
+      stopVideoRecord()
+    }, seconds * 1000 + 1200)
     return true
-  }, [play, resetToTimelineStart, sanitizeActiveCameraForRecording, startRecording, stopVideoRecord])
+  }, [recordDimensions.height, recordDimensions.width, resetToTimelineStart, sanitizeActiveCameraForRecording, startPlaybackAt, startRecording, stopVideoRecord])
 
-  const handleVideoRecord = () => {
+  const handleVideoRecord = useCallback(() => {
     if (isVideoRecording) {
       stopVideoRecord()
     } else {
-      startVideoRecord()
+      startVideoRecord({ autoStopAfter: Number(durationRef.current) })
     }
-  }
+  }, [isVideoRecording, startVideoRecord, stopVideoRecord])
 
   const handleExportMode = useCallback((mode) => {
     const canvas = document.querySelector('.previz-canvas-wrap canvas')
@@ -867,6 +1086,8 @@ export default function DirectorPreviz({ onBack }) {
     }
     if (data.config?.backgroundImage || data.backgroundImage) setBackgroundImage(data.config?.backgroundImage || data.backgroundImage)
     if (data.config?.backgroundImages || data.backgroundImages) setBackgroundImages(data.config?.backgroundImages || data.backgroundImages)
+    if (data.config?.shotPackages) setShotPackages(data.config.shotPackages)
+    if (data.config?.referenceLibrary) setReferenceLibrary(data.config.referenceLibrary)
     setShowProject(false)
   }
 
@@ -943,6 +1164,186 @@ export default function DirectorPreviz({ onBack }) {
     updateBackgroundImage(id, { position, rotation })
   }, [updateBackgroundImage])
 
+  const addReferenceAssets = useCallback(async (files, metadata = {}) => {
+    setPackageBusy('upload-references')
+    setPackageError(null)
+    try {
+      const formData = new FormData()
+      files.forEach((file) => formData.append('files', file))
+      const response = await fetch('/api/upload', { method: 'POST', body: formData })
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok || !data.success) throw new Error(data.message || '参考图上传失败')
+      const additions = (data.files || []).map((uploaded, index) => ({
+        id: `ref_${Date.now()}_${index}`,
+        url: uploaded.url,
+        name: files[index]?.name || uploaded.filename,
+        label: metadata.label || files[index]?.name?.replace(/\.[^.]+$/, '') || `参考${index + 1}`,
+        category: metadata.category || 'character',
+        createdAt: new Date().toISOString(),
+      }))
+      setReferenceLibrary((previous) => [...previous, ...additions])
+    } catch (err) {
+      setPackageError(err.message || '参考图上传失败')
+    } finally {
+      setPackageBusy(null)
+    }
+  }, [])
+
+  const removeReferenceAsset = useCallback((id) => {
+    setReferenceLibrary((previous) => previous.filter((item) => item.id !== id))
+  }, [])
+
+  const updateReferenceAsset = useCallback((id, patch) => {
+    setReferenceLibrary((previous) => previous.map((item) => item.id === id ? { ...item, ...patch } : item))
+  }, [])
+
+  const capturePackageFrame = useCallback(async (kind) => {
+    const targetTime = kind === 'first' ? 0 : Number(durationRef.current)
+    setPackageBusy(`capture-${kind}`)
+    setPackageError(null)
+    try {
+      flushSync(() => {
+        setIsPlaying(false)
+        setCurrentTime(targetTime)
+        setRecordSurfaceActive(true)
+      })
+      await waitForCanvasFrame('.previz-record-canvas canvas')
+      const canvas = document.querySelector('.previz-record-canvas canvas') || document.querySelector('.previz-canvas-wrap canvas')
+      const blob = await canvasToPngBlob(canvas)
+      const file = new File([blob], `${shotPackageKey}-${kind}-${Date.now()}.png`, { type: 'image/png' })
+      const uploaded = await uploadPrevizAsset(file)
+      updateShotPackage((current) => ({
+        previzFrames: {
+          ...current.previzFrames,
+          [kind]: {
+            kind: 'image',
+            url: uploaded.url,
+            name: uploaded.filename || file.name,
+            time: targetTime,
+            width: canvas.width || recordDimensions.width,
+            height: canvas.height || recordDimensions.height,
+          },
+        },
+        styledFrames: { ...current.styledFrames, [kind]: null },
+      }))
+    } catch (err) {
+      setPackageError(`捕获${kind === 'first' ? '首帧' : '尾帧'}失败：${err.message}`)
+    } finally {
+      if (!isVideoRecording) setRecordSurfaceActive(false)
+      setPackageBusy(null)
+    }
+  }, [isVideoRecording, recordDimensions.height, recordDimensions.width, shotPackageKey, updateShotPackage])
+
+  const generateStyledPackageFrame = useCallback(async (kind) => {
+    const sourceFrame = currentShotPackage.previzFrames?.[kind]
+    if (!sourceFrame?.url) return
+    setPackageBusy(`style-${kind}`)
+    setPackageError(null)
+    try {
+      const synthesisReferences = referenceLibrary.slice(0, 8)
+      const prompt = buildFrameSynthesisPrompt({
+        kind,
+        shot: currentShot,
+        shotPackage: currentShotPackage,
+        references: synthesisReferences,
+        aspectRatio,
+      })
+      const ratio = aspectRatio === '2.35:1' ? '21:9' : aspectRatio
+      const response = await fetch('/api/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          originalPrompt: prompt,
+          apiPrompt: prompt,
+          model: 'gpt-image-2',
+          aspectRatio: ratio,
+          imageSize: '1K',
+          images: [sourceFrame.url, ...synthesisReferences.map((item) => item.url)],
+        }),
+      })
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok || !data.success || !data.data?.imageUrl) {
+        throw new Error(data.message || 'GPT-Image 2 生成失败')
+      }
+      updateShotPackage((current) => ({
+        styledFrames: {
+          ...current.styledFrames,
+          [kind]: {
+            kind: 'image',
+            url: data.data.imageUrl,
+            name: `${current.shotId}-${kind}-cinematic.png`,
+            model: data.data.model || 'gpt-image-2',
+            sourceFrame: sourceFrame.url,
+          },
+        },
+      }))
+    } catch (err) {
+      setPackageError(`成片化${kind === 'first' ? '首帧' : '尾帧'}失败：${err.message}`)
+    } finally {
+      setPackageBusy(null)
+    }
+  }, [aspectRatio, currentShot, currentShotPackage, referenceLibrary, updateShotPackage])
+
+  const handlePackageRecording = useCallback(() => {
+    recordingPackageKeyRef.current = shotPackageKey
+    if (isVideoRecording) {
+      stopVideoRecord()
+    } else {
+      startVideoRecord({ autoStopAfter: Number(currentShot?.duration || duration) })
+    }
+  }, [currentShot?.duration, duration, isVideoRecording, shotPackageKey, startVideoRecord, stopVideoRecord])
+
+  const sendPackageToVideo = useCallback(() => {
+    const first = currentShotPackage.styledFrames.first || currentShotPackage.previzFrames.first
+    const last = currentShotPackage.styledFrames.last || currentShotPackage.previzFrames.last
+    if (!first?.url || !last?.url) {
+      setPackageError('请先准备首尾帧')
+      return
+    }
+
+    const referenceAssets = referenceLibrary.slice(0, currentShotPackage.previzVideo?.url ? 6 : 7)
+    const handoffAssets = [
+      { id: 1, type: 'image', url: first.url, name: first.name, label: '严格成片首帧' },
+      { id: 2, type: 'image', url: last.url, name: last.name, label: '严格成片尾帧' },
+      ...referenceAssets.map((asset, index) => ({
+        id: index + 3,
+        type: 'image',
+        url: asset.url,
+        name: asset.name,
+        label: `${asset.label || asset.name}（${asset.category}）`,
+      })),
+    ]
+    if (currentShotPackage.previzVideo?.url) {
+      handoffAssets.push({
+        id: handoffAssets.length + 1,
+        type: 'video',
+        url: currentShotPackage.previzVideo.url,
+        name: currentShotPackage.previzVideo.name,
+        label: '严格3D运镜与动作时序参考',
+      })
+    }
+    const generatedPrompt = buildVideoHandoffPrompt({ shot: currentShot, shotPackage: currentShotPackage, assets: handoffAssets })
+    const handoff = {
+      ...currentShotPackage,
+      id: `${currentShotPackage.shotId}-${Date.now()}`,
+      aspectRatio,
+      duration: Number(currentShot?.duration || duration),
+      assets: handoffAssets,
+      videoPrompt: `${generatedPrompt}\n${currentShotPackage.handoffPrompt || ''}`.trim(),
+      sceneManifest: {
+        actors,
+        props,
+        cameras,
+        tracks,
+        activeCameraId,
+        environmentMode,
+        shot: currentShot,
+      },
+    }
+    updateShotPackage({ lastHandoffAt: new Date().toISOString() })
+    onSendToVideo?.(handoff)
+  }, [activeCameraId, actors, aspectRatio, cameras, currentShot, currentShotPackage, duration, environmentMode, onSendToVideo, props, referenceLibrary, tracks, updateShotPackage])
+
   // ==========================================
   // AI 自然语言导演
   // ==========================================
@@ -964,6 +1365,7 @@ export default function DirectorPreviz({ onBack }) {
           director_profile: payload.directorProfile,
           material_type: payload.materialType,
           source_title: payload.sourceTitle,
+          replace_scene: payload.replaceScene,
           preferred_shot_count: payload.preferredShotCount,
         }),
       })
@@ -1001,6 +1403,7 @@ export default function DirectorPreviz({ onBack }) {
       environmentMode,
     }
 
+    clearLastRecording()
     setAiLoading(true)
     setAiStatus({ phase: 'sending', message: '正在向 AI 导演发送指令...' })
     setAiError(null)
@@ -1025,22 +1428,52 @@ export default function DirectorPreviz({ onBack }) {
         })),
         hasBackgroundImage: backgroundImages.length > 0,
         environmentMode,
+        actors: actorsRef.current.map((actor) => ({
+          id: actor.id,
+          name: actor.name,
+          position: actor.position,
+          rotation: actor.rotation,
+          scale: actor.scale,
+        })),
+        props: propsRef.current.map((prop) => ({
+          id: prop.id,
+          type: prop.type,
+          position: prop.position,
+          rotation: prop.rotation,
+          scale: prop.scale,
+        })),
+        cameras: camerasRef.current.map((camera) => ({
+          id: camera.id,
+          name: camera.name,
+          position: camera.position,
+          lookAt: camera.lookAt,
+          fov: camera.fov,
+        })),
       }
 
       setAiStatus({ phase: 'analyzing', message: 'AI 正在分析场景指令...' })
 
       // 注意：直接用 fetch，不通过 /api/previz 避免路径冲突
-      const resp = await fetch('/api/previz/direct', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          scene_context: sceneContext,
-          prompt: prompt.trim(),
-          director_profile: payload.directorProfile,
-          material_type: payload.materialType,
-          source_title: payload.sourceTitle,
-        }),
-      })
+      const requestController = new AbortController()
+      const requestTimer = window.setTimeout(() => requestController.abort(), 135000)
+      let resp
+      try {
+        resp = await fetch('/api/previz/direct', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          signal: requestController.signal,
+          body: JSON.stringify({
+            scene_context: sceneContext,
+            prompt: prompt.trim(),
+            director_profile: payload.directorProfile,
+            material_type: payload.materialType,
+            source_title: payload.sourceTitle,
+            replace_scene: Boolean(payload.replaceScene),
+          }),
+        })
+      } finally {
+        window.clearTimeout(requestTimer)
+      }
 
       const data = await resp.json()
 
@@ -1050,12 +1483,13 @@ export default function DirectorPreviz({ onBack }) {
         return false
       }
 
-      const { commands, explanation } = data.data
+      const { commands, explanation, quality } = data.data
       if (!commands || commands.length === 0) {
         setAiError('AI 未生成有效的场景命令，请尝试更具体的描述。')
         setAiStatus(null)
         return false
       }
+      if (quality) setShotQuality(quality)
 
       setAiStatus({ phase: 'executing', message: `正在执行 ${commands.length} 条场景命令...` })
 
@@ -1093,14 +1527,19 @@ export default function DirectorPreviz({ onBack }) {
           propCounter.current += 1
           const id = `prop_${propCounter.current}`
           const groundY = getPropGroundY(type)
-          const hasFreeY = Array.isArray(position) && Math.abs((position[1] || 0) - groundY) > 0.05
+          const isFreeSpaceAsset = ['airplane', 'spacecraft', 'planet', 'asteroid', 'starfield'].includes(type)
+          const requestedY = Array.isArray(position) ? Number(position[1]) || 0 : 0
+          const hasFreeY = isFreeSpaceAsset || requestedY > groundY + 0.1 || requestedY < -0.1
+          const resolvedPosition = Array.isArray(position)
+            ? (hasFreeY ? position : [position[0], groundY, position[2]])
+            : [0, groundY, 0]
           const newProp = {
             id,
             type,
-            position: position || [0, groundY, 0],
+            position: resolvedPosition,
             rotation: rotation || [0, 0, 0],
             scale: scale || [1, 1, 1],
-            color: '#666666',
+            color: type === 'car' || type === 'car_open' ? '#111827' : '#666666',
             locked: false,
             snapToGround: !hasFreeY,
           }
@@ -1193,7 +1632,8 @@ export default function DirectorPreviz({ onBack }) {
             if (p.id !== id) return p
             const type = p.type
             const groundY = getPropGroundY(type)
-            const hasFreeY = Array.isArray(position) && Math.abs((position[1] || 0) - groundY) > 0.05
+            const requestedY = Array.isArray(position) ? Number(position[1]) || 0 : groundY
+            const hasFreeY = requestedY > groundY + 0.1 || requestedY < -0.1
             return {
               ...p,
               position: position ? (hasFreeY || p.snapToGround === false ? position : [position[0], groundY, position[2]]) : p.position,
@@ -1207,7 +1647,8 @@ export default function DirectorPreviz({ onBack }) {
               if (p.id !== id) return p
               const type = p.type
               const groundY = getPropGroundY(type)
-              const hasFreeY = Array.isArray(position) && Math.abs((position[1] || 0) - groundY) > 0.05
+              const requestedY = Array.isArray(position) ? Number(position[1]) || 0 : groundY
+              const hasFreeY = requestedY > groundY + 0.1 || requestedY < -0.1
               return {
                 ...p,
                 position: position ? (hasFreeY || p.snapToGround === false ? position : [position[0], groundY, position[2]]) : p.position,
@@ -1261,6 +1702,16 @@ export default function DirectorPreviz({ onBack }) {
           const waitMs = Math.max(0, delay ?? 0.5) * 1000
           setAiStatus({ phase: 'recording', message: `AI 已完成预演，将自动录制 ${seconds}s 摄影机参考片...` })
           setTimeout(() => {
+            const execution = assessExecutableTimeline(tracksRef.current, {
+              cameraIds: camerasRef.current.map((camera) => camera.id),
+              duration: seconds,
+            })
+            setShotQuality(execution)
+            if (!execution.valid) {
+              setAiStatus(null)
+              setAiError(`已阻止静态空录制：${execution.warnings.join('；') || '没有有效运动轨道'}`)
+              return
+            }
             startVideoRecord({ autoStopAfter: seconds })
           }, waitMs)
         },
@@ -1286,13 +1737,48 @@ export default function DirectorPreviz({ onBack }) {
           )
         },
         addKeyframe: (time) => addKeyframeAt(time),
+        setCameraTrack: (id, keyframes, metadata = {}) => {
+          const nextTrack = {
+            targetType: 'camera',
+            targetId: id,
+            interpolation: 'cinematic',
+            rigType: metadata.rigType,
+            subject: metadata.subject,
+            keyframes,
+          }
+          const nextTracks = [
+            ...tracksRef.current.filter((track) => !(track.targetType === 'camera' && track.targetId === id)),
+            nextTrack,
+          ]
+          const optimized = optimizeCinematicTracks(nextTracks, durationRef.current)
+          tracksRef.current = optimized.tracks
+          setTracks(optimized.tracks)
+          setShotQuality(assessExecutableTimeline(optimized.tracks, {
+            cameraIds: camerasRef.current.map((camera) => camera.id),
+            duration: durationRef.current,
+          }))
+        },
         resetScene: () => {
+          const defaultCamera = { id: 'cam1', name: '主机位', fov: 45, position: [0, 2.2, 8], rotation: [0, 0, 0], lookAt: [0, FACE_LOOK_AT_Y, 0] }
           actorsRef.current = []
           propsRef.current = []
+          camerasRef.current = [defaultCamera]
+          tracksRef.current = []
+          activeCameraIdRef.current = 'cam1'
+          cameraFovRef.current = 45
           setActors([])
           setProps([])
+          setCameras([defaultCamera])
+          setTracks([])
+          setActiveCameraId('cam1')
+          setCameraFov(45)
+          setCameraMode('fixed')
+          setEnvironmentMode('ground')
+          setCurrentTime(0)
+          setShotQuality(null)
           setSelectedActor(null)
           setSelectedProp(null)
+          setSelectedCamera(null)
           setSelectedJoint(null)
         },
         clearAllProps: () => {
@@ -1309,11 +1795,25 @@ export default function DirectorPreviz({ onBack }) {
         getAllActors: () => actorsRef.current,
         getAllCameras: () => camerasRef.current,
         getAllProps: () => propsRef.current,
+        getTrack: (targetType, targetId) => tracksRef.current.find((track) => track.targetType === targetType && track.targetId === targetId),
+        getActiveCameraId: () => activeCameraIdRef.current,
       }
 
       // 执行命令
       const hasRecordCommand = commands.some((cmd) => cmd?.type === 'record_camera_video')
       const result = applyCommands(commands, callbacks)
+      if (hasRecordCommand) {
+        ensureCameraTrackForRecording({ prompt, duration: durationRef.current }, callbacks)
+      }
+      window.setTimeout(() => {
+        const optimized = optimizeCinematicTracks(tracksRef.current, durationRef.current)
+        tracksRef.current = optimized.tracks
+        setTracks(optimized.tracks)
+        setShotQuality(assessExecutableTimeline(optimized.tracks, {
+          cameraIds: camerasRef.current.map((camera) => camera.id),
+          duration: durationRef.current,
+        }))
+      }, 0)
       const shouldFallbackRecord = !hasRecordCommand && shouldAutoRecordFromPrompt(prompt)
       if (shouldFallbackRecord) {
         const recordDuration = extractDurationFromPrompt(prompt, durationRef.current)
@@ -1321,6 +1821,16 @@ export default function DirectorPreviz({ onBack }) {
         setDuration(recordDuration)
         setAiStatus({ phase: 'recording', message: `AI 已完成预演，将自动录制 ${recordDuration}s 摄影机参考片...` })
         setTimeout(() => {
+          const execution = assessExecutableTimeline(tracksRef.current, {
+            cameraIds: camerasRef.current.map((camera) => camera.id),
+            duration: recordDuration,
+          })
+          setShotQuality(execution)
+          if (!execution.valid) {
+            setAiStatus(null)
+            setAiError(`已阻止静态空录制：${execution.warnings.join('；') || '没有有效运动轨道'}`)
+            return
+          }
           startVideoRecord({ autoStopAfter: recordDuration })
         }, 650)
       }
@@ -1341,7 +1851,10 @@ export default function DirectorPreviz({ onBack }) {
       )
       return true
     } catch (err) {
-      setAiError(`网络错误：${err.message || '请检查后端服务是否启动'}`)
+      const message = err?.name === 'AbortError'
+        ? 'AI 响应超过135秒，已停止本次生成。请重试或检查 DeepSeek 接口延迟。'
+        : `网络错误：${err.message || '请检查后端服务是否启动'}`
+      setAiError(message)
       setAiStatus(null)
       return false
     } finally {
@@ -1350,7 +1863,7 @@ export default function DirectorPreviz({ onBack }) {
   }, [
     aiLoading, props, tracks, aspectRatio, cameraFov, cameraMode,
     selectedActor, selectedCamera, selectedProp, activeCameraId,
-    addKeyframeAt, backgroundImage, backgroundImages, duration, environmentMode, startVideoRecord, updateActiveCameraFov,
+    addKeyframeAt, backgroundImage, backgroundImages, clearLastRecording, duration, environmentMode, startVideoRecord, updateActiveCameraFov,
   ])
 
   const updateShotPlanItem = useCallback((shotId, patch) => {
@@ -1443,7 +1956,7 @@ ${shot.previz_prompt || ''}
   const hasAISnapshot = () => aiSnapshotRef.current !== null
 
   useEffect(() => () => {
-    if (playbackRef.current) clearInterval(playbackRef.current)
+    if (playbackRef.current) cancelAnimationFrame(playbackRef.current)
     if (recordTimerRef.current) clearInterval(recordTimerRef.current)
   }, [])
 
@@ -1474,21 +1987,10 @@ ${shot.previz_prompt || ''}
         setCameraMode={setCameraMode}
         aspectRatio={aspectRatio}
         setAspectRatio={setAspectRatio}
-        transformMode={transformMode}
-        setTransformMode={setTransformMode}
         showGrid={showGrid}
         setShowGrid={setShowGrid}
         showGuides={showGuides}
         setShowGuides={setShowGuides}
-        isPlaying={isPlaying}
-        isRecording={isRecording}
-        loopMode={loopMode}
-        onPlay={play}
-        onPause={pause}
-        onStop={stop}
-        onRecord={startRecord}
-        onLoop={() => setLoopMode((value) => !value)}
-        onAddKeyframe={addKeyframeNow}
         onScreenshot={() => exportScreenshot()}
         onRecordVideo={handleVideoRecord}
         onExportMode={handleExportMode}
@@ -1515,76 +2017,92 @@ ${shot.previz_prompt || ''}
         onUpdateBackground={updateBackgroundImage}
         onRemoveBackground={removeBackgroundImage}
         onFitBackgroundToCamera={fitBackgroundToCamera}
+        shotPackageContent={(
+          <ShotPackagePanel
+            shot={currentShot}
+            shotPackage={currentShotPackage}
+            references={referenceLibrary}
+            sceneContext={packageSceneContext}
+            isRecording={isVideoRecording}
+            busy={packageBusy}
+            error={packageError}
+            onAddReferences={addReferenceAssets}
+            onRemoveReference={removeReferenceAsset}
+            onUpdateReference={updateReferenceAsset}
+            onCaptureFrame={capturePackageFrame}
+            onGenerateStyledFrame={generateStyledPackageFrame}
+            onRecordPreviz={handlePackageRecording}
+            onUpdatePackage={updateShotPackage}
+            onSendToVideo={sendPackageToVideo}
+          />
+        )}
       />
 
       <div className="previz-canvas-wrap">
-        {onBack && <button className="previz-back-btn" onClick={onBack}>返回</button>}
-        {exportStatus && <div className="previz-export-toast">{exportStatus}</div>}
-        {isRecording && <div className="previz-rec-indicator"><div className="rec-dot" />录制中 {currentTime.toFixed(1)}s</div>}
+        <div className="previz-stage-toolbar" aria-label="导演台工具栏">
+          {onBack ? <button type="button" className="previz-tool-back" onClick={onBack}>← 返回</button> : null}
+          <div className="previz-tool-group">
+            <button type="button" onClick={isPlaying ? pause : play} disabled={isRecording || recordSurfaceActive}>{isPlaying ? '暂停' : '播放'}</button>
+            <button type="button" onClick={stop} disabled={recordSurfaceActive}>停止</button>
+            <button type="button" className={loopMode ? 'active' : ''} aria-pressed={loopMode} onClick={() => setLoopMode((value) => !value)} disabled={recordSurfaceActive}>循环</button>
+          </div>
+          <span className="previz-tool-time">{currentTime.toFixed(1)}s <b>/</b> {duration}s</span>
+          {shotQuality ? (
+            <span className={`previz-quality-badge grade-${shotQuality.grade.toLowerCase()}`} role="status" title={shotQuality.warnings.join('\n') || '镜头路径、速度与焦段检查通过'}>
+              镜头 {shotQuality.score}分 · {shotQuality.grade}
+            </span>
+          ) : null}
+          <div className="previz-tool-group">
+            <button type="button" onClick={addKeyframeNow} disabled={recordSurfaceActive}>+关键帧</button>
+            <button type="button" className={isRecording ? 'danger active' : ''} onClick={isRecording ? stopRecord : startRecord} disabled={recordSurfaceActive}>{isRecording ? '停止采集' : '采集动作'}</button>
+            <button type="button" className={isVideoRecording ? 'danger active' : 'primary'} onClick={handleVideoRecord}>{isVideoRecording ? '停止录制' : `录制 ${duration}s`}</button>
+          </div>
+          <div className="previz-tool-spacer" />
+          <div className="previz-tool-group compact" aria-label="变换工具">
+            <button type="button" className={transformMode === 'translate' ? 'active' : ''} aria-pressed={transformMode === 'translate'} onClick={() => setTransformMode('translate')}>移动 W</button>
+            <button type="button" className={transformMode === 'rotate' ? 'active' : ''} aria-pressed={transformMode === 'rotate'} onClick={() => setTransformMode('rotate')}>旋转 E</button>
+            <button type="button" className={transformMode === 'scale' ? 'active' : ''} aria-pressed={transformMode === 'scale'} onClick={() => setTransformMode('scale')}>缩放 R</button>
+          </div>
+          <div className="previz-tool-group compact" aria-label="视口模式">
+            <button type="button" className={viewportMode === 'director' ? 'active' : ''} aria-pressed={viewportMode === 'director'} onClick={() => setViewportMode('director')}>导演视图</button>
+            <button type="button" className={viewportMode === 'camera' ? 'active' : ''} aria-pressed={viewportMode === 'camera'} onClick={() => setViewportMode('camera')}>机位视图</button>
+          </div>
+        </div>
+        {exportStatus && <div className="previz-export-toast" role="status" aria-live="polite">{exportStatus}</div>}
+        {lastRecording ? (
+          <aside className="previz-recording-result" aria-label="最近录制的视频">
+            <div className="previz-recording-result-head">
+              <div>
+                <strong>预演视频已生成</strong>
+                <small>{lastRecording.width}×{lastRecording.height} · {lastRecording.fps}fps · {(lastRecording.size / 1024 / 1024).toFixed(1)}MB{lastRecording.converting ? ' · 正在转换MP4' : ''}</small>
+              </div>
+              <button type="button" aria-label="关闭视频结果" onClick={clearLastRecording}>×</button>
+            </div>
+            <video
+              key={lastRecording.url}
+              src={lastRecording.url}
+              controls
+              preload="metadata"
+              playsInline
+              onEnded={(event) => { event.currentTarget.currentTime = 0 }}
+            />
+            <button type="button" className="primary" onClick={downloadLastRecording} disabled={lastRecording.converting}>
+              {lastRecording.converting ? '正在生成标准MP4…' : `下载${String(lastRecording.ext || 'mp4').toUpperCase()}视频`}
+            </button>
+          </aside>
+        ) : null}
+        {isRecording && <div className="previz-rec-indicator" role="status" aria-live="polite"><div className="rec-dot" />录制中 {currentTime.toFixed(1)}s</div>}
         {placementMode && <div className="previz-placement-indicator">点击地面放置道具</div>}
-        <Canvas shadows camera={{ position: [0, 6, 12], fov: 55, near: 0.1, far: 500 }} gl={{ antialias: true, preserveDrawingBuffer: true }} onPointerMissed={handlePointerMissed}>
-          <color attach="background" args={['#1e1e1e']} />
-          <PrevizScene
-            actors={actors}
-            props={props}
-            cameras={cameras}
-            activeCameraId={activeCameraId}
-            cameraFov={cameraFov}
-            aspectRatio={aspectRatio}
-            showGrid={showGrid}
-            showGuides={showGuides}
-            selectedActor={selectedActor}
-            selectedProp={selectedProp}
-            selectedCamera={selectedCamera}
-            selectedJoint={selectedJoint}
-            onSelectActor={selectActor}
-            onSelectProp={selectProp}
-            onSelectCamera={selectCamera}
-            onSelectJoint={setSelectedJoint}
-            actorRefs={actorRefs}
-            propRefs={propRefs}
-            cameraRefs={cameraRefs}
-            onRegisterObject={registerSceneObject}
-            placementMode={placementMode}
-            onPlaceProp={placeProp}
-            backgroundImages={backgroundImages}
-            environmentMode={environmentMode}
-          />
-          <OrbitControls makeDefault enabled={!isTransforming} />
-          {selectedActor && selectedActorTarget && (
-            <TransformGizmo
-              target={selectedActorTarget}
-              mode={selectedJoint ? 'rotate' : transformMode}
-              onChange={(position, rotation, scale) => selectedJoint ? updateJoint(selectedActor, selectedJoint, rotation) : handleActorTransform(selectedActor, position, rotation, scale)}
-              onDragStart={() => setIsTransforming(true)}
-              onDragEnd={() => setIsTransforming(false)}
-            />
-          )}
-          {selectedProp && selectedPropRoot && (
-            <TransformGizmo
-              target={selectedPropRoot}
-              mode={transformMode}
-              onChange={(position, rotation, scale) => handlePropTransform(selectedProp, position, rotation, scale)}
-              onDragStart={() => setIsTransforming(true)}
-              onDragEnd={() => setIsTransforming(false)}
-            />
-          )}
-          {selectedCamera && selectedCameraRoot && (
-            <TransformGizmo
-              target={selectedCameraRoot}
-              mode={transformMode}
-              onChange={(position, rotation) => handleCameraTransform(selectedCamera, position, rotation, transformMode)}
-              onDragStart={() => setIsTransforming(true)}
-              onDragEnd={() => setIsTransforming(false)}
-            />
-          )}
-        </Canvas>
-
-        <div className="previz-preview-window">
-          <div className="previz-preview-label">{activeCamera?.name || 'CAM'} | {activeCamera?.fov || cameraFov} | {aspectRatio}{isVideoRecording ? ' | REC' : ''}</div>
-          <Canvas style={{ width: '100%', height: '100%' }} camera={{ position: activeCamera?.position || [0, 2.2, 8], fov: activeCamera?.fov || cameraFov, near: 0.05, far: 2000 }} gl={{ antialias: true, preserveDrawingBuffer: true }}>
-            <color attach="background" args={['#000000']} />
-            <MoviePreviewCamera cameraConfig={activeCamera} aspectRatio={aspectRatio} fallbackFov={cameraFov} />
+        {recordSurfaceActive ? (
+          <div className="previz-rendering-overlay">
+            <div className="previz-ai-spinner" />
+            <strong>{isVideoRecording ? '正在录制高清预演' : '正在捕获高清构图'}</strong>
+            <small>已暂停编辑视口，保证 WebGL 稳定性</small>
+          </div>
+        ) : (
+          <Canvas shadows camera={{ position: [0, 6, 12], fov: 55, near: 0.1, far: 500 }} gl={{ antialias: true, preserveDrawingBuffer: true, powerPreference: 'high-performance' }} onPointerMissed={handlePointerMissed}>
+            <color attach="background" args={[viewportMode === 'camera' ? '#000000' : '#1e1e1e']} />
+            {viewportMode === 'camera' ? <MoviePreviewCamera cameraConfig={activeCamera} aspectRatio={aspectRatio} fallbackFov={cameraFov} /> : null}
             <PrevizScene
               actors={actors}
               props={props}
@@ -1592,63 +2110,96 @@ ${shot.previz_prompt || ''}
               activeCameraId={activeCameraId}
               cameraFov={cameraFov}
               aspectRatio={aspectRatio}
-              showGrid={false}
+              showGrid={viewportMode === 'director' ? showGrid : false}
               showGuides={showGuides}
-              selectedActor={null}
-              selectedProp={null}
-              selectedCamera={null}
-              selectedJoint={null}
-              onSelectActor={() => {}}
-              onSelectProp={() => {}}
-              onSelectCamera={() => {}}
-              onSelectJoint={() => {}}
-              actorRefs={{ current: {} }}
-              propRefs={{ current: {} }}
-              cameraRefs={{ current: {} }}
-              showCameraRigs={false}
+              selectedActor={viewportMode === 'director' ? selectedActor : null}
+              selectedProp={viewportMode === 'director' ? selectedProp : null}
+              selectedCamera={viewportMode === 'director' ? selectedCamera : null}
+              selectedJoint={viewportMode === 'director' ? selectedJoint : null}
+              onSelectActor={viewportMode === 'director' ? selectActor : () => {}}
+              onSelectProp={viewportMode === 'director' ? selectProp : () => {}}
+              onSelectCamera={viewportMode === 'director' ? selectCamera : () => {}}
+              onSelectJoint={viewportMode === 'director' ? setSelectedJoint : () => {}}
+              actorRefs={actorRefs}
+              propRefs={propRefs}
+              cameraRefs={cameraRefs}
+              onRegisterObject={registerSceneObject}
+              placementMode={viewportMode === 'director' ? placementMode : null}
+              onPlaceProp={placeProp}
+              showCameraRigs={viewportMode === 'director'}
               backgroundImages={backgroundImages}
-              isPreview
+              isPreview={viewportMode === 'camera'}
               environmentMode={environmentMode}
             />
+            {viewportMode === 'director' ? <OrbitControls makeDefault enabled={!isTransforming} /> : null}
+            {viewportMode === 'director' && selectedActor && selectedActorTarget ? (
+              <TransformGizmo
+                target={selectedActorTarget}
+                mode={selectedJoint ? 'rotate' : transformMode}
+                onChange={(position, rotation, scale) => selectedJoint ? updateJoint(selectedActor, selectedJoint, rotation) : handleActorTransform(selectedActor, position, rotation, scale)}
+                onDragStart={() => setIsTransforming(true)}
+                onDragEnd={() => setIsTransforming(false)}
+              />
+            ) : null}
+            {viewportMode === 'director' && selectedProp && selectedPropRoot ? (
+              <TransformGizmo
+                target={selectedPropRoot}
+                mode={transformMode}
+                onChange={(position, rotation, scale) => handlePropTransform(selectedProp, position, rotation, scale)}
+                onDragStart={() => setIsTransforming(true)}
+                onDragEnd={() => setIsTransforming(false)}
+              />
+            ) : null}
+            {viewportMode === 'director' && selectedCamera && selectedCameraRoot ? (
+              <TransformGizmo
+                target={selectedCameraRoot}
+                mode={transformMode}
+                onChange={(position, rotation) => handleCameraTransform(selectedCamera, position, rotation, transformMode)}
+                onDragStart={() => setIsTransforming(true)}
+                onDragEnd={() => setIsTransforming(false)}
+              />
+            ) : null}
           </Canvas>
-        </div>
+        )}
 
-        <div className="previz-record-canvas" aria-hidden="true">
-          <Canvas
-            style={{ width: '1920px', height: '1080px' }}
-            dpr={1}
-            camera={{ position: activeCamera?.position || [0, 2.2, 8], fov: activeCamera?.fov || cameraFov, near: 0.05, far: 2000 }}
-            gl={{ antialias: true, preserveDrawingBuffer: true }}
-          >
-            <color attach="background" args={['#000000']} />
-            <MoviePreviewCamera cameraConfig={activeCamera} aspectRatio={aspectRatio} fallbackFov={cameraFov} />
-            <PrevizScene
-              actors={actors}
-              props={props}
-              cameras={cameras}
-              activeCameraId={activeCameraId}
-              cameraFov={cameraFov}
-              aspectRatio={aspectRatio}
-              showGrid={false}
-              showGuides={showGuides}
-              selectedActor={null}
-              selectedProp={null}
-              selectedCamera={null}
-              selectedJoint={null}
-              onSelectActor={() => {}}
-              onSelectProp={() => {}}
-              onSelectCamera={() => {}}
-              onSelectJoint={() => {}}
-              actorRefs={{ current: {} }}
-              propRefs={{ current: {} }}
-              cameraRefs={{ current: {} }}
-              showCameraRigs={false}
-              backgroundImages={backgroundImages}
-              isPreview
-              environmentMode={environmentMode}
-            />
-          </Canvas>
-        </div>
+        {recordSurfaceActive ? (
+          <div className="previz-record-canvas" aria-hidden="true" style={{ width: recordDimensions.width, height: recordDimensions.height }}>
+            <Canvas
+              style={{ width: `${recordDimensions.width}px`, height: `${recordDimensions.height}px` }}
+              dpr={1}
+              camera={{ position: activeCamera?.position || [0, 2.2, 8], fov: activeCamera?.fov || cameraFov, near: 0.05, far: 2000 }}
+              gl={{ antialias: true, preserveDrawingBuffer: true }}
+            >
+              <color attach="background" args={['#000000']} />
+              <MoviePreviewCamera cameraConfig={activeCamera} aspectRatio={aspectRatio} fallbackFov={cameraFov} />
+              <PrevizScene
+                actors={actors}
+                props={props}
+                cameras={cameras}
+                activeCameraId={activeCameraId}
+                cameraFov={cameraFov}
+                aspectRatio={aspectRatio}
+                showGrid={false}
+                showGuides={showGuides}
+                selectedActor={null}
+                selectedProp={null}
+                selectedCamera={null}
+                selectedJoint={null}
+                onSelectActor={() => {}}
+                onSelectProp={() => {}}
+                onSelectCamera={() => {}}
+                onSelectJoint={() => {}}
+                actorRefs={{ current: {} }}
+                propRefs={{ current: {} }}
+                cameraRefs={{ current: {} }}
+                showCameraRigs={false}
+                backgroundImages={backgroundImages}
+                isPreview
+                environmentMode={environmentMode}
+              />
+            </Canvas>
+          </div>
+        ) : null}
 
         <div className="previz-info-tag">
           右键旋转 | 滚轮缩放 | Shift+右键平移
@@ -1677,7 +2228,7 @@ ${shot.previz_prompt || ''}
           props={props}
           cameras={cameras}
           timeline={tracks}
-          config={{ aspectRatio, fps: FPS, backgroundImage, backgroundImages }}
+          config={{ aspectRatio, fps: FPS, backgroundImage, backgroundImages, shotPackages, referenceLibrary }}
           onClose={() => setShowProject(false)}
           onLoad={loadProject}
         />

@@ -542,10 +542,23 @@ async function ensurePublicImageUrl(imageUrl) {
   return uploadLocalImageToPublicUrl(imageUrl);
 }
 
+/**
+ * Ensure an uploaded image/video/audio URL can be fetched by an external model.
+ * The generic upload providers used by uploadLocalImageToPublicUrl preserve the
+ * original filename and MIME inferred from the extension, so the same path is
+ * safe for the short, low-bitrate previz clips produced by the director desk.
+ */
+async function ensurePublicMediaUrl(mediaUrl) {
+  if (!mediaUrl || typeof mediaUrl !== 'string') return null;
+  if (!isLocalUrl(mediaUrl) && isHttpUrl(mediaUrl)) return mediaUrl;
+  return uploadLocalImageToPublicUrl(mediaUrl);
+}
+
 module.exports = {
   urlToBase64,
   urlsToBase64,
   isLocalUrl,
   ensurePublicImageUrl,
+  ensurePublicMediaUrl,
   uploadLocalImageToPublicUrl,
 };

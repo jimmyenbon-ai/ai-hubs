@@ -3,16 +3,19 @@ import { TransformControls } from '@react-three/drei'
 import { useThree } from '@react-three/fiber'
 
 export default function TransformGizmo({ target, mode, onChange, onDragStart, onDragEnd }) {
-  const { camera, gl } = useThree()
+  const { camera, gl, scene } = useThree()
   const controlsRef = useRef(null)
 
-  useEffect(() => {
-    if (!controlsRef.current || !target) return undefined
-    const controls = controlsRef.current
-    controls.attach(target)
-    controls.setMode(mode)
-    return () => controls.detach()
-  }, [mode, target])
+  let current = target
+  let isInCurrentScene = false
+  while (current) {
+    if (current === scene) {
+      isInCurrentScene = true
+      break
+    }
+    current = current.parent
+  }
+  const attachedTarget = isInCurrentScene ? target : null
 
   useEffect(() => {
     if (!controlsRef.current) return undefined
@@ -22,8 +25,8 @@ export default function TransformGizmo({ target, mode, onChange, onDragStart, on
       if (event.value) {
         onDragStart?.()
       } else {
-        if (target) {
-          onChange?.(target.position.toArray(), target.rotation.toArray(), target.scale.toArray())
+        if (attachedTarget) {
+          onChange?.(attachedTarget.position.toArray(), attachedTarget.rotation.toArray(), attachedTarget.scale.toArray())
         }
         onDragEnd?.()
       }
@@ -31,7 +34,7 @@ export default function TransformGizmo({ target, mode, onChange, onDragStart, on
 
     controls.addEventListener('dragging-changed', handleDragging)
     return () => controls.removeEventListener('dragging-changed', handleDragging)
-  }, [onChange, onDragEnd, onDragStart, target])
+  }, [attachedTarget, onChange, onDragEnd, onDragStart])
 
   useEffect(() => {
     const handleKey = (event) => {
@@ -44,17 +47,17 @@ export default function TransformGizmo({ target, mode, onChange, onDragStart, on
     return () => window.removeEventListener('keydown', handleKey)
   }, [])
 
-  if (!target) return null
+  if (!attachedTarget) return null
 
   return (
     <TransformControls
       ref={controlsRef}
-      object={target}
+      object={attachedTarget}
       mode={mode}
       camera={camera}
       domElement={gl.domElement}
       onObjectChange={() => {
-        onChange?.(target.position.toArray(), target.rotation.toArray(), target.scale.toArray())
+        onChange?.(attachedTarget.position.toArray(), attachedTarget.rotation.toArray(), attachedTarget.scale.toArray())
       }}
     />
   )

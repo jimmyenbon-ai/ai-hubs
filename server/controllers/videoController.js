@@ -4,7 +4,7 @@ const { createAgnesVideoTask, queryAgnesVideoTask } = require('../utils/agnesVid
 const { deductPoints } = require('../utils/pointsService');
 const cache = require('../utils/cache');
 const { saveVideo: saveVideoLocal, localPathToUrl } = require('../utils/localStorage');
-const { ensurePublicImageUrl } = require('../utils/imageUtils');
+const { ensurePublicImageUrl, ensurePublicMediaUrl } = require('../utils/imageUtils');
 
 // 生成模式常量
 const GENERATION_MODE = {
@@ -103,6 +103,31 @@ function buildContent(mode, params) {
   return content;
 }
 
+async function normalizeMultimodalContent(content) {
+  return Promise.all(content.map(async (item) => {
+    if (!item || typeof item !== 'object') return item;
+    if (item.type === 'image_url' && item.image_url?.url) {
+      return {
+        ...item,
+        image_url: { ...item.image_url, url: await ensurePublicImageUrl(item.image_url.url) },
+      };
+    }
+    if (item.type === 'video_url' && item.video_url?.url) {
+      return {
+        ...item,
+        video_url: { ...item.video_url, url: await ensurePublicMediaUrl(item.video_url.url) },
+      };
+    }
+    if (item.type === 'audio_url' && item.audio_url?.url) {
+      return {
+        ...item,
+        audio_url: { ...item.audio_url, url: await ensurePublicMediaUrl(item.audio_url.url) },
+      };
+    }
+    return item;
+  }));
+}
+
 /**
  * POST /api/video/generate
  * 创建视频生成任务
@@ -135,6 +160,10 @@ async function handleVideoGenerate(req, res, next) {
 
     // 如果前端直接传了 content 数组（多模态模式），直接使用
     let requestContent = content
+
+    if (Array.isArray(requestContent) && requestContent.length > 0) {
+      requestContent = await normalizeMultimodalContent(requestContent);
+    }
 
     if (!requestContent || !Array.isArray(requestContent) || requestContent.length === 0) {
       // 验证必填参数

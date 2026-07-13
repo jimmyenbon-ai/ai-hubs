@@ -59,18 +59,32 @@ const MEDIA_TYPE_LABELS = {
   [MEDIA_TYPE.AUDIO]: '音频',
 }
 
-function VideoGenerate() {
+function getPrevizAssets(previzPackage) {
+  return (previzPackage?.assets || []).slice(0, 9).map((asset, index) => ({
+    id: index + 1,
+    url: asset.url,
+    filename: asset.name || asset.label || `previz-asset-${index + 1}`,
+    originalname: asset.label || asset.name || `预演资产 ${index + 1}`,
+    type: asset.type === 'video' ? MEDIA_TYPE.VIDEO : asset.type === 'audio' ? MEDIA_TYPE.AUDIO : MEDIA_TYPE.IMAGE,
+    source: 'previz',
+    label: asset.label,
+  }))
+}
+
+function VideoGenerate({ previzPackage = null }) {
+  const initialPrevizAssets = getPrevizAssets(previzPackage)
+  const initialFirstFrame = initialPrevizAssets[0]?.type === MEDIA_TYPE.IMAGE ? initialPrevizAssets[0] : null
+  const initialLastFrame = initialPrevizAssets[1]?.type === MEDIA_TYPE.IMAGE ? initialPrevizAssets[1] : null
   // 视频提供商状态
   const [videoProvider, setVideoProvider] = useState(VIDEO_PROVIDER.SEEDANCE)
   
-  const [generationMode, setGenerationMode] = useState(GENERATION_MODE.TEXT_TO_VIDEO)
+  const [generationMode, setGenerationMode] = useState(() => previzPackage?.id ? GENERATION_MODE.MULTIMODAL_REFERENCE : GENERATION_MODE.TEXT_TO_VIDEO)
   const [agnesMode, setAgnesMode] = useState(AGNES_GENERATION_MODE.TEXT_TO_VIDEO)
   const [selectedModel, setSelectedModel] = useState('doubao-seedance-2-0-260128')
-  const [provider, setProvider] = useState('seedance')
-  const [prompt, setPrompt] = useState('')
+  const [prompt, setPrompt] = useState(() => previzPackage?.videoPrompt || '')
   const [resolution, setResolution] = useState('720p')
-  const [ratio, setRatio] = useState('16:9')
-  const [duration, setDuration] = useState(5)
+  const [ratio, setRatio] = useState(() => previzPackage?.aspectRatio || '16:9')
+  const [duration, setDuration] = useState(() => Number(previzPackage?.duration) || 5)
   const [seed, setSeed] = useState(-1)
   const [generateAudio, setGenerateAudio] = useState(true)
   const [watermark, setWatermark] = useState(false)
@@ -87,15 +101,15 @@ function VideoGenerate() {
   const multiImageInputRef = useRef(null)
 
   // 统一素材列表
-  const [uploadedFiles, setUploadedFiles] = useState([])
+  const [uploadedFiles, setUploadedFiles] = useState(() => initialPrevizAssets)
   const [loadingUpload, setLoadingUpload] = useState(false)
   const uploadInputRef = useRef(null)
 
   // 首帧/尾帧（图生视频模式）
-  const [firstFrameUrl, setFirstFrameUrl] = useState('')
-  const [lastFrameUrl, setLastFrameUrl] = useState('')
-  const [firstFrameName, setFirstFrameName] = useState('')
-  const [lastFrameName, setLastFrameName] = useState('')
+  const [firstFrameUrl, setFirstFrameUrl] = useState(() => initialFirstFrame?.url || '')
+  const [lastFrameUrl, setLastFrameUrl] = useState(() => initialLastFrame?.url || '')
+  const [firstFrameName, setFirstFrameName] = useState(() => initialFirstFrame?.filename || '')
+  const [lastFrameName, setLastFrameName] = useState(() => initialLastFrame?.filename || '')
   const firstFrameInputRef = useRef(null)
   const lastFrameInputRef = useRef(null)
   const promptRef = useRef(null)
@@ -131,7 +145,6 @@ function VideoGenerate() {
   const pollBackoffMsRef = useRef(5000)
   const pollDeadlineRef = useRef({})
   const historyFetchDebounceRef = useRef(null)
-
   useEffect(() => {
     fetchVideoHistory()
     return () => {
@@ -827,7 +840,7 @@ function VideoGenerate() {
         const newImages = data.files.map((f, idx) => ({
           id: multiImages.length + idx + 1,
           url: f.url,
-          filename: f.filename || f.originalname || file.name,
+          filename: f.filename || f.originalname || Array.from(files)[idx]?.name || `image-${idx + 1}`,
         }))
         setMultiImages(prev => [...prev, ...newImages])
       } else {
@@ -856,6 +869,16 @@ function VideoGenerate() {
         <div className="panel-title">
           <span style={{ cursor: 'pointer' }}>&larr;</span> 工具箱 - AI 视频生成
         </div>
+
+        {previzPackage?.id ? (
+          <div className="video-previz-import-banner">
+            <span>3D PREVIZ</span>
+            <div>
+              <strong>{previzPackage.shotId || '当前镜头'} · {previzPackage.title || '预演资产包'}</strong>
+              <small>已自动载入 {previzPackage.assets?.length || 0} 份素材、{previzPackage.duration || 5}秒时长与运镜约束</small>
+            </div>
+          </div>
+        ) : null}
 
         {/* API 提供商切换 */}
         <div className="section-label">选择 API 提供商</div>

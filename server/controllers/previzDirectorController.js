@@ -7,7 +7,7 @@ const logger = require('../utils/logger');
 
 async function handleDirect(req, res, next) {
   try {
-    const { scene_context, prompt, director_profile, material_type, source_title } = req.body;
+    const { scene_context, prompt, director_profile, material_type, source_title, replace_scene } = req.body;
 
     if (!prompt || !prompt.trim()) {
       return res.status(400).json({
@@ -22,6 +22,7 @@ async function handleDirect(req, res, next) {
       directorProfile: director_profile,
       materialType: material_type,
       sourceTitle: source_title,
+      replaceScene: Boolean(replace_scene),
     });
 
     if (result.success) {
@@ -68,7 +69,7 @@ async function handlePlan(req, res, next) {
 }
 
 async function handleDirectStream(req, res) {
-  const { scene_context, prompt, director_profile, material_type, source_title } = req.body;
+  const { scene_context, prompt, director_profile, material_type, source_title, replace_scene } = req.body;
 
   if (!prompt || !prompt.trim()) {
     return res.status(400).json({
@@ -97,6 +98,7 @@ async function handleDirectStream(req, res) {
       directorProfile: director_profile,
       materialType: material_type,
       sourceTitle: source_title,
+      replaceScene: Boolean(replace_scene),
     });
 
     if (result.success) {

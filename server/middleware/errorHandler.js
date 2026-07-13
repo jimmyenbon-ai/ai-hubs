@@ -13,8 +13,8 @@ function errorHandler(err, req, res, next) {
   if (err && (err.name === 'MulterError' || err.code)) {
     if (err.code === 'LIMIT_FILE_SIZE') {
       status = 413;
-      const mb = Number(process.env.MAX_UPLOAD_MB || 10);
-      message = `文件过大，请上传不超过 ${Number.isFinite(mb) ? mb : 10}MB 的图片`;
+      const mb = Number(process.env.MAX_UPLOAD_MB || 30);
+      message = `文件过大，请上传不超过 ${Number.isFinite(mb) ? mb : 30}MB 的素材`;
     } else if (err.code === 'LIMIT_FILE_COUNT') {
       status = 400;
       message = '上传文件数量超限';
@@ -31,4 +31,3 @@ function errorHandler(err, req, res, next) {
 }
 
 module.exports = errorHandler;
-

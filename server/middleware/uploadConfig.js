@@ -42,11 +42,11 @@ function fileFilter(req, file, cb) {
   }
 }
 
-const maxUploadMb = Number(process.env.MAX_UPLOAD_MB || 10);
+const maxUploadMb = Number(process.env.MAX_UPLOAD_MB || 30);
 const maxFileSizeBytes =
   Number.isFinite(maxUploadMb) && maxUploadMb > 0
     ? Math.floor(maxUploadMb * 1024 * 1024)
-    : 10 * 1024 * 1024;
+    : 30 * 1024 * 1024;
 
 const upload = multer({
   storage,
@@ -58,4 +58,3 @@ const upload = multer({
 });
 
 module.exports = upload;
-

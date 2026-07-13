@@ -23,7 +23,7 @@ const PROP_GROUND_Y = {
   door: 1.1, window: 1.4, screen: 0.9, carpet: 0.03,
   corridor: 1.5, elevator: 2, console: 0.75, cockpit: 1, hatch: 1.25,
   med_bed: 0.35, lab_table: 0.55,
-  building: 4, street: 0.05, lamp: 2, billboard: 2, bridge: 1,
+  building: 4, street: 0.05, lamp: 2, billboard: 2, bridge: 1, car: 0.48, car_open: 0.48,
   led_screen: 1.5, product_box: 0.5, product_panel: 1, airplane: 0, spacecraft: 0,
   planet: 0, asteroid: 0, starfield: 0, hologram: 1,
 }
@@ -283,6 +283,29 @@ function Furniture({ type, color }) {
           <PropMesh args={[0.48, 0.18, 0.48]} position={[0, 2.05, 0]} color="#fde68a" />
         </>
       )
+    case 'car':
+    case 'car_open':
+      return (
+        <>
+          <PropMesh args={[1.85, 0.42, 4.1]} position={[0, -0.12, 0]} color={c || '#111827'} />
+          <PropMesh args={[1.58, 0.52, 1.85]} position={[0, 0.28, -0.2]} color="#1f2937" />
+          <PropMesh args={[1.42, 0.38, 0.06]} position={[0, 0.32, -1.14]} rotation={[-0.22, 0, 0]} color="#60a5fa" />
+          <PropMesh args={[1.42, 0.34, 0.06]} position={[0, 0.32, 0.76]} rotation={[0.22, 0, 0]} color="#334155" />
+          {[-0.88, 0.88].flatMap((x) => [-1.25, 1.25].map((z) => (
+            <mesh key={`wheel-${x}-${z}`} position={[x, -0.18, z]} rotation={[0, 0, Math.PI / 2]} castShadow>
+              <cylinderGeometry args={[0.36, 0.36, 0.22, 18]} />
+              <meshStandardMaterial color="#09090b" roughness={0.8} />
+            </mesh>
+          )))}
+          {[-0.58, 0.58].map((x) => <PropMesh key={`head-${x}`} args={[0.34, 0.12, 0.05]} position={[x, 0.02, -2.08]} color="#f8fafc" />)}
+          {[-0.58, 0.58].map((x) => <PropMesh key={`tail-${x}`} args={[0.34, 0.12, 0.05]} position={[x, 0.02, 2.08]} color="#ef4444" />)}
+          {type === 'car_open' ? (
+            <group position={[-0.96, 0.12, -0.2]} rotation={[0, -0.95, 0]}>
+              <PropMesh args={[0.08, 0.62, 1.55]} position={[-0.55, 0, 0]} color={c || '#111827'} />
+            </group>
+          ) : null}
+        </>
+      )
     case 'platform':
       return (
         <mesh castShadow receiveShadow>
@@ -379,7 +402,7 @@ function Furniture({ type, color }) {
       const boxes = {
         wall: [4, 3, 0.18], cabinet: [1, 1.8, 0.6], screen: [2, 1.8, 0.08], carpet: [3, 0.05, 2],
         elevator: [2, 4, 2], base_module: [5, 2, 5], med_bed: [2.2, 0.7, 1], lab_table: [2, 1, 0.8],
-        building: [6, 8, 6], street: [10, 0.1, 3], billboard: [3, 2, 0.3], bridge: [8, 2, 2],
+        building: [3.5, 6, 3.5], street: [14, 0.1, 5], billboard: [3, 2, 0.3], bridge: [8, 2, 2],
       }
       return <PropMesh args={boxes[type] || [1, 1, 1]} position={[0, 0, 0]} color={c} />
     }
@@ -442,12 +465,12 @@ export const MovieCameraRig = forwardRef(function MovieCameraRig({ camera, activ
 })
 
 function GroundReference({ showGrid = true, muted = false }) {
-  const floorColor = muted ? '#20352d' : '#263b34'
-  const gridPrimary = muted ? '#7bd7c1' : '#9fd7c9'
-  const gridSecondary = muted ? '#45675d' : '#536f66'
-  const laneColor = muted ? '#00e6b8' : '#00ffcc'
-  const depthColor = muted ? '#ffd36a' : '#ffcc66'
-  const markerColor = muted ? '#8bd3ff' : '#a8ddff'
+  const floorColor = muted ? '#454a52' : '#565c66'
+  const gridPrimary = muted ? '#e5e7eb' : '#ffffff'
+  const gridSecondary = muted ? '#8c949f' : '#b8c0cb'
+  const laneColor = muted ? '#f3f4f6' : '#ffffff'
+  const depthColor = muted ? '#cfd4da' : '#e5e7eb'
+  const markerColor = muted ? '#aeb5bf' : '#d1d5db'
 
   return (
     <>

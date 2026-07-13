@@ -1,67 +1,11 @@
 import { useCallback, useEffect, useRef } from 'react'
 import { POSE_PARTS } from './PrevizCanvas'
-
-function lerp3(a, b, t) {
-  if (!a || !b) return a || b || [0, 0, 0]
-  return [
-    a[0] + (b[0] - a[0]) * t,
-    a[1] + (b[1] - a[1]) * t,
-    a[2] + (b[2] - a[2]) * t,
-  ]
-}
-
-function lerp1(a, b, t) {
-  if (a == null && b == null) return null
-  if (a == null) return b
-  if (b == null) return a
-  return a + (b - a) * t
-}
-
-function getSpan(keyframes, time) {
-  if (!keyframes?.length) return null
-  if (time <= keyframes[0].time) return { a: keyframes[0], b: keyframes[0], t: 0 }
-  const last = keyframes[keyframes.length - 1]
-  if (time >= last.time) return { a: last, b: last, t: 0 }
-  for (let index = 0; index < keyframes.length - 1; index += 1) {
-    const a = keyframes[index]
-    const b = keyframes[index + 1]
-    if (time >= a.time && time <= b.time) {
-      const range = b.time - a.time
-      return { a, b, t: range > 0 ? (time - a.time) / range : 0 }
-    }
-  }
-  return { a: last, b: last, t: 0 }
-}
-
-function getValueAtTime(keyframes, time, prop) {
-  const span = getSpan(keyframes, time)
-  if (!span) return null
-  const { a, b, t } = span
-  const av = a[prop]
-  const bv = b[prop]
-  if (av == null && bv == null) return null
-  if (Array.isArray(av) || Array.isArray(bv)) return lerp3(av, bv, t)
-  return lerp1(av, bv, t)
-}
-
-function getPoseAtTime(keyframes, time) {
-  const span = getSpan(keyframes, time)
-  if (!span) return null
-  const result = {}
-  const poseKeys = new Set([
-    'rootPosition',
-    'rootRotation',
-    ...POSE_PARTS,
-    ...Object.keys(span.a.pose || {}),
-    ...Object.keys(span.b.pose || {}),
-  ])
-  for (const part of poseKeys) {
-    const av = span.a.pose?.[part]
-    const bv = span.b.pose?.[part]
-    result[part] = av && bv ? lerp3(av, bv, span.t) : (av || bv || [0, 0, 0])
-  }
-  return result
-}
+import {
+  DEFAULT_CAMERA_EASING,
+  DEFAULT_OBJECT_EASING,
+  getCinematicPose,
+  getCinematicValue,
+} from './CinematicMotion'
 
 export default function useTimelinePlayback({ actors, setActors, props = [], setProps, cameras, setCameras, tracks, currentTime, isPlaying }) {
   const prevTimeRef = useRef(currentTime)
@@ -97,10 +41,10 @@ export default function useTimelinePlayback({ actors, setActors, props = [], set
       if (track.targetType === 'actor') {
         const index = nextActors.findIndex((actor) => actor.id === track.targetId)
         if (index < 0) continue
-        const position = getValueAtTime(track.keyframes, currentTime, 'position')
-        const rotation = getValueAtTime(track.keyframes, currentTime, 'rotation')
-        const scale = getValueAtTime(track.keyframes, currentTime, 'scale')
-        const pose = getPoseAtTime(track.keyframes, currentTime)
+        const position = getCinematicValue(track.keyframes, currentTime, 'position', { curve: true, defaultEasing: DEFAULT_OBJECT_EASING })
+        const rotation = getCinematicValue(track.keyframes, currentTime, 'rotation', { rotation: true, defaultEasing: DEFAULT_OBJECT_EASING })
+        const scale = getCinematicValue(track.keyframes, currentTime, 'scale', { defaultEasing: DEFAULT_OBJECT_EASING })
+        const pose = getCinematicPose(track.keyframes, currentTime, POSE_PARTS)
         if (position) { nextActors[index].position = position; actorsChanged = true }
         if (rotation) { nextActors[index].rotation = rotation; actorsChanged = true }
         if (scale) { nextActors[index].scale = scale; actorsChanged = true }
@@ -109,10 +53,10 @@ export default function useTimelinePlayback({ actors, setActors, props = [], set
       if (track.targetType === 'camera') {
         const index = nextCameras.findIndex((camera) => camera.id === track.targetId)
         if (index < 0) continue
-        const position = getValueAtTime(track.keyframes, currentTime, 'position')
-        const rotation = getValueAtTime(track.keyframes, currentTime, 'rotation')
-        const lookAt = getValueAtTime(track.keyframes, currentTime, 'lookAt')
-        const fov = getValueAtTime(track.keyframes, currentTime, 'fov')
+        const position = getCinematicValue(track.keyframes, currentTime, 'position', { curve: true, defaultEasing: DEFAULT_CAMERA_EASING })
+        const rotation = getCinematicValue(track.keyframes, currentTime, 'rotation', { rotation: true, defaultEasing: DEFAULT_CAMERA_EASING })
+        const lookAt = getCinematicValue(track.keyframes, currentTime, 'lookAt', { curve: true, defaultEasing: DEFAULT_CAMERA_EASING })
+        const fov = getCinematicValue(track.keyframes, currentTime, 'fov', { defaultEasing: DEFAULT_CAMERA_EASING })
         if (position) { nextCameras[index].position = position; camerasChanged = true }
         if (rotation) { nextCameras[index].rotation = rotation; camerasChanged = true }
         if (lookAt) { nextCameras[index].lookAt = lookAt; camerasChanged = true }
@@ -121,9 +65,9 @@ export default function useTimelinePlayback({ actors, setActors, props = [], set
       if (track.targetType === 'prop') {
         const index = nextProps.findIndex((prop) => prop.id === track.targetId)
         if (index < 0) continue
-        const position = getValueAtTime(track.keyframes, currentTime, 'position')
-        const rotation = getValueAtTime(track.keyframes, currentTime, 'rotation')
-        const scale = getValueAtTime(track.keyframes, currentTime, 'scale')
+        const position = getCinematicValue(track.keyframes, currentTime, 'position', { curve: true, defaultEasing: DEFAULT_OBJECT_EASING })
+        const rotation = getCinematicValue(track.keyframes, currentTime, 'rotation', { rotation: true, defaultEasing: DEFAULT_OBJECT_EASING })
+        const scale = getCinematicValue(track.keyframes, currentTime, 'scale', { defaultEasing: DEFAULT_OBJECT_EASING })
         if (position) { nextProps[index].position = position; propsChanged = true }
         if (rotation) { nextProps[index].rotation = rotation; propsChanged = true }
         if (scale) { nextProps[index].scale = scale; propsChanged = true }

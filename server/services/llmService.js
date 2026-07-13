@@ -74,8 +74,11 @@ class LLMService {
         role: m.role,
         content: m.content,
       })),
-      temperature: config.temperature || 0.7,
+      temperature: config.temperature ?? 0.7,
     };
+    if (Number.isFinite(Number(config.max_tokens))) {
+      requestBody.max_tokens = Math.max(256, Math.min(8192, Number(config.max_tokens)));
+    }
 
     // Ollama 特殊处理
     if (config.provider === 'ollama') {

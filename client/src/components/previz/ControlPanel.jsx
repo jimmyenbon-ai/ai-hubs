@@ -12,7 +12,7 @@ const PROP_CATS = {
   base: ['box', 'cylinder', 'platform', 'wall'],
   indoor: ['bed', 'table', 'desk', 'chair', 'sofa', 'cabinet', 'bookshelf', 'shelf', 'door', 'window', 'screen', 'carpet'],
   scifi: ['corridor', 'elevator', 'console', 'cockpit', 'hatch', 'med_bed', 'lab_table'],
-  city: ['building', 'street', 'lamp', 'billboard', 'bridge'],
+  city: ['building', 'street', 'lamp', 'billboard', 'bridge', 'car', 'car_open'],
   product: ['led_screen', 'product_box', 'product_panel', 'hologram'],
   space: ['airplane', 'spacecraft', 'planet', 'asteroid', 'starfield'],
 }
@@ -55,6 +55,8 @@ const PROP_LABELS = {
   lamp: '路灯',
   billboard: '广告牌',
   bridge: '天桥',
+  car: '汽车',
+  car_open: '开门汽车',
   led_screen: 'LED屏',
   product_box: '产品盒',
   product_panel: '产品板',
@@ -89,12 +91,6 @@ const POSE_PRESET_LIST = [
   { key: 'point', label: '指向' },
   { key: 'bow', label: '低头' },
   { key: 'crouch', label: '蹲下' },
-]
-
-const TRANSFORM_MODES = [
-  { key: 'translate', label: '移动 W' },
-  { key: 'rotate', label: '旋转 E' },
-  { key: 'scale', label: '缩放 R' },
 ]
 
 const DIRECTOR_PROFILES = [
@@ -165,21 +161,10 @@ export default function ControlPanel({
   setCameraMode,
   aspectRatio,
   setAspectRatio,
-  transformMode,
-  setTransformMode,
   showGrid,
   setShowGrid,
   showGuides,
   setShowGuides,
-  isPlaying,
-  isRecording,
-  loopMode,
-  onPlay,
-  onPause,
-  onStop,
-  onRecord,
-  onLoop,
-  onAddKeyframe,
   onScreenshot,
   onRecordVideo,
   onExportMode,
@@ -206,6 +191,7 @@ export default function ControlPanel({
   onUpdateBackground,
   onRemoveBackground,
   onFitBackgroundToCamera,
+  shotPackageContent,
 }) {
   const [tab, setTab] = useState('ai')
   const [propCat, setPropCat] = useState('indoor')
@@ -217,12 +203,14 @@ export default function ControlPanel({
   const [scriptTitle, setScriptTitle] = useState('')
   const [scriptText, setScriptText] = useState('')
   const [tweakText, setTweakText] = useState('')
+  const [creationMode, setCreationMode] = useState('single')
 
   const tabs = [
-    { key: 'ai', label: 'AI分镜' },
+    { key: 'ai', label: 'AI导演' },
     { key: 'actors', label: '角色' },
     { key: 'props', label: '场景' },
     { key: 'camera', label: '摄影机' },
+    { key: 'package', label: '资产包' },
     { key: 'export', label: '导出' },
   ]
 
@@ -232,17 +220,21 @@ export default function ControlPanel({
   }, [selectedShotId, shotPlan])
 
   const hasAIInput = Boolean(aiPrompt.trim() || scriptText.trim())
-  const shouldPlanFirst = scriptText.trim() || aiPrompt.length > 1200 || materialType === 'script' || materialType === 'novel'
+  const shouldPlanFirst = creationMode === 'shots'
 
   const buildAIPayload = () => {
     const sourceBlock = scriptText.trim()
       ? `\n\n[上传文本/剧本：${scriptTitle || '未命名'}]\n${scriptText.trim()}`
       : ''
+    const modeInstruction = creationMode === 'single'
+      ? '[创作模式：一镜到底]\n严禁拆镜。将整段需求作为一条连续时间线执行；按用户指定时长设置时间线，至少生成起点、两个中段和终点4组关键帧，最后自动录制完整时长的摄影机预演视频。'
+      : '[创作模式：拆镜制作]\n先生成可审核的分镜队列，不要直接执行整段预演。'
     return {
-      prompt: `${aiPrompt.trim()}${sourceBlock}`,
+      prompt: `${modeInstruction}\n\n${aiPrompt.trim()}${sourceBlock}`,
       directorProfile,
       materialType,
       sourceTitle: scriptTitle,
+      replaceScene: creationMode === 'single',
     }
   }
 
@@ -267,7 +259,9 @@ export default function ControlPanel({
     setScriptText(text.slice(0, 16000))
     setMaterialType('novel')
     if (!aiPrompt.trim()) {
-      setAiPrompt('请解析我上传的文本，先智能拆分镜头，列出每个分镜的秒数、景别、机位、焦段、运镜、场景、角色动作和衔接方式，待我审核后再逐镜生成3D预演参考片。')
+      setAiPrompt(creationMode === 'single'
+        ? '请将我上传的文本改编为一个完整的一镜到底3D预演，保留连续的场面调度、人物动作和摄影机路径，不要拆镜，最后自动录制。'
+        : '请解析我上传的文本，拆分为可审核的分镜队列，列出每镜的秒数、景别、机位、焦段、运镜、场景、角色动作和衔接方式。')
     }
   }
 
@@ -307,29 +301,8 @@ export default function ControlPanel({
       <div className="previz-control-head">
         <div>
           <h3>3D 预演导演</h3>
-          <small>分镜审核 · 灰模运镜 · 60fps导出</small>
+          <small>一镜 / 拆镜 · 灰模运镜 · AI视频交付</small>
         </div>
-      </div>
-
-      <div className={`previz-rec-bar ${isRecording ? 'active' : ''}`}>
-        <button className={`previz-rec-btn ${isRecording ? 'active' : ''}`} onClick={isRecording ? onStop : onRecord}>
-          {isRecording ? '停动作' : '录动作'}
-        </button>
-        <button className="previz-rec-btn" onClick={isPlaying ? onPause : onPlay}>{isPlaying ? '暂停' : '播放'}</button>
-        <button className="previz-rec-btn" onClick={onStop}>停止</button>
-        <button className={`previz-rec-btn ${loopMode ? 'active' : ''}`} onClick={onLoop}>循环</button>
-        <button className="previz-rec-btn" onClick={onAddKeyframe}>关键帧</button>
-        <button className={`previz-rec-btn ${isVideoRecording ? 'active' : ''}`} onClick={onRecordVideo}>
-          {isVideoRecording ? '停MP4' : '录MP4'}
-        </button>
-      </div>
-
-      <div className="control-group previz-mode-row">
-        {TRANSFORM_MODES.map((mode) => (
-          <button key={mode.key} className={`btn btn-sm ${transformMode === mode.key ? 'active' : ''}`} onClick={() => setTransformMode(mode.key)}>
-            {mode.label}
-          </button>
-        ))}
       </div>
 
       <div className="previz-tabs">
@@ -342,18 +315,29 @@ export default function ControlPanel({
 
       {tab === 'ai' && (
         <div className="previz-tab-content previz-ai-tab">
+          <section className="previz-creation-mode" aria-label="创作模式">
+            <button type="button" className={creationMode === 'single' ? 'active' : ''} aria-pressed={creationMode === 'single'} onClick={() => setCreationMode('single')}>
+              <strong>一镜到底</strong>
+              <small>整段提示词直接生成一条连续预演</small>
+            </button>
+            <button type="button" className={creationMode === 'shots' ? 'active' : ''} aria-pressed={creationMode === 'shots'} onClick={() => setCreationMode('shots')}>
+              <strong>拆镜制作</strong>
+              <small>先生成分镜队列，审核后逐镜预演</small>
+            </button>
+          </section>
+
           <section className="previz-ai-compact">
             <div className="previz-step-title"><span>1</span><strong>输入需求 / 上传文本</strong></div>
             <div className="previz-ai-workflow">
               <label>
                 LLM身份
-                <select className="input-field" value={directorProfile} onChange={(event) => setDirectorProfile(event.target.value)} disabled={aiLoading}>
+                <select className="input-field" name="directorProfile" autoComplete="off" value={directorProfile} onChange={(event) => setDirectorProfile(event.target.value)} disabled={aiLoading}>
                   {DIRECTOR_PROFILES.map((profile) => <option key={profile.value} value={profile.value}>{profile.label}</option>)}
                 </select>
               </label>
               <label>
                 素材类型
-                <select className="input-field" value={materialType} onChange={(event) => setMaterialType(event.target.value)} disabled={aiLoading}>
+                <select className="input-field" name="materialType" autoComplete="off" value={materialType} onChange={(event) => setMaterialType(event.target.value)} disabled={aiLoading}>
                   {MATERIAL_TYPES.map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}
                 </select>
               </label>
@@ -380,7 +364,9 @@ export default function ControlPanel({
 
             <textarea
               className="previz-ai-input"
-              placeholder="例如：10秒一镜到底，两个人并列走动聊天，摄影机从后方绕到侧面再到前方，带变焦，对准人脸，地面参照清楚，最后导出MP4。"
+              name="previzPrompt"
+              autoComplete="off"
+              placeholder="例如：10秒一镜到底，两人并列走动聊天，摄影机从后方绕到侧面再到前方，对准人脸，最后自动录制…"
               value={aiPrompt}
               onChange={(event) => setAiPrompt(event.target.value)}
               onKeyDown={handleKeyDown}
@@ -390,16 +376,29 @@ export default function ControlPanel({
 
             <div className="previz-ai-actions">
               <button className="btn previz-ai-send" onClick={handleSendAI} disabled={aiLoading || !hasAIInput}>
-                {aiLoading ? '执行中...' : shouldPlanFirst ? '生成分镜计划' : '直接执行'}
+                {aiLoading ? '执行中…' : shouldPlanFirst ? '生成分镜计划' : '生成一镜到底'}
               </button>
-              <button className="btn btn-sm" onClick={handleGenerateShotPlan} disabled={aiLoading || shotPlanLoading || !hasAIInput}>
-                {shotPlanLoading ? '拆分中...' : '拆分镜'}
-              </button>
+              {creationMode === 'shots' ? (
+                <button className="btn btn-sm" onClick={handleGenerateShotPlan} disabled={aiLoading || shotPlanLoading || !hasAIInput}>
+                  {shotPlanLoading ? '拆分中…' : '重新拆分'}
+                </button>
+              ) : null}
               {hasAISnapshot?.() && <button className="btn btn-sm" onClick={onUndoAI}>撤销AI</button>}
             </div>
           </section>
 
-          {shotPlan?.shots?.length > 0 && (
+          {creationMode === 'single' ? (
+            <section className="previz-single-flow">
+              <div><span>1</span><strong>LLM 搭建场景</strong></div>
+              <i />
+              <div><span>2</span><strong>生成连续关键帧</strong></div>
+              <i />
+              <div><span>3</span><strong>按时长自动录制</strong></div>
+              <p>不会把完整提示词拆成多个分镜。自然语言修改会继续作用于当前场景。</p>
+            </section>
+          ) : null}
+
+          {creationMode === 'shots' && shotPlan?.shots?.length > 0 && (
             <section className="previz-shot-plan">
               <div className="previz-step-title"><span>2</span><strong>审核分镜队列</strong></div>
               <div className="previz-shot-plan-head">
@@ -454,16 +453,16 @@ export default function ControlPanel({
           )}
 
           {aiLoading && aiStatus && (
-            <div className="previz-ai-status">
+            <div className="previz-ai-status" role="status" aria-live="polite">
               <div className="previz-ai-spinner" />
               <span>{aiStatus.message}</span>
             </div>
           )}
 
           {aiError && (
-            <div className="previz-ai-error">
+            <div className="previz-ai-error" role="alert">
               <span>{aiError}</span>
-              <button className="btn-back" onClick={onClearAIError}>X</button>
+              <button className="btn-back" aria-label="关闭错误提示" onClick={onClearAIError}>×</button>
             </div>
           )}
 
@@ -638,6 +637,8 @@ export default function ControlPanel({
           </div>
         </div>
       )}
+
+      {tab === 'package' && shotPackageContent}
 
       {tab === 'export' && (
         <div className="previz-tab-content">

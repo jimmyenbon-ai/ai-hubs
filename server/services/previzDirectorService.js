@@ -26,13 +26,14 @@ const VALID_COMMAND_TYPES = [
   'set_lighting', 'reset_scene', 'clear_props', 'clear_actors',
   'focus_camera_on_actor', 'add_keyframe',
   'set_timeline_duration', 'record_camera_video', 'set_environment',
+  'set_camera_rig',
 ];
 
 const VALID_PROP_TYPES = [
   'box', 'cylinder', 'platform', 'wall',
   'bed', 'table', 'desk', 'chair', 'sofa', 'cabinet', 'bookshelf', 'shelf', 'door', 'window', 'screen', 'carpet',
   'corridor', 'elevator', 'console', 'cockpit', 'hatch', 'med_bed', 'lab_table',
-  'building', 'street', 'lamp', 'billboard', 'bridge',
+  'building', 'street', 'lamp', 'billboard', 'bridge', 'car', 'car_open',
   'led_screen', 'product_box', 'product_panel', 'hologram',
   'airplane', 'spacecraft', 'planet', 'asteroid', 'starfield',
 ];
@@ -158,6 +159,7 @@ const PROP_CN_TO_EN = {
   '走廊': 'corridor', '电梯': 'elevator', '控制台': 'console',
   '驾驶舱': 'cockpit', '舱门': 'hatch', '医疗床': 'med_bed', '实验台': 'lab_table',
   '建筑': 'building', '街道': 'street', '路灯': 'lamp', '广告牌': 'billboard', '天桥': 'bridge',
+  '汽车': 'car', '轿车': 'car', '跑车': 'car', '车门打开的跑车': 'car_open', '开门汽车': 'car_open',
 };
 
 // 姿势中文名→英文key映射
@@ -266,9 +268,9 @@ function buildSystemPrompt() {
 - 同一运动需要创建起点与终点关系：先用 move_actor / move_camera 摆出最终构图；如果需要动作录制，则保持 actors/camera 的路径方向一致，方便用户一键打关键帧
 
 **自动一镜到底预演 / 自动录制参考片**：
-- 当用户说“自动、只需等待结果、查看回放、录制、导出、下载、参考片、生成素材”时，必须输出完整自动执行链：set_timeline_duration → 场景搭建 → 起点 add_keyframe → 中段 move_actor/move_camera/configure_camera/add_keyframe → 终点 move_actor/move_camera/configure_camera/add_keyframe → record_camera_video。
+- 当用户说“自动、只需等待结果、查看回放、录制、导出、下载、参考片、生成素材”时，必须输出完整自动执行链：set_timeline_duration → 场景搭建 → 必要的人物/道具关键帧 → 活动摄影机 → set_camera_rig → record_camera_video。
 - 用户指定时长（如10秒运镜）时，必须 set_timeline_duration duration=10，并让 record_camera_video duration=10。
-- 一镜到底不要只输出起点和终点，至少输出 3 个关键帧：time=0、time=duration*0.45~0.6、time=duration。复杂运镜可输出4个关键帧。
+- 一镜到底优先输出一个 set_camera_rig，程序会自动生成至少5个平滑控制点；只有无法用Rig表达的特殊运动才使用 move_camera + add_keyframe。
 - “从后到侧面再到前方”参考：人物并排行走沿 X 轴或 Z 轴移动；摄影机 time=0 在人物后方，time=中段移动到侧面，time=终点移动到人物前方；lookAt 始终对准两人脸部/头部中间。
 - “不要平淡、有变焦”必须让 fov 随关键帧变化，例如 54 → 40 → 28，形成从环境到更紧张中近景/近景的压缩感。
 - “两个人并列走动聊天”必须创建两个演员、给他们并排行走的起点和终点，并在每个关键帧前移动演员位置；可用 wave/point/stand 姿势体现交谈。
@@ -279,7 +281,7 @@ function buildSystemPrompt() {
 **基础**：box(方块)、cylinder(圆柱)、platform(圆台)、wall(墙体)
 **室内**：bed(床)、table(桌子)、desk(书桌)、chair(椅子)、sofa(沙发)、cabinet(柜子)、bookshelf(书架)、shelf(置物架)、door(门)、window(窗户)、screen(屏幕)、carpet(地毯)
 **科幻**：corridor(走廊)、elevator(电梯)、console(控制台)、cockpit(驾驶舱)、hatch(舱门)、med_bed(医疗床)、lab_table(实验台)
-**城市**：building(建筑)、street(街道)、lamp(路灯)、billboard(广告牌)、bridge(天桥)
+**城市**：building(建筑)、street(街道)、lamp(路灯)、billboard(广告牌)、bridge(天桥)、car(汽车/跑车)、car_open(车门打开的汽车)
 **产品/空天**：led_screen(LED显示屏)、product_box(产品盒体)、product_panel(产品面板)、hologram(全息透明板)、airplane(飞机)、spacecraft(飞船)、planet(星球)、asteroid(小行星)、starfield(星空)
 
 **道具摆放规则**：
@@ -326,12 +328,13 @@ function buildSystemPrompt() {
 - 对空中、飞机、太空场景：道具和摄影机允许 Y>0 悬空；使用 airplane/spacecraft/planet/asteroid/starfield；不要把飞机、飞船、小行星强行贴地。
 - 空中场景必须先输出 set_environment mode="air"；太空场景必须先输出 set_environment mode="space"；普通地面/室内/城市使用 mode="ground"。
 - 如果用户要求“摄影机不动，产品自己动”，必须让 camera 保持 fixed，给产品 prop 在不同时间 move_prop 并 add_keyframe。
-- 自动化请求默认至少输出：set_timeline_duration、必要灰模资产、活动摄影机、time=0关键帧、中段关键帧、结束关键帧、record_camera_video。
+- 自动化请求默认至少输出：set_timeline_duration、必要灰模资产、活动摄影机、set_camera_rig、record_camera_video。人物或道具发生运动时，再为它们输出起点/中段/结束关键帧。
 
 ## 常用运镜语言映射
-- 一镜到底：同一活动摄影机贯穿全段，至少3个关键帧。
-- 推镜/拉镜：move_camera 沿目标方向靠近/远离，并保持 lookAt。
-- 摇镜/移镜/侧移/轨道：camera 横向或弧线移动，lookAt 跟随主体。
+- 一镜到底：同一活动摄影机贯穿全段，优先使用一个 set_camera_rig，不要拼接多个互相冲突的摄影机。
+- 推镜/拉镜：使用 set_camera_rig rig_type="dolly"/"pull_out"，保持 lookAt 锁定主体。
+- 环绕：使用 set_camera_rig rig_type="orbit"，提供 subject、radius、start_angle、end_angle、height。
+- 升降：使用 set_camera_rig rig_type="crane"；侧移使用 rig_type="truck"；轻微手持使用 rig_type="handheld"。
 - 希区柯克变焦/滑动变焦：camera 与目标距离变化，同时 FOV 反向变化，形成空间压缩或拉伸。
 - 芬奇式：稳定、精准、低抖动、构图居中或对称，FOV多用35mm/50mm。
 - 迈克尔贝式：低机位广角、强透视、环绕主体、前景/背景运动层次明显。
@@ -342,7 +345,13 @@ function buildSystemPrompt() {
 - 侧拍、后拍、前方倒退拍都必须体现主体朝向、摄影机方位和运动路径，不能只创建静态机位。
 - 如果要求变焦或推拉，必须在不同关键帧使用不同 fov，并同时移动 camera 或改变距离。
 - 地面/室内/城市场景必须保留地面可见性，可创建 carpet/street/platform/table/chair 等参照物，避免人物漂浮在黑场。
-- 每个需要录制的镜头必须输出 set_timeline_duration、time=0 关键帧、中段关键帧、结束关键帧、record_camera_video。
+- 每个需要录制的镜头必须输出 set_timeline_duration、set_camera_rig或至少3个摄影机关键帧、record_camera_video。
+- 同一个15秒镜头只选择一种主运镜，最多叠加一种幅度很小的次运动。不要同时大幅环绕、升降、变焦和横移。
+- 运镜默认 easing="easeInOutCubic"，首尾必须缓入缓出；除非明确要求手持，不要使用 linear。
+- 主体构图优先于炫技：lookAt 锁定人物脸部/双人中点，环绕通常不超过70度，摄影机距主体通常2.5-8米。
+- 场景资产只创建叙事和构图必需项。普通15秒镜头建议人物不超过3个、主要道具不超过8个，避免灰模堆叠和遮挡。
+- 当前场景已有摄影机时必须复用“主机位”，使用 move_camera/configure_camera/set_camera_rig；不要再 create_camera。
+- 城市场景中 street 只创建1条，近景主体周围至少留出3米净空；building只作为远景轮廓，通常2-4栋，放在主体8米以外，禁止压住人物和车辆。
 - 逐镜生成时，如果用户要求“只生成当前分镜”，先 reset_scene 清理上一镜演员和道具，但不要删除上传背景图。
 
 ## 输出规则（严格遵守！）
@@ -423,6 +432,12 @@ function buildSystemPrompt() {
 **record_camera_video** — 从活动摄影机视图开始录制参考视频
 参数：duration(秒，可选，默认使用时间线时长), delay(秒，可选，默认0.5)。仅当用户明确要求录制、导出视频、生成参考片时输出。必须放在所有 create/move/add_keyframe 命令之后。
 
+**set_camera_rig** — 使用确定性电影摄影机Rig生成整条平滑轨道（优先于多次move_camera）
+参数：target(摄影机ID或名称), rig_type("orbit"/"dolly"/"pull_out"/"truck"/"crane"/"follow"/"handheld"), subject(演员名称，可选), start_time, end_time, easing, fov_start, fov_end。
+orbit额外参数：radius(米), start_angle/end_angle(角度制，建议总幅度不超过70度), height, look_at_height。
+其他Rig可提供：start_position[x,y,z], end_position[x,y,z]。如果省略，系统会围绕subject自动求解安全机位。
+示例：{"type":"set_camera_rig","target":"主机位","rig_type":"orbit","subject":"男主角","start_time":0,"end_time":15,"radius":4.5,"start_angle":-30,"end_angle":35,"height":1.55,"fov_start":54,"fov_end":40,"easing":"easeInOutCubic"}
+
 **reset_scene** — 清空整个场景（保留默认摄影机）
 无额外参数
 
@@ -501,12 +516,13 @@ function validateCommands(commands) {
       case 'delete_camera':
       case 'configure_camera':
       case 'focus_camera_on_actor':
+      case 'set_camera_rig':
         if (!cmd.target) errors.push(`命令${i}(${cmd.type}): 缺少 target`);
         break;
     }
 
     // 校验可选参数
-    if (cmd.mode && !VALID_CAMERA_MODES.includes(cmd.mode)) {
+    if (['create_camera', 'configure_camera', 'move_camera'].includes(cmd.type) && cmd.mode && !VALID_CAMERA_MODES.includes(cmd.mode)) {
       warnings.push(`命令${i}: 未知运镜模式 "${cmd.mode}"，将忽略`);
     }
     if (cmd.value && cmd.type === 'set_aspect_ratio' && !VALID_ASPECT_RATIOS.includes(cmd.value)) {
@@ -535,6 +551,13 @@ function validateCommands(commands) {
       }
       if (cmd.delay !== undefined && (typeof cmd.delay !== 'number' || cmd.delay < 0 || cmd.delay > 10)) {
         errors.push(`命令${i}(record_camera_video): delay 必须是 0-10 秒的数字`);
+      }
+    }
+    if (cmd.type === 'set_camera_rig') {
+      const rigTypes = ['orbit', 'dolly', 'pull_out', 'truck', 'crane', 'follow', 'handheld'];
+      if (!rigTypes.includes(cmd.rig_type)) errors.push(`命令${i}(set_camera_rig): rig_type 无效`);
+      if (cmd.end_time !== undefined && Number(cmd.end_time) <= Number(cmd.start_time || 0)) {
+        errors.push(`命令${i}(set_camera_rig): end_time 必须大于 start_time`);
       }
     }
   }
@@ -633,12 +656,36 @@ function postProcessPrevizCommands(commands) {
   let activeCamera = null;
   let lastLookAt = [0, 1.55, 0];
   let environmentMode = 'ground';
+  let buildingIndex = 0;
+  let streetCreated = false;
 
   const processed = commands.map((command) => {
     if (!command || typeof command !== 'object') return command;
     const next = { ...command };
+    if (next.type === 'set_aspect_ratio') {
+      const requestedAspect = String(next.value || '').trim();
+      if (['2.39:1', '2.40:1', '21:9'].includes(requestedAspect)) next.value = '2.35:1';
+    }
     if (next.type === 'set_environment' && next.mode) {
       environmentMode = next.mode;
+    }
+    if (next.type === 'create_prop' && next.prop_type === 'street') {
+      if (streetCreated) return null;
+      streetCreated = true;
+      next.position = [0, 0, 0];
+      next.scale = [1, 1, 1];
+    }
+    if (next.type === 'create_prop' && next.prop_type === 'building') {
+      const position = Array.isArray(next.position) ? next.position.map(Number) : [0, 0, 0];
+      const distance = Math.hypot(position[0] || 0, position[2] || 0);
+      if (distance < 8) {
+        const side = buildingIndex % 2 === 0 ? -1 : 1;
+        position[0] = side * (7 + (buildingIndex % 3) * 2.5);
+        position[2] = 8 + Math.floor(buildingIndex / 2) * 4;
+      }
+      next.position = [position[0], 0, position[2]];
+      next.scale = (Array.isArray(next.scale) ? next.scale : [1, 1, 1]).map((value) => Math.max(0.4, Math.min(1.6, Number(value) || 1)));
+      buildingIndex += 1;
     }
     const freeCameraY = environmentMode === 'space' || environmentMode === 'air';
     if (next.type === 'create_camera') {
@@ -661,8 +708,25 @@ function postProcessPrevizCommands(commands) {
       lastLookAt = next.lookAt;
       if (next.target) cameraLookAts.set(next.target, next.lookAt);
     }
+    if (next.type === 'set_camera_rig') {
+      next.start_time = Math.max(0, Number(next.start_time) || 0);
+      next.end_time = Math.max(next.start_time + 0.5, Number(next.end_time ?? next.duration) || next.start_time + 6);
+      next.easing = next.easing || (next.rig_type === 'handheld' ? 'linear' : 'easeInOutCubic');
+      next.fov_start = Math.max(15, Math.min(90, Number(next.fov_start ?? next.fov) || 45));
+      next.fov_end = Math.max(15, Math.min(90, Number(next.fov_end ?? next.fov_start) || next.fov_start));
+      if (Array.isArray(next.start_position)) next.start_position = clampCameraPosition(next.start_position, freeCameraY);
+      if (Array.isArray(next.end_position)) next.end_position = clampCameraPosition(next.end_position, freeCameraY);
+      if (next.rig_type === 'orbit') {
+        next.radius = Math.max(1.5, Math.min(15, Number(next.radius) || 4));
+        next.height = Math.max(0.5, Math.min(12, Number(next.height) || 1.55));
+        const startAngle = Number(next.start_angle) || 0;
+        const requestedEnd = Number(next.end_angle) || 45;
+        next.start_angle = startAngle;
+        next.end_angle = startAngle + Math.max(-100, Math.min(100, requestedEnd - startAngle));
+      }
+    }
     return next;
-  });
+  }).filter(Boolean);
 
   if (!processed.some((command) => command?.type === 'set_timeline_duration')) {
     const record = processed.find((command) => command?.type === 'record_camera_video');
@@ -681,7 +745,194 @@ function postProcessPrevizCommands(commands) {
   return processed;
 }
 
-async function processDirective({ sceneContext, prompt, directorProfile, materialType, sourceTitle } = {}) {
+function distanceBetween(a, b) {
+  if (!Array.isArray(a) || !Array.isArray(b)) return Infinity;
+  return Math.hypot((a[0] || 0) - (b[0] || 0), (a[1] || 0) - (b[1] || 0), (a[2] || 0) - (b[2] || 0));
+}
+
+function assessPrevizCommandQuality(commands) {
+  const warnings = [];
+  const actors = commands.filter((command) => command?.type === 'create_actor');
+  const props = commands.filter((command) => command?.type === 'create_prop');
+  const cameras = commands.filter((command) => command?.type === 'create_camera');
+  const rigs = commands.filter((command) => command?.type === 'set_camera_rig');
+  const cameraMoves = commands.filter((command) => command?.type === 'move_camera');
+  const keyframes = commands.filter((command) => command?.type === 'add_keyframe');
+  const shouldRecord = commands.some((command) => command?.type === 'record_camera_video');
+
+  if (actors.length > 4) warnings.push(`人物数量偏多（${actors.length}），容易造成调度混乱`);
+  if (props.length > 10) warnings.push(`主要道具偏多（${props.length}），容易遮挡主体`);
+  if (cameras.length > 2) warnings.push(`单镜头创建了${cameras.length}台摄影机，应保持一个活动机位`);
+  if (rigs.length > 2) warnings.push(`单镜头叠加了${rigs.length}条摄影机Rig，运动意图过多`);
+  if (!rigs.length && cameraMoves.length > 0 && keyframes.length < 3) warnings.push('运镜关键帧不足，无法形成稳定的缓入缓出');
+  if (shouldRecord && !rigs.length && keyframes.length < 3) warnings.push('录制前没有完整摄影机轨道');
+
+  for (const rig of rigs) {
+    const duration = Number(rig.end_time) - Number(rig.start_time || 0);
+    if (duration < 2) warnings.push(`${rig.rig_type} 运镜时长不足2秒，运动会显得突兀`);
+    if (Math.abs(Number(rig.fov_end) - Number(rig.fov_start)) > 28) warnings.push('同一运镜的FOV变化过大，容易产生生硬变焦');
+    if (rig.rig_type === 'orbit' && Math.abs(Number(rig.end_angle) - Number(rig.start_angle)) > 80) warnings.push('环绕幅度超过80度，可能越轴或失去主体构图');
+  }
+
+  const supportTypes = new Set(['platform', 'street', 'carpet', 'corridor', 'starfield']);
+  const placements = [...actors, ...props].filter((command) => (
+    Array.isArray(command.position) && !supportTypes.has(command.prop_type)
+  ));
+  for (let left = 0; left < placements.length; left += 1) {
+    for (let right = left + 1; right < placements.length; right += 1) {
+      if (distanceBetween(placements[left].position, placements[right].position) < 0.35) {
+        warnings.push(`场景元素${left + 1}与${right + 1}位置重叠`);
+        left = placements.length;
+        break;
+      }
+    }
+  }
+
+  const score = Math.max(0, 100 - warnings.length * 10);
+  return { score, grade: score >= 90 ? 'A' : score >= 75 ? 'B' : score >= 60 ? 'C' : 'D', warnings };
+}
+
+function ensurePromptRequiredAssets(commands, prompt) {
+  const next = [...commands];
+  const needsCar = /跑车|汽车|轿车|车辆|车门/.test(prompt);
+  const hasCar = next.some((command) => command?.type === 'create_prop' && ['car', 'car_open'].includes(command.prop_type));
+  if (needsCar && !hasCar) {
+    const actor = next.find((command) => command?.type === 'create_actor');
+    const actorPosition = Array.isArray(actor?.position) ? actor.position : [0, 0, -3];
+    const carType = /车门.{0,4}(打开|开启)|开着车门|车门打开/.test(prompt) ? 'car_open' : 'car';
+    const carCommand = {
+      type: 'create_prop',
+      name: carType === 'car_open' ? '开门跑车' : '跑车',
+      prop_type: carType,
+      position: [actorPosition[0], 0, actorPosition[2] + 3],
+      rotation: [0, 0, 0],
+      scale: [1, 1, 1],
+    };
+    const recordIndex = next.findIndex((command) => command?.type === 'record_camera_video');
+    next.splice(recordIndex >= 0 ? recordIndex : next.length, 0, carCommand);
+  }
+  return next;
+}
+
+function ensureExecutableCameraMotion(commands, prompt) {
+  const next = [...commands];
+  const recordIndex = next.findIndex((command) => command?.type === 'record_camera_video');
+  const timeline = next.find((command) => command?.type === 'set_timeline_duration');
+  const record = recordIndex >= 0 ? next[recordIndex] : null;
+  const requestedAutoRecord = /一镜到底|自动录制|录制.{0,8}(视频|参考片|MP4)|生成.{0,5}视频/.test(prompt);
+  if (!record && !requestedAutoRecord) return next;
+
+  const cameraRig = next.find((command) => command?.type === 'set_camera_rig');
+  const cameraMoves = next.filter((command) => command?.type === 'move_camera');
+  const cameraKeyframes = next.filter((command) => command?.type === 'add_keyframe');
+  const hasExplicitCameraAnimation = cameraRig || (cameraMoves.length >= 2 && cameraKeyframes.length >= 3);
+  const durationMatch = String(prompt || '').match(/(\d+(?:\.\d+)?)\s*秒/);
+  const duration = Math.max(3, Math.min(60, Number(record?.duration || timeline?.duration || durationMatch?.[1]) || 15));
+
+  if (!timeline) next.unshift({ type: 'set_timeline_duration', duration });
+  if (hasExplicitCameraAnimation) {
+    if (!record) next.push({ type: 'record_camera_video', duration, delay: 0.5 });
+    return next;
+  }
+
+  const actor = next.find((command) => command?.type === 'create_actor');
+  const subject = actor?.name;
+  const wantsOrbit = /环绕|绕到|绕拍|顺时针|逆时针/.test(prompt);
+  const wantsCrane = /升至|升高|升降|俯拍|高机位/.test(prompt);
+  const rig = wantsOrbit
+    ? { type: 'set_camera_rig', target: '主机位', rig_type: 'orbit', subject, start_time: 0, end_time: duration, radius: 4.8, start_angle: -32, end_angle: 34, height: 1.45, look_at_height: 1.55, fov_start: 52, fov_end: 38, easing: 'easeInOutCubic' }
+    : { type: 'set_camera_rig', target: '主机位', rig_type: wantsCrane ? 'crane' : 'dolly', subject, start_time: 0, end_time: duration, start_position: [-3.8, 1.1, 6.5], end_position: wantsCrane ? [2.8, 3.5, 6.8] : [-1.8, 1.5, 3.8], fov_start: 50, fov_end: 38, easing: 'easeInOutCubic' };
+  const insertAt = recordIndex >= 0 ? recordIndex : next.length;
+  next.splice(insertAt, 0, rig);
+  if (!record) next.push({ type: 'record_camera_video', duration, delay: 0.5 });
+  return next;
+}
+
+function parseDirectiveCandidate(content, prompt, materialType, { replaceScene = false } = {}) {
+  const parsed = extractJsonFromLLMResponse(content);
+  if (!parsed) return null;
+  let commands = Array.isArray(parsed) ? parsed : parsed.commands;
+  if (!Array.isArray(commands)) return null;
+  commands = postProcessPrevizCommands(commands);
+  commands = ensurePromptRequiredAssets(commands, prompt);
+  commands = ensureExecutableCameraMotion(commands, prompt);
+  const isRefinement = /调整|修改|微调|继续|保留当前|在现有|不要重建|只改/.test(prompt);
+  if (replaceScene && !isRefinement) {
+    const createdCamera = commands.find((command) => command?.type === 'create_camera');
+    const createdCameraName = createdCamera?.name;
+    const sceneCommands = commands.flatMap((command) => {
+      if (command?.type === 'create_camera') {
+        if (command !== createdCamera) return [];
+        return [{
+          type: 'move_camera',
+          target: '主机位',
+          position: command.position,
+          rotation: command.rotation,
+          lookAt: command.lookAt,
+          fov: command.fov,
+        }];
+      }
+      if (createdCameraName && command?.target === createdCameraName) {
+        return [{ ...command, target: '主机位' }];
+      }
+      if (['move_camera', 'configure_camera', 'set_camera_rig'].includes(command?.type)) {
+        return [{ ...command, target: '主机位' }];
+      }
+      return [command];
+    });
+    commands = [
+      { type: 'reset_scene' },
+      ...sceneCommands.filter((command) => command?.type !== 'reset_scene' && command?.type !== 'clear_props' && command?.type !== 'clear_actors'),
+    ];
+  }
+  if (materialType === 'product' && !/太空|宇宙|飞船|星球|行星/.test(prompt)) {
+    commands = commands.map((command) => (
+      command?.type === 'set_environment' && command.mode === 'space'
+        ? { ...command, mode: 'studio' }
+        : command
+    ));
+  }
+  return {
+    commands,
+    explanation: parsed.explanation || `已生成 ${commands.length} 条场景操作命令。`,
+    quality: assessPrevizCommandQuality(commands),
+  };
+}
+
+function buildDeterministicPrevizFallback(prompt, materialType, { replaceScene = false } = {}) {
+  const durationMatch = String(prompt || '').match(/(\d+(?:\.\d+)?)\s*秒/);
+  const duration = Math.max(3, Math.min(60, Number(durationMatch?.[1]) || 15));
+  const hasPerson = /人物|演员|主角|男主|女主|男人|女人|两个人|双人/.test(prompt);
+  const hasVehicle = /跑车|汽车|轿车|车辆|车门/.test(prompt);
+  const wantsOpenDoor = /车门.{0,5}(打开|开启)|开着车门|车门打开/.test(prompt);
+  const wantsOrbit = /环绕|绕到|绕拍|顺时针|逆时针/.test(prompt);
+  const wantsCrane = /升至|升高|升降|俯拍|高机位/.test(prompt);
+  const subjectName = hasPerson ? '主角' : undefined;
+  const rigType = wantsOrbit ? 'orbit' : wantsCrane ? 'crane' : 'dolly';
+  const commands = [
+    { type: 'set_environment', mode: 'ground' },
+    { type: 'set_aspect_ratio', value: /2\.3(?:5|9)|宽银幕/.test(prompt) ? '2.35:1' : '16:9' },
+    { type: 'set_timeline_duration', duration },
+    { type: 'create_prop', name: '地面道路', prop_type: /街道|道路|城市/.test(prompt) ? 'street' : 'platform', position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+  ];
+  if (hasPerson) {
+    commands.push({ type: 'create_actor', name: subjectName, position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1], pose: 'stand' });
+  }
+  if (hasVehicle) {
+    commands.push({ type: 'create_prop', name: wantsOpenDoor ? '开门跑车' : '跑车', prop_type: wantsOpenDoor ? 'car_open' : 'car', position: [0, 0, 3.2], rotation: [0, Math.PI, 0], scale: [1, 1, 1] });
+  }
+  commands.push({ type: 'set_lighting', preset: /雨夜|夜景|夜晚|霓虹/.test(prompt) ? 'night' : 'cinematic' });
+  commands.push(rigType === 'orbit'
+    ? { type: 'set_camera_rig', target: '主机位', rig_type: 'orbit', subject: subjectName, start_time: 0, end_time: duration, radius: 4.8, start_angle: -32, end_angle: 34, height: 1.45, look_at_height: 1.55, fov_start: 52, fov_end: 38, easing: 'easeInOutCubic' }
+    : { type: 'set_camera_rig', target: '主机位', rig_type: rigType, subject: subjectName, start_time: 0, end_time: duration, start_position: [-3.8, 1.1, 6.5], end_position: wantsCrane ? [2.8, 3.5, 6.8] : [-1.8, 1.5, 3.8], fov_start: 50, fov_end: 38, easing: 'easeInOutCubic' });
+  commands.push({ type: 'record_camera_video', duration, delay: 0.5 });
+  return parseDirectiveCandidate(JSON.stringify({
+    commands,
+    explanation: 'AI响应不可用，已启用确定性导演降级，生成可执行的一镜到底基础预演。',
+  }), prompt, materialType, { replaceScene });
+}
+
+async function processDirective({ sceneContext, prompt, directorProfile, materialType, sourceTitle, replaceScene = false } = {}) {
   if (!prompt || !prompt.trim()) {
     return { success: false, message: '请输入场景指令。' };
   }
@@ -722,9 +973,18 @@ async function processDirective({ sceneContext, prompt, directorProfile, materia
         : '未命名背景图';
       ctxParts.push(`已有 ${sceneContext.backgroundImageCount} 张用户上传背景图：${names}。这些背景图必须保留，AI 只调整人物、道具、摄影机和关键帧来配合它们`);
     }
+    if (Array.isArray(sceneContext.actors) && sceneContext.actors.length) {
+      ctxParts.push(`演员空间状态JSON：${JSON.stringify(sceneContext.actors.slice(0, 12))}`);
+    }
+    if (Array.isArray(sceneContext.props) && sceneContext.props.length) {
+      ctxParts.push(`道具空间状态JSON：${JSON.stringify(sceneContext.props.slice(0, 24))}`);
+    }
+    if (Array.isArray(sceneContext.cameras) && sceneContext.cameras.length) {
+      ctxParts.push(`摄影机空间状态JSON：${JSON.stringify(sceneContext.cameras.slice(0, 8))}`);
+    }
 
     if (ctxParts.length > 0) {
-      userMessage = `[场景上下文] ${ctxParts.join('；')}。\n\n用户指令：${userMessage}`;
+      userMessage = `[场景上下文] ${ctxParts.join('；')}。\n坐标状态是真实场景数据，必须基于现有空间关系规划，禁止把主体和摄影机放到同一点。\n\n用户指令：${userMessage}`;
     }
   }
 
@@ -732,61 +992,75 @@ async function processDirective({ sceneContext, prompt, directorProfile, materia
 
   // 4. 调用 LLM
   try {
-    const result = await llmService.complete(config, systemPrompt, userMessage);
+    const directorConfig = { ...config, temperature: 0.2, max_tokens: 8192 };
+    const firstPassStartedAt = Date.now();
+    let result = await llmService.complete(directorConfig, systemPrompt, userMessage);
+    const firstPassDurationMs = Date.now() - firstPassStartedAt;
 
+    let candidate;
     if (!result || !result.content || !result.content.trim()) {
       logger.error('[previzDirector] LLM 返回空内容');
-      return {
-        success: false,
-        message: 'AI 返回了空内容。请检查 API Key 是否正确配置，或稍后重试。',
-      };
-    }
-
-    logger.info('[previzDirector] LLM 响应长度:', result.content.length);
-
-    // 5. 提取 JSON
-    const parsed = extractJsonFromLLMResponse(result.content);
-
-    if (!parsed) {
-      logger.error('[previzDirector] JSON 提取失败，原始响应前500字符:', result.content.slice(0, 500));
-      return {
-        success: false,
-        message: 'AI 返回的格式无法解析。请尝试用更具体的描述重试。',
-        rawResponse: result.content.slice(0, 1000),
-      };
-    }
-
-    // 支持两种输出格式: { commands: [...] } 或直接的数组 [...]
-    let commands;
-    if (Array.isArray(parsed)) {
-      commands = parsed;
-    } else if (parsed.commands && Array.isArray(parsed.commands)) {
-      commands = parsed.commands;
+      candidate = buildDeterministicPrevizFallback(prompt, materialType, { replaceScene });
+      result = { ...result, model: `${result?.model || config.model || 'LLM'}+deterministic-fallback` };
     } else {
-      logger.error('[previzDirector] 解析结果无 commands 数组:', JSON.stringify(parsed).slice(0, 300));
-      return {
-        success: false,
-        message: 'AI 返回的数据缺少 commands 数组。请重试。',
-        rawResponse: result.content.slice(0, 1000),
-      };
+      logger.info('[previzDirector] LLM 响应长度:', result.content.length);
+      candidate = parseDirectiveCandidate(result.content, prompt, materialType, { replaceScene });
+    }
+    if (!candidate) {
+      logger.error('[previzDirector] JSON 提取失败，原始响应前500字符:', String(result?.content || '').slice(0, 500));
+      candidate = buildDeterministicPrevizFallback(prompt, materialType, { replaceScene });
+      result = { ...result, model: `${result?.model || config.model || 'LLM'}+deterministic-fallback` };
     }
 
-    commands = postProcessPrevizCommands(commands);
-    if (materialType === 'product' && !/太空|宇宙|飞船|星球|行星/.test(prompt)) {
-      commands = commands.map((command) => (
-        command?.type === 'set_environment' && command.mode === 'space'
-          ? { ...command, mode: 'studio' }
-          : command
-      ));
+    let validation = validateCommands(candidate.commands);
+    const shouldRunAiRepair = (candidate.quality.score < 75 || !validation.valid) && firstPassDurationMs < 45000;
+    if (shouldRunAiRepair) {
+      const repairReasons = [
+        ...candidate.quality.warnings,
+        ...validation.errors,
+      ].slice(0, 8);
+      logger.warn('[previzDirector] 首轮导演命令进入质量修复:', repairReasons.join('; '));
+      const repairMessage = `${userMessage}
+
+[上一版命令质量检查未通过]
+${repairReasons.map((reason) => `- ${reason}`).join('\n')}
+
+[修复要求]
+- 保留原叙事和主体，不增加无关资产。
+- 优先使用单个 set_camera_rig，保证主体构图、缓入缓出和安全距离。
+- 修正重叠、过快变焦、过多运镜和关键帧不足。
+- 重新输出完整纯JSON，不要解释。
+
+[上一版命令]
+${JSON.stringify(candidate.commands)}`;
+      const repairedResult = await llmService.complete(directorConfig, systemPrompt, repairMessage);
+      const repairedCandidate = repairedResult?.content
+        ? parseDirectiveCandidate(repairedResult.content, prompt, materialType, { replaceScene })
+        : null;
+      if (repairedCandidate) {
+        const repairedValidation = validateCommands(repairedCandidate.commands);
+        const originalRank = candidate.quality.score - validation.errors.length * 15;
+        const repairedRank = repairedCandidate.quality.score - repairedValidation.errors.length * 15;
+        if (repairedRank > originalRank) {
+          candidate = repairedCandidate;
+          validation = repairedValidation;
+          result = repairedResult;
+        }
+      }
+    } else if (candidate.quality.score < 75 || !validation.valid) {
+      logger.warn('[previzDirector] 首轮响应较慢，跳过二次AI修复以避免等待时间翻倍', {
+        firstPassDurationMs,
+        qualityScore: candidate.quality.score,
+        validationErrors: validation.errors.length,
+      });
     }
 
     // 6. 验证命令
-    const validation = validateCommands(commands);
     if (!validation.valid) {
       logger.warn('[previzDirector] 命令验证失败:', validation.errors.join('; '));
       // 不直接返回失败——尝试执行验证通过的命令（过滤掉无效的）
       // 但如果全部无效则返回错误
-      if (commands.length === validation.errors.length) {
+      if (candidate.commands.length === validation.errors.length) {
         return {
           success: false,
           message: `所有命令验证失败：${validation.errors.join('；')}`,
@@ -795,13 +1069,12 @@ async function processDirective({ sceneContext, prompt, directorProfile, materia
       }
     }
 
-    const explanation = parsed.explanation || `已生成 ${commands.length} 条场景操作命令。`;
-
     return {
       success: true,
       data: {
-        commands,
-        explanation,
+        commands: candidate.commands,
+        explanation: candidate.explanation,
+        quality: candidate.quality,
         validation: validation.errors.length > 0 ? validation : undefined,
         model: result.model,
       },
@@ -809,10 +1082,20 @@ async function processDirective({ sceneContext, prompt, directorProfile, materia
 
   } catch (err) {
     logger.error('[previzDirector] LLM 调用异常:', err.message);
-    return {
-      success: false,
-      message: `AI 场景生成失败：${err.message || '未知错误'}`,
-    };
+    const candidate = buildDeterministicPrevizFallback(prompt, materialType, { replaceScene });
+    if (candidate) {
+      return {
+        success: true,
+        data: {
+          commands: candidate.commands,
+          explanation: `${candidate.explanation} 原因：${err.message || '模型接口异常'}`,
+          quality: candidate.quality,
+          model: 'deterministic-fallback',
+          fallback: true,
+        },
+      };
+    }
+    return { success: false, message: `AI 场景生成失败：${err.message || '未知错误'}` };
   }
 }
 
@@ -916,4 +1199,6 @@ module.exports = {
   VALID_PROP_TYPES,
   VALID_POSES,
   VALID_CAMERA_MODES,
+  buildDeterministicPrevizFallback,
+  ensureExecutableCameraMotion,
 };

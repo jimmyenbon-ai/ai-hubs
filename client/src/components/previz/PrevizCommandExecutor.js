@@ -67,6 +67,132 @@ function clampCameraPosition(pos, freeY = false) {
   ];
 }
 
+function degreesToRadians(value) {
+  return (Number(value) || 0) * Math.PI / 180;
+}
+
+function lerpVector(a, b, t) {
+  return [0, 1, 2].map((axis) => (Number(a?.[axis]) || 0) + ((Number(b?.[axis]) || 0) - (Number(a?.[axis]) || 0)) * t);
+}
+
+function resolveRigCenter(command, nameToId, callbacks) {
+  if (Array.isArray(command.center)) return command.center.map(Number);
+  const subjectId = resolveTarget(command.subject, nameToId, callbacks.getAllActors);
+  const subject = callbacks.getAllActors().find((actor) => actor.id === subjectId);
+  if (subject?.position) return [subject.position[0], Number(command.look_at_height) || 1.55, subject.position[2]];
+  if (Array.isArray(command.lookAt)) return command.lookAt.map(Number);
+  return [0, Number(command.look_at_height) || 1.55, 0];
+}
+
+function buildCameraRigKeyframes(command, nameToId, callbacks) {
+  const rigType = command.rig_type || command.movement || 'dolly';
+  const startTime = Math.max(0, Number(command.start_time) || 0);
+  const endTime = Math.max(startTime + 0.5, Number(command.end_time ?? command.duration) || 6);
+  const center = resolveRigCenter(command, nameToId, callbacks);
+  const easing = command.easing || 'easeInOutCubic';
+  const fovStart = clampFov(command.fov_start ?? command.fov ?? 45);
+  const fovEnd = clampFov(command.fov_end ?? command.fov ?? fovStart);
+  const steps = Math.max(3, Math.min(12, Number(command.steps) || (rigType === 'handheld' ? 10 : 5)));
+  const keyframes = [];
+
+  if (rigType === 'follow' && command.subject) {
+    const subjectId = resolveTarget(command.subject, nameToId, callbacks.getAllActors);
+    const subjectTrack = callbacks.getTrack?.('actor', subjectId);
+    const offset = Array.isArray(command.offset) ? command.offset.map(Number) : [0, 1.1, -4];
+    const actorKeyframes = (subjectTrack?.keyframes || []).filter((keyframe) => keyframe.time >= startTime && keyframe.time <= endTime);
+    if (actorKeyframes.length >= 2) {
+      return actorKeyframes.map((keyframe, index) => {
+        const t = index / (actorKeyframes.length - 1);
+        const subjectPosition = keyframe.position || center;
+        return {
+          time: keyframe.time,
+          position: [subjectPosition[0] + offset[0], subjectPosition[1] + offset[1], subjectPosition[2] + offset[2]],
+          lookAt: [subjectPosition[0], subjectPosition[1] + (Number(command.look_at_height) || 1.55), subjectPosition[2]],
+          fov: fovStart + (fovEnd - fovStart) * t,
+          easing,
+        };
+      });
+    }
+  }
+
+  if (rigType === 'orbit') {
+    const radius = Math.max(1.5, Math.min(15, Number(command.radius) || 4));
+    const height = Math.max(0.5, Math.min(12, Number(command.height) || center[1]));
+    const startAngle = degreesToRadians(command.start_angle ?? -35);
+    const endAngle = degreesToRadians(command.end_angle ?? 35);
+    for (let index = 0; index < steps; index += 1) {
+      const t = index / (steps - 1);
+      const angle = startAngle + (endAngle - startAngle) * t;
+      keyframes.push({
+        time: startTime + (endTime - startTime) * t,
+        position: [center[0] + Math.sin(angle) * radius, height, center[2] + Math.cos(angle) * radius],
+        lookAt: [...center],
+        fov: fovStart + (fovEnd - fovStart) * t,
+        easing,
+      });
+    }
+    return keyframes;
+  }
+
+  const defaultStart = [center[0], center[1] + 0.15, center[2] + (rigType === 'pull_out' ? 3 : 7)];
+  const defaultEnd = [
+    center[0] + (rigType === 'truck' ? 5 : 0),
+    center[1] + (rigType === 'crane' ? 4 : 0.15),
+    center[2] + (rigType === 'pull_out' ? 8 : 3),
+  ];
+  const start = clampCameraPosition(command.start_position || command.position_start || defaultStart, true);
+  const end = clampCameraPosition(command.end_position || command.position_end || defaultEnd, true);
+
+  for (let index = 0; index < steps; index += 1) {
+    const t = index / (steps - 1);
+    let position = lerpVector(start, end, t);
+    if (rigType === 'handheld') {
+      const intensity = Math.max(0.005, Math.min(0.12, Number(command.intensity) || 0.025));
+      position = [
+        position[0] + Math.sin(t * Math.PI * 7) * intensity,
+        position[1] + Math.sin(t * Math.PI * 11 + 0.7) * intensity * 0.55,
+        position[2] + Math.sin(t * Math.PI * 5 + 1.3) * intensity * 0.35,
+      ];
+    }
+    keyframes.push({
+      time: startTime + (endTime - startTime) * t,
+      position,
+      lookAt: [...center],
+      fov: fovStart + (fovEnd - fovStart) * t,
+      easing: rigType === 'handheld' ? 'linear' : easing,
+    });
+  }
+  return keyframes;
+}
+
+export function ensureCameraTrackForRecording({ prompt = '', duration = 15 } = {}, callbacks) {
+  const cameras = callbacks.getAllCameras?.() || [];
+  const activeId = callbacks.getActiveCameraId?.();
+  const cameraId = cameras.some((camera) => camera.id === activeId) ? activeId : cameras[0]?.id;
+  if (!cameraId) return { created: false, reason: '没有可用主机位' };
+  const currentTrack = callbacks.getTrack?.('camera', cameraId);
+  if (currentTrack?.keyframes?.length >= 2) return { created: false, reason: '已有摄影机轨道', cameraId };
+
+  const actors = callbacks.getAllActors?.() || [];
+  const subject = actors[0];
+  const seconds = Math.max(3, Math.min(120, Number(duration) || 15));
+  const wantsOrbit = /环绕|绕到|绕拍|顺时针|逆时针/.test(prompt);
+  const wantsCrane = /升至|升高|升降|俯拍|高机位/.test(prompt);
+  const command = wantsOrbit
+    ? { rig_type: 'orbit', subject: subject?.name, start_time: 0, end_time: seconds, radius: 4.8, start_angle: -32, end_angle: 34, height: 1.45, look_at_height: 1.55, fov_start: 52, fov_end: 38, easing: 'easeInOutCubic' }
+    : { rig_type: wantsCrane ? 'crane' : 'dolly', subject: subject?.name, start_time: 0, end_time: seconds, start_position: [-3.8, 1.1, 6.5], end_position: wantsCrane ? [2.8, 3.5, 6.8] : [-1.8, 1.5, 3.8], fov_start: 50, fov_end: 38, easing: 'easeInOutCubic' };
+  const nameToId = subject?.name ? { [subject.name]: subject.id } : {};
+  const keyframes = buildCameraRigKeyframes(command, nameToId, callbacks);
+  callbacks.setCameraTrack?.(cameraId, keyframes, {
+    rigType: command.rig_type,
+    subject: command.subject,
+    easing: command.easing,
+  });
+  callbacks.setActiveCamera?.(cameraId);
+  callbacks.setCameraMode?.(command.rig_type === 'orbit' ? 'orbit' : command.rig_type === 'crane' ? 'drone' : 'fixed');
+  return { created: keyframes.length >= 2, cameraId, keyframes: keyframes.length };
+}
+
 /**
  * 应用 AI 生成的命令列表到场景
  *
@@ -139,12 +265,13 @@ export function applyCommands(commands, callbacks) {
         }
 
         case 'create_prop': {
-          callbacks.createProp(
+          const propId = callbacks.createProp(
             cmd.prop_type,
             clampPosition(cmd.position, false),
             cmd.rotation,
             cmd.scale
           );
+          if (propId && cmd.name) nameToId[cmd.name] = propId;
           break;
         }
 
@@ -246,6 +373,31 @@ export function applyCommands(commands, callbacks) {
         case 'add_keyframe': {
           const time = Math.max(0, Math.min(120, Number(cmd.time) || 0));
           callbacks.addKeyframe?.(time);
+          break;
+        }
+
+        case 'set_camera_rig': {
+          const availableCameras = callbacks.getAllCameras();
+          const resolvedId = resolveTarget(cmd.target, nameToId, callbacks.getAllCameras);
+          const id = availableCameras.some((camera) => camera.id === resolvedId)
+            ? resolvedId
+            : callbacks.getActiveCameraId?.() || availableCameras[0]?.id;
+          if (id) {
+            const keyframes = buildCameraRigKeyframes(cmd, nameToId, callbacks);
+            callbacks.setCameraTrack?.(id, keyframes, {
+              rigType: cmd.rig_type || cmd.movement || 'dolly',
+              subject: cmd.subject,
+              easing: cmd.easing || 'easeInOutCubic',
+            });
+            const mode = {
+              orbit: 'orbit',
+              handheld: 'handheld',
+              follow: 'follow',
+              crane: 'drone',
+            }[cmd.rig_type] || 'fixed';
+            callbacks.setCameraMode?.(mode);
+            callbacks.setActiveCamera?.(id);
+          }
           break;
         }
 

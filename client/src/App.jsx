@@ -1,10 +1,9 @@
-import { useCallback, useEffect, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
 import './App.css'
 import Sidebar from './Sidebar'
 import ImageFreePanel from './ImageFreePanel'
 import TemplatePanel from './TemplatePanel'
 import MusicGenerate from './MusicGenerate'
-import VideoGenerate from './VideoGenerate'
 import TemplateManage from './TemplateManage'
 import PromptTemplateLibrary from './PromptTemplateLibrary'
 import WorkflowPanel from './WorkflowPanel'
@@ -14,8 +13,20 @@ import StyleProfileManager from './StyleProfileManager'
 import AIDialogPanel from './AIDialogPanel'
 import StoryboardPanel from './StoryboardPanel'
 import ProductAutomationPanel from './ProductAutomationPanel'
-import DirectorPreviz from './DirectorPreviz'
 import { Icon, ICON_LIST } from './components/Icons'
+
+const VideoGenerate = lazy(() => import('./VideoGenerate'))
+const DirectorPreviz = lazy(() => import('./DirectorPreviz'))
+
+function WorkspaceLoading({ label }) {
+  return (
+    <div className="workspace-lazy-loading">
+      <span />
+      <strong>{label}</strong>
+      <small>正在按需加载工作台资源...</small>
+    </div>
+  )
+}
 
 function App() {
   const [currentGroup, setCurrentGroup] = useState('image')
@@ -40,6 +51,7 @@ function App() {
   const [showStoryboard, setShowStoryboard] = useState(false)
   const [showProductAutomation, setShowProductAutomation] = useState(false)
   const [showPreviz, setShowPreviz] = useState(false)
+  const [previzHandoff, setPrevizHandoff] = useState(null)
   const [userId, setUserId] = useState(() => localStorage.getItem('aihub_user_id') || null)
 
   // 切换主题
@@ -415,12 +427,28 @@ function App() {
               }}
             />
           )}
-          {showPreviz && <DirectorPreviz onBack={() => setShowPreviz(false)} />}
+          {showPreviz && (
+            <Suspense fallback={<WorkspaceLoading label="3D 预演导演" />}>
+              <DirectorPreviz
+                onBack={() => setShowPreviz(false)}
+                onSendToVideo={(shotPackage) => {
+                  setPrevizHandoff(shotPackage)
+                  setShowPreviz(false)
+                  setCurrentGroup('video')
+                  setCurrentMode('free')
+                }}
+              />
+            </Suspense>
+          )}
           {showProductAutomation && !showPreviz && <ProductAutomationPanel onBack={() => setShowProductAutomation(false)} />}
           {showStoryboard && !showPreviz && <StoryboardPanel onBack={() => setShowStoryboard(false)} onNavigateToVideo={() => { setShowStoryboard(false); setCurrentGroup('video') }} />}
           {showAIDialog && !showStoryboard && !showProductAutomation && !showPreviz && <AIDialogPanel onBack={() => setShowAIDialog(false)} />}
           {!showPreviz && !showStoryboard && !showProductAutomation && !showAIDialog && !showWorkflow && !showPromptLibrary && currentGroup === 'image' && renderImageWorkspace()}
-          {!showPreviz && !showStoryboard && !showProductAutomation && !showAIDialog && !showWorkflow && !showPromptLibrary && currentGroup === 'video' && <VideoGenerate />}
+          {!showPreviz && !showStoryboard && !showProductAutomation && !showAIDialog && !showWorkflow && !showPromptLibrary && currentGroup === 'video' && (
+            <Suspense fallback={<WorkspaceLoading label="AI 视频生成" />}>
+              <VideoGenerate key={previzHandoff?.id || 'video'} previzPackage={previzHandoff} />
+            </Suspense>
+          )}
           {!showPreviz && !showStoryboard && !showProductAutomation && !showAIDialog && !showWorkflow && !showPromptLibrary && currentGroup === 'music' && <MusicGenerate />}
           {showWorkflow && !showStoryboard && !showProductAutomation && !showPreviz && <WorkflowPanel onBack={() => setShowWorkflow(false)} currentRole={currentRole} />}
           {showSettings && !showStoryboard && !showProductAutomation && !showPreviz && <SettingsPanel onBack={() => setShowSettings(false)} />}
