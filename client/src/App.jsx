@@ -17,6 +17,7 @@ import { Icon, ICON_LIST } from './components/Icons'
 
 const VideoGenerate = lazy(() => import('./VideoGenerate'))
 const DirectorPreviz = lazy(() => import('./DirectorPreviz'))
+const EnterpriseWorkspace = lazy(() => import('./EnterpriseWorkspace'))
 
 function WorkspaceLoading({ label }) {
   return (
@@ -51,6 +52,7 @@ function App() {
   const [showStoryboard, setShowStoryboard] = useState(false)
   const [showProductAutomation, setShowProductAutomation] = useState(false)
   const [showPreviz, setShowPreviz] = useState(false)
+  const [showEnterprise, setShowEnterprise] = useState(false)
   const [previzHandoff, setPrevizHandoff] = useState(null)
   const [userId, setUserId] = useState(() => localStorage.getItem('aihub_user_id') || null)
 
@@ -127,8 +129,63 @@ function App() {
   }, [initUserId, theme])
 
   function handleNavigate(group, mode) {
+    setShowEnterprise(false)
     setCurrentGroup(group)
     setCurrentMode(mode)
+  }
+
+  function handleOpenEnterprise() {
+    setCurrentGroup('enterprise')
+    setShowEnterprise(true)
+    setShowPreviz(false)
+    setShowProductAutomation(false)
+    setShowStoryboard(false)
+    setShowWorkflow(false)
+    setShowAIDialog(false)
+    setShowPromptLibrary(false)
+    setShowSettings(false)
+    setShowStyleManager(false)
+    setSidebarOpen(false)
+  }
+
+  function handleEnterpriseLaunch(tool) {
+    setShowEnterprise(false)
+    setShowPreviz(false)
+    setShowProductAutomation(false)
+    setShowStoryboard(false)
+    setShowWorkflow(false)
+    setShowAIDialog(false)
+    setShowPromptLibrary(false)
+    setShowSettings(false)
+    setShowStyleManager(false)
+
+    if (tool === 'previz') {
+      setCurrentGroup('previz')
+      setShowPreviz(true)
+      return
+    }
+    if (tool === 'storyboard') {
+      setCurrentGroup('storyboard')
+      setShowStoryboard(true)
+      return
+    }
+    if (tool === 'product-automation') {
+      setCurrentGroup('product-automation')
+      setShowProductAutomation(true)
+      return
+    }
+    if (tool === 'workflow') {
+      setCurrentGroup('workflow')
+      setShowWorkflow(true)
+      return
+    }
+    if (tool === 'ai-dialog') {
+      setCurrentGroup('ai-dialog')
+      setShowAIDialog(true)
+      return
+    }
+    setCurrentGroup(tool === 'video' ? 'video' : 'image')
+    setCurrentMode('free')
   }
 
   function handleRoleChange(roleId) {
@@ -254,11 +311,14 @@ function App() {
           currentMode={currentMode}
           currentRole={currentRole}
           onRoleChange={handleRoleChange}
+          onOpenEnterprise={handleOpenEnterprise}
           templates={templates}
           onNavigate={(g, m) => { handleNavigate(g, m); setSidebarOpen(false) }}
-          onCreateTemplate={() => setShowTemplateCreate(true)}
-          onManageTemplates={() => { setShowTemplateManage(true); setSidebarOpen(false) }}
+          onCreateTemplate={() => { setShowEnterprise(false); setCurrentGroup('image'); setShowTemplateCreate(true) }}
+          onManageTemplates={() => { setShowEnterprise(false); setCurrentGroup('image'); setShowTemplateManage(true); setSidebarOpen(false) }}
           onOpenPromptLibrary={() => {
+            setShowEnterprise(false)
+            if (currentGroup === 'enterprise') setCurrentGroup('image')
             // 如果当前已在模板库，则关闭；否则打开
             if (showPromptLibrary) {
               setShowPromptLibrary(false)
@@ -267,6 +327,7 @@ function App() {
             }
           }}
           onOpenWorkflow={() => {
+            setShowEnterprise(false)
             setCurrentGroup('workflow')
             setShowWorkflow(true)
             setShowAIDialog(false)
@@ -275,6 +336,7 @@ function App() {
             setSidebarOpen(false)
           }}
           onOpenAIDialog={() => {
+            setShowEnterprise(false)
             setCurrentGroup('ai-dialog')
             setShowAIDialog(true)
             setShowWorkflow(false)
@@ -284,6 +346,7 @@ function App() {
             setSidebarOpen(false)
           }}
           onOpenStoryboard={() => {
+            setShowEnterprise(false)
             setCurrentGroup('storyboard')
             setShowStoryboard(true)
             setShowProductAutomation(false)
@@ -296,6 +359,7 @@ function App() {
             setSidebarOpen(false)
           }}
           onOpenProductAutomation={() => {
+            setShowEnterprise(false)
             setCurrentGroup('product-automation')
             setShowProductAutomation(true)
             setShowStoryboard(false)
@@ -308,6 +372,7 @@ function App() {
             setSidebarOpen(false)
           }}
           onOpenPreviz={() => {
+            setShowEnterprise(false)
             setCurrentGroup('previz')
             setShowPreviz(true)
             setShowStoryboard(false)
@@ -320,6 +385,7 @@ function App() {
             setSidebarOpen(false)
           }}
           onOpenStyleManager={() => {
+            setShowEnterprise(false)
             setShowStyleManager(true)
             setShowWorkflow(false)
             setShowSettings(false)
@@ -328,6 +394,7 @@ function App() {
             setSidebarOpen(false)
           }}
           onOpenSettings={() => {
+            setShowEnterprise(false)
             if (showSettings) {
               setShowSettings(false)
             } else {
@@ -367,18 +434,19 @@ function App() {
               </svg>
             </button>
             <span className="header-title">
-              {showPreviz && '3D 预演导演'}
-              {showProductAutomation && !showPreviz && '产品图自动化'}
-              {showStoryboard && !showPreviz && 'AI 视频自动化'}
-              {showWorkflow && !showStoryboard && !showProductAutomation && !showPreviz && 'AI 工作流'}
-              {showPromptLibrary && !showStoryboard && !showProductAutomation && '提示词模板库'}
-              {!showStoryboard && !showProductAutomation && !showWorkflow && !showPromptLibrary && currentGroup === 'image' && currentMode === 'free' && 'AI 图片生成 · 自由创作'}
-              {!showStoryboard && !showProductAutomation && !showWorkflow && !showPromptLibrary && currentGroup === 'image' && currentMode === 'batch' && 'AI 图片生成 · 批量生成'}
-              {showSettings && !showStoryboard && !showProductAutomation && '系统设置'}
-              {showAIDialog && !showStoryboard && !showProductAutomation && 'AI 智能对话'}
-              {!showStoryboard && !showProductAutomation && !showWorkflow && !showPromptLibrary && currentGroup === 'image' && currentMode.startsWith('tpl_') && (getCurrentTemplate()?.name || '模板生成')}
-              {!showStoryboard && !showProductAutomation && !showWorkflow && !showPromptLibrary && currentGroup === 'video' && 'AI 视频生成'}
-              {!showStoryboard && !showProductAutomation && !showWorkflow && !showPromptLibrary && currentGroup === 'music' && 'Suno AI音乐生成'}
+              {showEnterprise && '企业 AI 工作台'}
+              {!showEnterprise && showPreviz && '3D 预演导演'}
+              {!showEnterprise && showProductAutomation && !showPreviz && '产品图自动化'}
+              {!showEnterprise && showStoryboard && !showPreviz && 'AI 视频自动化'}
+              {!showEnterprise && showWorkflow && !showStoryboard && !showProductAutomation && !showPreviz && 'AI 工作流'}
+              {!showEnterprise && showPromptLibrary && !showStoryboard && !showProductAutomation && '提示词模板库'}
+              {!showEnterprise && !showStoryboard && !showProductAutomation && !showWorkflow && !showPromptLibrary && currentGroup === 'image' && currentMode === 'free' && 'AI 图片生成 · 自由创作'}
+              {!showEnterprise && !showStoryboard && !showProductAutomation && !showWorkflow && !showPromptLibrary && currentGroup === 'image' && currentMode === 'batch' && 'AI 图片生成 · 批量生成'}
+              {!showEnterprise && showSettings && !showStoryboard && !showProductAutomation && '系统设置'}
+              {!showEnterprise && showAIDialog && !showStoryboard && !showProductAutomation && 'AI 智能对话'}
+              {!showEnterprise && !showStoryboard && !showProductAutomation && !showWorkflow && !showPromptLibrary && currentGroup === 'image' && currentMode.startsWith('tpl_') && (getCurrentTemplate()?.name || '模板生成')}
+              {!showEnterprise && !showStoryboard && !showProductAutomation && !showWorkflow && !showPromptLibrary && currentGroup === 'video' && 'AI 视频生成'}
+              {!showEnterprise && !showStoryboard && !showProductAutomation && !showWorkflow && !showPromptLibrary && currentGroup === 'music' && 'Suno AI音乐生成'}
             </span>
           </div>
           <div className="header-actions">
@@ -406,7 +474,19 @@ function App() {
         </header>
 
         <div className="workspace">
-          {showPromptLibrary && (
+          {showEnterprise && (
+            <Suspense fallback={<WorkspaceLoading label="企业 AI 工作台" />}>
+              <EnterpriseWorkspace
+                onBack={() => {
+                  setShowEnterprise(false)
+                  setCurrentGroup('image')
+                  setCurrentMode('free')
+                }}
+                onLaunchTool={handleEnterpriseLaunch}
+              />
+            </Suspense>
+          )}
+          {!showEnterprise && showPromptLibrary && (
             <PromptTemplateLibrary
               onUseTemplate={(tpl) => {
                 if (tpl.contentType === 'image') {
@@ -427,7 +507,7 @@ function App() {
               }}
             />
           )}
-          {showPreviz && (
+          {!showEnterprise && showPreviz && (
             <Suspense fallback={<WorkspaceLoading label="3D 预演导演" />}>
               <DirectorPreviz
                 onBack={() => setShowPreviz(false)}
@@ -440,19 +520,19 @@ function App() {
               />
             </Suspense>
           )}
-          {showProductAutomation && !showPreviz && <ProductAutomationPanel onBack={() => setShowProductAutomation(false)} />}
-          {showStoryboard && !showPreviz && <StoryboardPanel onBack={() => setShowStoryboard(false)} onNavigateToVideo={() => { setShowStoryboard(false); setCurrentGroup('video') }} />}
-          {showAIDialog && !showStoryboard && !showProductAutomation && !showPreviz && <AIDialogPanel onBack={() => setShowAIDialog(false)} />}
-          {!showPreviz && !showStoryboard && !showProductAutomation && !showAIDialog && !showWorkflow && !showPromptLibrary && currentGroup === 'image' && renderImageWorkspace()}
-          {!showPreviz && !showStoryboard && !showProductAutomation && !showAIDialog && !showWorkflow && !showPromptLibrary && currentGroup === 'video' && (
+          {!showEnterprise && showProductAutomation && !showPreviz && <ProductAutomationPanel onBack={() => setShowProductAutomation(false)} />}
+          {!showEnterprise && showStoryboard && !showPreviz && <StoryboardPanel onBack={() => setShowStoryboard(false)} onNavigateToVideo={() => { setShowStoryboard(false); setCurrentGroup('video') }} />}
+          {!showEnterprise && showAIDialog && !showStoryboard && !showProductAutomation && !showPreviz && <AIDialogPanel onBack={() => setShowAIDialog(false)} />}
+          {!showEnterprise && !showPreviz && !showStoryboard && !showProductAutomation && !showAIDialog && !showWorkflow && !showPromptLibrary && currentGroup === 'image' && renderImageWorkspace()}
+          {!showEnterprise && !showPreviz && !showStoryboard && !showProductAutomation && !showAIDialog && !showWorkflow && !showPromptLibrary && currentGroup === 'video' && (
             <Suspense fallback={<WorkspaceLoading label="AI 视频生成" />}>
               <VideoGenerate key={previzHandoff?.id || 'video'} previzPackage={previzHandoff} />
             </Suspense>
           )}
-          {!showPreviz && !showStoryboard && !showProductAutomation && !showAIDialog && !showWorkflow && !showPromptLibrary && currentGroup === 'music' && <MusicGenerate />}
-          {showWorkflow && !showStoryboard && !showProductAutomation && !showPreviz && <WorkflowPanel onBack={() => setShowWorkflow(false)} currentRole={currentRole} />}
-          {showSettings && !showStoryboard && !showProductAutomation && !showPreviz && <SettingsPanel onBack={() => setShowSettings(false)} />}
-          {showStyleManager && <StyleProfileManager onBack={() => setShowStyleManager(false)} onSelectProfile={(profile) => { setShowStyleManager(false); setCurrentGroup('image'); setCurrentMode('free'); setInjectedTemplate({ prompt: profile.promptTemplate, model: profile.parameters?.model, aspectRatio: profile.parameters?.aspectRatio, imageSize: profile.parameters?.imageSize }); }} />}
+          {!showEnterprise && !showPreviz && !showStoryboard && !showProductAutomation && !showAIDialog && !showWorkflow && !showPromptLibrary && currentGroup === 'music' && <MusicGenerate />}
+          {!showEnterprise && showWorkflow && !showStoryboard && !showProductAutomation && !showPreviz && <WorkflowPanel onBack={() => setShowWorkflow(false)} currentRole={currentRole} />}
+          {!showEnterprise && showSettings && !showStoryboard && !showProductAutomation && !showPreviz && <SettingsPanel onBack={() => setShowSettings(false)} />}
+          {!showEnterprise && showStyleManager && <StyleProfileManager onBack={() => setShowStyleManager(false)} onSelectProfile={(profile) => { setShowStyleManager(false); setCurrentGroup('image'); setCurrentMode('free'); setInjectedTemplate({ prompt: profile.promptTemplate, model: profile.parameters?.model, aspectRatio: profile.parameters?.aspectRatio, imageSize: profile.parameters?.imageSize }); }} />}
         </div>
       </div>
 
