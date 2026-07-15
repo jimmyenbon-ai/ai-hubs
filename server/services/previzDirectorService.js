@@ -433,7 +433,7 @@ function buildSystemPrompt() {
 参数：duration(秒，可选，默认使用时间线时长), delay(秒，可选，默认0.5)。仅当用户明确要求录制、导出视频、生成参考片时输出。必须放在所有 create/move/add_keyframe 命令之后。
 
 **set_camera_rig** — 使用确定性电影摄影机Rig生成整条平滑轨道（优先于多次move_camera）
-参数：target(摄影机ID或名称), rig_type("orbit"/"dolly"/"pull_out"/"truck"/"crane"/"follow"/"handheld"), subject(演员名称，可选), start_time, end_time, easing, fov_start, fov_end。
+参数：target(摄影机ID或名称), rig_type("fixed"/"orbit"/"dolly"/"pull_out"/"truck"/"crane"/"follow"/"handheld"), subject(演员名称，可选), start_time, end_time, easing, fov_start, fov_end。fixed 用于“摄影机不动、主体自己动”，仍会生成覆盖全时长的静态摄影机轨道。
 orbit额外参数：radius(米), start_angle/end_angle(角度制，建议总幅度不超过70度), height, look_at_height。
 其他Rig可提供：start_position[x,y,z], end_position[x,y,z]。如果省略，系统会围绕subject自动求解安全机位。
 示例：{"type":"set_camera_rig","target":"主机位","rig_type":"orbit","subject":"男主角","start_time":0,"end_time":15,"radius":4.5,"start_angle":-30,"end_angle":35,"height":1.55,"fov_start":54,"fov_end":40,"easing":"easeInOutCubic"}
@@ -554,7 +554,7 @@ function validateCommands(commands) {
       }
     }
     if (cmd.type === 'set_camera_rig') {
-      const rigTypes = ['orbit', 'dolly', 'pull_out', 'truck', 'crane', 'follow', 'handheld'];
+      const rigTypes = ['fixed', 'orbit', 'dolly', 'pull_out', 'truck', 'crane', 'follow', 'handheld'];
       if (!rigTypes.includes(cmd.rig_type)) errors.push(`命令${i}(set_camera_rig): rig_type 无效`);
       if (cmd.end_time !== undefined && Number(cmd.end_time) <= Number(cmd.start_time || 0)) {
         errors.push(`命令${i}(set_camera_rig): end_time 必须大于 start_time`);
@@ -814,15 +814,39 @@ function ensurePromptRequiredAssets(commands, prompt) {
   return next;
 }
 
+function commandVectorDistance(a, b) {
+  return Math.hypot(
+    (Number(a?.[0]) || 0) - (Number(b?.[0]) || 0),
+    (Number(a?.[1]) || 0) - (Number(b?.[1]) || 0),
+    (Number(a?.[2]) || 0) - (Number(b?.[2]) || 0),
+  );
+}
+
+function isCameraRigLikelyAnimated(rig) {
+  if (!rig || rig.type !== 'set_camera_rig') return false;
+  // A fixed rig is intentionally static, but still provides a complete,
+  // recordable camera track. Scene/prop motion supplies the visual movement.
+  if (rig.rig_type === 'fixed') return true;
+  const fovChange = Math.abs((Number(rig.fov_end) || Number(rig.fov_start) || 45) - (Number(rig.fov_start) || 45));
+  if (rig.rig_type === 'orbit') {
+    return Math.abs((Number(rig.end_angle) || 0) - (Number(rig.start_angle) || 0)) > 1 || fovChange > 1;
+  }
+  const start = rig.start_position || rig.position_start;
+  const end = rig.end_position || rig.position_end;
+  if (Array.isArray(start) && Array.isArray(end)) return commandVectorDistance(start, end) > 0.3 || fovChange > 1;
+  return ['dolly', 'pull_out', 'truck', 'crane', 'follow', 'handheld'].includes(rig.rig_type);
+}
+
 function ensureExecutableCameraMotion(commands, prompt) {
-  const next = [...commands];
+  let next = [...commands];
   const recordIndex = next.findIndex((command) => command?.type === 'record_camera_video');
   const timeline = next.find((command) => command?.type === 'set_timeline_duration');
   const record = recordIndex >= 0 ? next[recordIndex] : null;
   const requestedAutoRecord = /一镜到底|自动录制|录制.{0,8}(视频|参考片|MP4)|生成.{0,5}视频/.test(prompt);
+  const requestsFixedCamera = /摄影机不动|固定机位|镜头固定|机位固定/.test(prompt);
   if (!record && !requestedAutoRecord) return next;
 
-  const cameraRig = next.find((command) => command?.type === 'set_camera_rig');
+  const cameraRig = next.find((command) => command?.type === 'set_camera_rig' && isCameraRigLikelyAnimated(command));
   const cameraMoves = next.filter((command) => command?.type === 'move_camera');
   const cameraKeyframes = next.filter((command) => command?.type === 'add_keyframe');
   const hasExplicitCameraAnimation = cameraRig || (cameraMoves.length >= 2 && cameraKeyframes.length >= 3);
@@ -835,14 +859,19 @@ function ensureExecutableCameraMotion(commands, prompt) {
     return next;
   }
 
+  next = next.filter((command) => command?.type !== 'set_camera_rig');
+
   const actor = next.find((command) => command?.type === 'create_actor');
   const subject = actor?.name;
   const wantsOrbit = /环绕|绕到|绕拍|顺时针|逆时针/.test(prompt);
   const wantsCrane = /升至|升高|升降|俯拍|高机位/.test(prompt);
-  const rig = wantsOrbit
-    ? { type: 'set_camera_rig', target: '主机位', rig_type: 'orbit', subject, start_time: 0, end_time: duration, radius: 4.8, start_angle: -32, end_angle: 34, height: 1.45, look_at_height: 1.55, fov_start: 52, fov_end: 38, easing: 'easeInOutCubic' }
-    : { type: 'set_camera_rig', target: '主机位', rig_type: wantsCrane ? 'crane' : 'dolly', subject, start_time: 0, end_time: duration, start_position: [-3.8, 1.1, 6.5], end_position: wantsCrane ? [2.8, 3.5, 6.8] : [-1.8, 1.5, 3.8], fov_start: 50, fov_end: 38, easing: 'easeInOutCubic' };
-  const insertAt = recordIndex >= 0 ? recordIndex : next.length;
+  const rig = requestsFixedCamera
+    ? { type: 'set_camera_rig', target: '主机位', rig_type: 'fixed', subject, start_time: 0, end_time: duration, fov_start: 45, fov_end: 45, easing: 'linear' }
+    : wantsOrbit
+      ? { type: 'set_camera_rig', target: '主机位', rig_type: 'orbit', subject, start_time: 0, end_time: duration, radius: 4.8, start_angle: -32, end_angle: 34, height: 1.45, look_at_height: 1.55, fov_start: 52, fov_end: 38, easing: 'easeInOutCubic' }
+      : { type: 'set_camera_rig', target: '主机位', rig_type: wantsCrane ? 'crane' : 'dolly', subject, start_time: 0, end_time: duration, start_position: [-3.8, 1.1, 6.5], end_position: wantsCrane ? [2.8, 3.5, 6.8] : [-1.8, 1.5, 3.8], fov_start: 50, fov_end: 38, easing: 'easeInOutCubic' };
+  const currentRecordIndex = next.findIndex((command) => command?.type === 'record_camera_video');
+  const insertAt = currentRecordIndex >= 0 ? currentRecordIndex : next.length;
   next.splice(insertAt, 0, rig);
   if (!record) next.push({ type: 'record_camera_video', duration, delay: 0.5 });
   return next;
@@ -907,8 +936,9 @@ function buildDeterministicPrevizFallback(prompt, materialType, { replaceScene =
   const wantsOpenDoor = /车门.{0,5}(打开|开启)|开着车门|车门打开/.test(prompt);
   const wantsOrbit = /环绕|绕到|绕拍|顺时针|逆时针/.test(prompt);
   const wantsCrane = /升至|升高|升降|俯拍|高机位/.test(prompt);
+  const wantsFixedCamera = /摄影机不动|固定机位|镜头固定|机位固定/.test(prompt);
   const subjectName = hasPerson ? '主角' : undefined;
-  const rigType = wantsOrbit ? 'orbit' : wantsCrane ? 'crane' : 'dolly';
+  const rigType = wantsFixedCamera ? 'fixed' : wantsOrbit ? 'orbit' : wantsCrane ? 'crane' : 'dolly';
   const commands = [
     { type: 'set_environment', mode: 'ground' },
     { type: 'set_aspect_ratio', value: /2\.3(?:5|9)|宽银幕/.test(prompt) ? '2.35:1' : '16:9' },
@@ -922,9 +952,11 @@ function buildDeterministicPrevizFallback(prompt, materialType, { replaceScene =
     commands.push({ type: 'create_prop', name: wantsOpenDoor ? '开门跑车' : '跑车', prop_type: wantsOpenDoor ? 'car_open' : 'car', position: [0, 0, 3.2], rotation: [0, Math.PI, 0], scale: [1, 1, 1] });
   }
   commands.push({ type: 'set_lighting', preset: /雨夜|夜景|夜晚|霓虹/.test(prompt) ? 'night' : 'cinematic' });
-  commands.push(rigType === 'orbit'
-    ? { type: 'set_camera_rig', target: '主机位', rig_type: 'orbit', subject: subjectName, start_time: 0, end_time: duration, radius: 4.8, start_angle: -32, end_angle: 34, height: 1.45, look_at_height: 1.55, fov_start: 52, fov_end: 38, easing: 'easeInOutCubic' }
-    : { type: 'set_camera_rig', target: '主机位', rig_type: rigType, subject: subjectName, start_time: 0, end_time: duration, start_position: [-3.8, 1.1, 6.5], end_position: wantsCrane ? [2.8, 3.5, 6.8] : [-1.8, 1.5, 3.8], fov_start: 50, fov_end: 38, easing: 'easeInOutCubic' });
+  commands.push(rigType === 'fixed'
+    ? { type: 'set_camera_rig', target: '主机位', rig_type: 'fixed', subject: subjectName, start_time: 0, end_time: duration, fov_start: 45, fov_end: 45, easing: 'linear' }
+    : rigType === 'orbit'
+      ? { type: 'set_camera_rig', target: '主机位', rig_type: 'orbit', subject: subjectName, start_time: 0, end_time: duration, radius: 4.8, start_angle: -32, end_angle: 34, height: 1.45, look_at_height: 1.55, fov_start: 52, fov_end: 38, easing: 'easeInOutCubic' }
+      : { type: 'set_camera_rig', target: '主机位', rig_type: rigType, subject: subjectName, start_time: 0, end_time: duration, start_position: [-3.8, 1.1, 6.5], end_position: wantsCrane ? [2.8, 3.5, 6.8] : [-1.8, 1.5, 3.8], fov_start: 50, fov_end: 38, easing: 'easeInOutCubic' });
   commands.push({ type: 'record_camera_video', duration, delay: 0.5 });
   return parseDirectiveCandidate(JSON.stringify({
     commands,

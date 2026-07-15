@@ -75,6 +75,33 @@ function lerpVector(a, b, t) {
   return [0, 1, 2].map((axis) => (Number(a?.[axis]) || 0) + ((Number(b?.[axis]) || 0) - (Number(a?.[axis]) || 0)) * t);
 }
 
+function vectorDistance(a, b) {
+  return Math.hypot(
+    (Number(a?.[0]) || 0) - (Number(b?.[0]) || 0),
+    (Number(a?.[1]) || 0) - (Number(b?.[1]) || 0),
+    (Number(a?.[2]) || 0) - (Number(b?.[2]) || 0),
+  );
+}
+
+function inspectCameraTrack(track, duration) {
+  const keyframes = track?.keyframes || [];
+  if (keyframes.length < 2) return { complete: false, moving: false };
+  let travel = 0;
+  let lookAtTravel = 0;
+  let fovChange = 0;
+  for (let index = 1; index < keyframes.length; index += 1) {
+    travel += vectorDistance(keyframes[index - 1].position, keyframes[index].position);
+    lookAtTravel += vectorDistance(keyframes[index - 1].lookAt, keyframes[index].lookAt);
+    fovChange += Math.abs((Number(keyframes[index].fov) || 45) - (Number(keyframes[index - 1].fov) || 45));
+  }
+  const firstTime = Number(keyframes[0]?.time) || 0;
+  const lastTime = Number(keyframes.at(-1)?.time) || 0;
+  return {
+    complete: firstTime <= 0.1 && lastTime >= Number(duration) - 0.2,
+    moving: travel > 0.3 || lookAtTravel > 0.2 || fovChange > 1,
+  };
+}
+
 function resolveRigCenter(command, nameToId, callbacks) {
   if (Array.isArray(command.center)) return command.center.map(Number);
   const subjectId = resolveTarget(command.subject, nameToId, callbacks.getAllActors);
@@ -84,7 +111,7 @@ function resolveRigCenter(command, nameToId, callbacks) {
   return [0, Number(command.look_at_height) || 1.55, 0];
 }
 
-function buildCameraRigKeyframes(command, nameToId, callbacks) {
+function buildCameraRigKeyframes(command, nameToId, callbacks, cameraId = null) {
   const rigType = command.rig_type || command.movement || 'dolly';
   const startTime = Math.max(0, Number(command.start_time) || 0);
   const endTime = Math.max(startTime + 0.5, Number(command.end_time ?? command.duration) || 6);
@@ -94,6 +121,27 @@ function buildCameraRigKeyframes(command, nameToId, callbacks) {
   const fovEnd = clampFov(command.fov_end ?? command.fov ?? fovStart);
   const steps = Math.max(3, Math.min(12, Number(command.steps) || (rigType === 'handheld' ? 10 : 5)));
   const keyframes = [];
+
+  if (rigType === 'fixed') {
+    const cameras = callbacks.getAllCameras?.() || [];
+    const camera = cameras.find((item) => item.id === cameraId)
+      || cameras.find((item) => item.id === callbacks.getActiveCameraId?.())
+      || cameras[0];
+    if (!camera) return keyframes;
+    const position = clampCameraPosition(command.position || camera.position || [0, 1.6, 6], true);
+    const lookAt = Array.isArray(command.lookAt)
+      ? command.lookAt.map(Number)
+      : Array.isArray(camera.lookAt) ? camera.lookAt.map(Number) : [...center];
+    const fov = clampFov(command.fov ?? camera.fov ?? fovStart);
+    return [startTime, endTime].map((time) => ({
+      time,
+      position: [...position],
+      rotation: Array.isArray(camera.rotation) ? [...camera.rotation] : [0, 0, 0],
+      lookAt: [...lookAt],
+      fov,
+      easing: 'linear',
+    }));
+  }
 
   if (rigType === 'follow' && command.subject) {
     const subjectId = resolveTarget(command.subject, nameToId, callbacks.getAllActors);
@@ -171,18 +219,24 @@ export function ensureCameraTrackForRecording({ prompt = '', duration = 15 } = {
   const cameraId = cameras.some((camera) => camera.id === activeId) ? activeId : cameras[0]?.id;
   if (!cameraId) return { created: false, reason: '没有可用主机位' };
   const currentTrack = callbacks.getTrack?.('camera', cameraId);
-  if (currentTrack?.keyframes?.length >= 2) return { created: false, reason: '已有摄影机轨道', cameraId };
+  const seconds = Math.max(3, Math.min(120, Number(duration) || 15));
+  const currentTrackState = inspectCameraTrack(currentTrack, seconds);
+  const requestsFixedCamera = /摄影机不动|固定机位|镜头固定|机位固定/.test(prompt);
+  if (currentTrackState.complete && (currentTrackState.moving || requestsFixedCamera)) {
+    return { created: false, reason: '已有完整摄影机轨道', cameraId };
+  }
 
   const actors = callbacks.getAllActors?.() || [];
   const subject = actors[0];
-  const seconds = Math.max(3, Math.min(120, Number(duration) || 15));
   const wantsOrbit = /环绕|绕到|绕拍|顺时针|逆时针/.test(prompt);
   const wantsCrane = /升至|升高|升降|俯拍|高机位/.test(prompt);
-  const command = wantsOrbit
-    ? { rig_type: 'orbit', subject: subject?.name, start_time: 0, end_time: seconds, radius: 4.8, start_angle: -32, end_angle: 34, height: 1.45, look_at_height: 1.55, fov_start: 52, fov_end: 38, easing: 'easeInOutCubic' }
-    : { rig_type: wantsCrane ? 'crane' : 'dolly', subject: subject?.name, start_time: 0, end_time: seconds, start_position: [-3.8, 1.1, 6.5], end_position: wantsCrane ? [2.8, 3.5, 6.8] : [-1.8, 1.5, 3.8], fov_start: 50, fov_end: 38, easing: 'easeInOutCubic' };
+  const command = requestsFixedCamera
+    ? { rig_type: 'fixed', subject: subject?.name, start_time: 0, end_time: seconds, easing: 'linear' }
+    : wantsOrbit
+      ? { rig_type: 'orbit', subject: subject?.name, start_time: 0, end_time: seconds, radius: 4.8, start_angle: -32, end_angle: 34, height: 1.45, look_at_height: 1.55, fov_start: 52, fov_end: 38, easing: 'easeInOutCubic' }
+      : { rig_type: wantsCrane ? 'crane' : 'dolly', subject: subject?.name, start_time: 0, end_time: seconds, start_position: [-3.8, 1.1, 6.5], end_position: wantsCrane ? [2.8, 3.5, 6.8] : [-1.8, 1.5, 3.8], fov_start: 50, fov_end: 38, easing: 'easeInOutCubic' };
   const nameToId = subject?.name ? { [subject.name]: subject.id } : {};
-  const keyframes = buildCameraRigKeyframes(command, nameToId, callbacks);
+  const keyframes = buildCameraRigKeyframes(command, nameToId, callbacks, cameraId);
   callbacks.setCameraTrack?.(cameraId, keyframes, {
     rigType: command.rig_type,
     subject: command.subject,
@@ -383,7 +437,7 @@ export function applyCommands(commands, callbacks) {
             ? resolvedId
             : callbacks.getActiveCameraId?.() || availableCameras[0]?.id;
           if (id) {
-            const keyframes = buildCameraRigKeyframes(cmd, nameToId, callbacks);
+            const keyframes = buildCameraRigKeyframes(cmd, nameToId, callbacks, id);
             callbacks.setCameraTrack?.(id, keyframes, {
               rigType: cmd.rig_type || cmd.movement || 'dolly',
               subject: cmd.subject,

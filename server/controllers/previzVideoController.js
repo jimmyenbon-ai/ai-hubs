@@ -4,17 +4,28 @@ const { spawn } = require('child_process');
 const ffmpegPath = require('ffmpeg-static');
 const logger = require('../utils/logger');
 
-function runFfmpeg(args) {
+function runFfmpeg(args, timeoutMs = 180000) {
   return new Promise((resolve, reject) => {
     const child = spawn(ffmpegPath, args, { windowsHide: true });
     let stderr = '';
+    let settled = false;
+    const finish = (callback, value) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      callback(value);
+    };
+    const timeout = setTimeout(() => {
+      child.kill('SIGKILL');
+      finish(reject, new Error(`FFmpeg 转换超时（${Math.round(timeoutMs / 1000)}秒）`));
+    }, timeoutMs);
     child.stderr.on('data', (chunk) => {
       stderr = `${stderr}${chunk}`.slice(-8000);
     });
-    child.on('error', reject);
+    child.on('error', (error) => finish(reject, error));
     child.on('close', (code) => {
-      if (code === 0) resolve();
-      else reject(new Error(`FFmpeg 转换失败（code ${code}）：${stderr.slice(-1200)}`));
+      if (code === 0) finish(resolve);
+      else finish(reject, new Error(`FFmpeg 转换失败（code ${code}）：${stderr.slice(-1200)}`));
     });
   });
 }
@@ -25,8 +36,8 @@ async function normalizePrevizVideo(req, res, next) {
     return res.status(400).json({ success: false, message: '没有收到待转换的视频' });
   }
 
-  const width = Math.max(2, Number(req.body.width) || 1920);
-  const height = Math.max(2, Number(req.body.height) || 1080);
+  const width = Math.max(2, Math.min(3840, Number(req.body.width) || 1920));
+  const height = Math.max(2, Math.min(2160, Number(req.body.height) || 1080));
   const fps = Math.max(24, Math.min(60, Number(req.body.fps) || 60));
   const outputWidth = width - (width % 2);
   const outputHeight = height - (height % 2);
@@ -65,10 +76,10 @@ async function normalizePrevizVideo(req, res, next) {
     });
   } catch (error) {
     logger.error('[previzVideo] normalize failed:', error.message);
+    await fs.unlink(inputPath).catch(() => {});
     await fs.unlink(outputPath).catch(() => {});
     return next(error);
   }
 }
 
 module.exports = { normalizePrevizVideo };
-

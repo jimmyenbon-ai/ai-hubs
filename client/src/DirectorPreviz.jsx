@@ -416,12 +416,23 @@ export default function DirectorPreviz({ onBack, onSendToVideo }) {
       const file = new File([blob], `previz-${targetKey}-${Date.now()}.${ext}`, { type: mimeType })
       let videoAsset
       try {
+        const normalizeController = new AbortController()
+        const normalizeTimeout = window.setTimeout(() => normalizeController.abort(), 180000)
         const formData = new FormData()
         formData.append('video', file)
         formData.append('width', String(width || 1920))
         formData.append('height', String(height || 1080))
         formData.append('fps', String(fps || 60))
-        const response = await fetch('/api/previz/normalize-video', { method: 'POST', body: formData })
+        let response
+        try {
+          response = await fetch('/api/previz/normalize-video', {
+            method: 'POST',
+            body: formData,
+            signal: normalizeController.signal,
+          })
+        } finally {
+          window.clearTimeout(normalizeTimeout)
+        }
         const data = await response.json().catch(() => ({}))
         if (!response.ok || !data.success || !data.data?.url) {
           throw new Error(data.message || 'H.264 MP4转换失败')
