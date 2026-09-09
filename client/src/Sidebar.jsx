@@ -7,7 +7,7 @@ const CONTENT_TYPES = [
   { value: 'music', label: '音乐' },
 ]
 
-function Sidebar({ currentGroup, currentMode, currentRole, onRoleChange, templates = [], onNavigate, onCreateTemplate, onManageTemplates, onOpenEnterprise, onOpenPromptLibrary, onOpenWorkflow, onOpenStoryboard, onOpenProductAutomation, onOpenPreviz, onOpenStyleManager, onOpenSettings, onOpenTutorial, onOpenAIDialog }) {
+function Sidebar({ currentGroup, currentMode, currentRole, onRoleChange, templates = [], onNavigate, onCreateTemplate, onManageTemplates, showEnterpriseEntry = false, onOpenEnterprise, onOpenPromptLibrary, onOpenWorkflow, onOpenStoryboard, onOpenProductAutomation, onOpenPreviz, onOpenStyleManager, onOpenSettings, onOpenTutorial, onOpenAIDialog }) {
   const [expandedGroups, setExpandedGroups] = useState({
     image: true,
     video: false,
@@ -76,21 +76,23 @@ function Sidebar({ currentGroup, currentMode, currentRole, onRoleChange, templat
       <div className="logo-name">Enbon AI</div>
       <div className="logo-subtitle">设计工作台</div>
       <RoleSelector currentRole={currentRole} onRoleChange={onRoleChange} />
-      <div className="nav-library-entry enterprise-nav-entry" style={{ padding: '8px 10px 2px' }}>
-        <button
-          type="button"
-          className={`nav-group-header enterprise-nav-button ${currentGroup === 'enterprise' ? 'active-group' : ''}`}
-          onClick={onOpenEnterprise}
-        >
-          <span className="nav-group-icon">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M3 21h18"/><path d="M5 21V7l7-4 7 4v14"/><path d="M9 21v-5h6v5"/><path d="M9 9h.01M15 9h.01M9 12h.01M15 12h.01"/>
-            </svg>
-          </span>
-          <span className="nav-group-label">企业 AI 工作台</span>
-          <span className="enterprise-nav-badge">V1</span>
-        </button>
-      </div>
+      {showEnterpriseEntry && (
+        <div className="nav-library-entry enterprise-nav-entry" style={{ padding: '8px 10px 2px' }}>
+          <button
+            type="button"
+            className={`nav-group-header enterprise-nav-button ${currentGroup === 'enterprise' ? 'active-group' : ''}`}
+            onClick={onOpenEnterprise}
+          >
+            <span className="nav-group-icon">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M3 21h18"/><path d="M5 21V7l7-4 7 4v14"/><path d="M9 21v-5h6v5"/><path d="M9 9h.01M15 9h.01M9 12h.01M15 12h.01"/>
+              </svg>
+            </span>
+            <span className="nav-group-label">企业 AI 工作台</span>
+            <span className="enterprise-nav-badge">V1</span>
+          </button>
+        </div>
+      )}
       <nav className="nav-menu">
         {groups.map((group) => {
           const groupTemplates = templatesByGroup[group.id] || []

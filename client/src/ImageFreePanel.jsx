@@ -582,10 +582,11 @@ function ImageFreePanel({ injectedTemplate, onInjectedConsumed, userId, currentR
           {GPT_IMAGE_MODEL_OPTIONS.map((model) => (
             <div
               key={model.value}
-              className={`model-card ${selectedModel === model.value ? 'active' : ''}`}
+              className={`model-card ${model.isNew ? 'has-new-badge' : ''} ${selectedModel === model.value ? 'active' : ''}`}
               onClick={() => { setSelectedModel(model.value); setImageSize('1K') }}
             >
-              {model.label}<br />
+              {model.isNew && <span className="model-new-badge">NEW</span>}
+              <span className="model-name">{model.label}</span>
               <span className="model-sub">{model.supportsImageSize ? '支持 1K/2K/4K' : '支持比例'}</span>
             </div>
           ))}
