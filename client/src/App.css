@@ -892,6 +892,55 @@ code {
   line-height: 1;
 }
 
+.model-tier-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 7px;
+  padding: 3px 7px;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.model-tier-badge.economy {
+  border-color: #3f7d59;
+  background: rgba(55, 130, 81, 0.15);
+  color: #77d391;
+}
+
+.model-tier-badge.balanced {
+  border-color: #9f7620;
+  background: rgba(204, 153, 30, 0.15);
+  color: #e6bc54;
+}
+
+.model-tier-badge.premium {
+  border-color: #a74a4a;
+  background: rgba(220, 55, 55, 0.14);
+  color: #f08787;
+}
+
+[data-theme="light"] .model-tier-badge.economy {
+  border-color: #86a894;
+  background: #edf7f0;
+  color: #2f6b45;
+}
+
+[data-theme="light"] .model-tier-badge.balanced {
+  border-color: #d5a73b;
+  background: #fff7db;
+  color: #76520c;
+}
+
+[data-theme="light"] .model-tier-badge.premium {
+  border-color: #cf7777;
+  background: #fff0f0;
+  color: #a32121;
+}
+
 .model-card:hover {
   border-color: var(--border-light);
   color: var(--text-main);

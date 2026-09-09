@@ -588,6 +588,9 @@ function ImageFreePanel({ injectedTemplate, onInjectedConsumed, userId, currentR
               {model.isNew && <span className="model-new-badge">NEW</span>}
               <span className="model-name">{model.label}</span>
               <span className="model-sub">{model.supportsImageSize ? '支持 1K/2K/4K' : '支持比例'}</span>
+              {model.tierLabel && (
+                <span className={`model-tier-badge ${model.tierTone}`}>{model.tierLabel}</span>
+              )}
             </div>
           ))}
           <div className={`model-card ${selectedModel === 'nano-banana-pro' ? 'active' : ''}`} onClick={() => { setSelectedModel('nano-banana-pro'); setImageSize('1K'); }}>

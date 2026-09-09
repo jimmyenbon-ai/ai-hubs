@@ -1,9 +1,9 @@
 export const IMAGE_MODEL_OPTIONS = [
   { value: 'gpt-image-2', label: 'GPT-Image 2', category: 'gpt', supportsImageSize: false },
   { value: 'gpt-image-2-vip', label: 'GPT-Image 2 VIP', category: 'gpt', supportsImageSize: true },
-  { value: 'gpt-image-2.5', label: 'GPT-Image 2.5', category: 'gpt', supportsImageSize: false, isNew: true },
-  { value: 'gpt-image-2.5-flare', label: 'GPT-Image 2.5 Flare', category: 'gpt', supportsImageSize: true, isNew: true },
-  { value: 'gpt-image-2.5-sunburst', label: 'GPT-Image 2.5 Sunburst', category: 'gpt', supportsImageSize: true, isNew: true },
+  { value: 'gpt-image-2.5', label: 'GPT-Image 2.5', category: 'gpt', supportsImageSize: false, isNew: true, tierLabel: '低成本', tierTone: 'economy' },
+  { value: 'gpt-image-2.5-flare', label: 'GPT-Image 2.5 Flare', category: 'gpt', supportsImageSize: true, isNew: true, tierLabel: '均衡推荐', tierTone: 'balanced' },
+  { value: 'gpt-image-2.5-sunburst', label: 'GPT-Image 2.5 Sunburst', category: 'gpt', supportsImageSize: true, isNew: true, tierLabel: '高画质', tierTone: 'premium' },
   { value: 'nano-banana', label: 'Nano Banana', category: 'nano', supportsImageSize: true },
   { value: 'nano-banana-fast', label: 'Nano Banana Fast', category: 'nano', supportsImageSize: true },
   { value: 'nano-banana-2', label: 'Nano Banana 2', category: 'nano', supportsImageSize: true },
