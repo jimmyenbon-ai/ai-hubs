@@ -5,6 +5,7 @@ const { intelligentSearch, isMultimedia, isImageContent, isVideoContent, isAudio
 const { ensurePublicImageUrl } = require('../utils/imageUtils');
 const { saveImage: saveImageLocal, saveVideo: saveVideoLocal, saveText: saveTextLocal } = require('../utils/localStorage');
 const { appConfig } = require('../utils/appConfig');
+const { GPT_IMAGE_PIXEL_SIZE_MODELS } = require('../config/imageModels');
 
 // 获取节点实际使用的 LLM 配置：优先读数据库中的默认配置，fallback 到硬编码默认值
 async function getNodeLLMConfig(node) {
@@ -1430,7 +1431,6 @@ async function handleImageGenerate(node, inputs, context) {
   const aspectRatio = node.data?.aspectRatio || '1:1';
   const resolution = node.data?.resolution || '1K';
   const isNanoBanana = model.startsWith('nano-banana');
-  const isGptImage2Vip = model === 'gpt-image-2-vip';
 
   const requestBody = {
     prompt,
@@ -1440,7 +1440,9 @@ async function handleImageGenerate(node, inputs, context) {
     images: publicRefs.length > 0 ? publicRefs : undefined,
   };
 
-  if (isNanoBanana) requestBody.imageSize = resolution;
+  if (isNanoBanana || GPT_IMAGE_PIXEL_SIZE_MODELS.includes(model)) {
+    requestBody.imageSize = resolution;
+  }
 
   try {
     const apiBase = getApiBase();

@@ -1,7 +1,8 @@
 const express = require('express');
 const { handleGenerate } = require('../controllers/generateController');
 const { generateLimiter } = require('../middleware/rateLimiter');
-const { GPT_ASPECT_RATIOS, SUPPORTED_NANO_MODELS } = require('../utils/grsaiClient');
+const { GPT_ASPECT_RATIOS } = require('../utils/grsaiClient');
+const { ALL_IMAGE_MODELS, IMAGE_MODEL_POINTS } = require('../config/imageModels');
 
 // Nano Banana 专用的 aspectRatio 和 imageSize
 const NANO_ASPECT_RATIOS = [
@@ -38,36 +39,19 @@ router.get('/config', (req, res) => {
   res.json({
     success: true,
     data: {
-      models: [
-        {
-          id: 'gpt-image-2',
-          name: 'GPT-Image 2',
-          description: 'ChatGPT 最新绘图模型，支持比例',
-          points: 2,
-          aspectRatios: GPT_ASPECT_RATIOS,
-          supportsImageSize: false,
-        },
-        {
-          id: 'gpt-image-2-vip',
-          name: 'GPT-Image 2 VIP',
-          description: '支持 1K/2K/4K 分辨率',
-          points: 5,
-          aspectRatios: GPT_ASPECT_RATIOS,
-          supportsImageSize: true,
-          imageSizes: NANO_IMAGE_SIZES,
-        },
-        ...SUPPORTED_NANO_MODELS.map(m => ({
-          id: m,
-          name: m,
-          description: '基础绘图模型',
-          aspectRatios: NANO_ASPECT_RATIOS,
-          supportsImageSize: true,
-          imageSizes: NANO_IMAGE_SIZES,
-        })),
-      ],
+      models: ALL_IMAGE_MODELS.map((model) => ({
+        id: model.value,
+        name: model.label,
+        description: model.category === 'gpt'
+          ? (model.supportsImageSize ? '支持 1K/2K/4K 分辨率' : '支持常用画幅比例')
+          : 'Nano Banana 绘图模型',
+        points: IMAGE_MODEL_POINTS[model.value],
+        aspectRatios: model.category === 'gpt' ? GPT_ASPECT_RATIOS : NANO_ASPECT_RATIOS,
+        supportsImageSize: model.supportsImageSize,
+        imageSizes: model.supportsImageSize ? NANO_IMAGE_SIZES : undefined,
+      })),
     },
   });
 });
 
 module.exports = router;
-

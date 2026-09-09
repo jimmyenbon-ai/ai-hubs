@@ -9,36 +9,10 @@ const cache = require('../utils/cache')
 const { saveImage: saveImageLocal, localPathToUrl } = require('../utils/localStorage')
 const { StyleProfile } = require('../models/styleProfileModel')
 const { extractStyleIntent, matchStyleProfile, buildStyleAwarePrompt } = require('../services/styleMatcher')
+const { GPT_IMAGE_MODELS, IMAGE_MODEL_POINTS, SUPPORTED_NANO_MODELS } = require('../config/imageModels')
 
-// GRSai 支持的模型列表（用于判断是否走 GRSai）
-const GRSAI_MODELS = [
-  'gpt-image-2',
-  'gpt-image-2-vip',
-  'nano-banana',
-  'nano-banana-fast',
-  'nano-banana-2',
-  'nano-banana-2-cl',
-  'nano-banana-2-4k-cl',
-  'nano-banana-pro',
-  'nano-banana-pro-cl',
-  'nano-banana-pro-vip',
-  'nano-banana-pro-4k-vip',
-]
-
-// 模型对应积分消耗
-const MODEL_POINTS = {
-  'gpt-image-2': 2,
-  'gpt-image-2-vip': 5,
-  'nano-banana': 1,
-  'nano-banana-fast': 1,
-  'nano-banana-2': 2,
-  'nano-banana-2-cl': 2,
-  'nano-banana-2-4k-cl': 4,
-  'nano-banana-pro': 1,
-  'nano-banana-pro-cl': 2,
-  'nano-banana-pro-vip': 2,
-  'nano-banana-pro-4k-vip': 4,
-}
+const GRSAI_MODELS = [...GPT_IMAGE_MODELS, ...SUPPORTED_NANO_MODELS]
+const MODEL_POINTS = IMAGE_MODEL_POINTS
 
 // POST /api/generate
 // body: { originalPrompt, apiPrompt, model, aspectRatio, imageSize, quality, referenceImages }

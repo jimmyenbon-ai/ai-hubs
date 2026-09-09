@@ -1,19 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Icon } from './components/Icons'
-
-const MODEL_OPTIONS = [
-  { value: 'gpt-image-2', label: 'GPT-Image 2' },
-  { value: 'gpt-image-2-vip', label: 'GPT-Image 2 VIP' },
-  { value: 'nano-banana', label: 'Nano Banana' },
-  { value: 'nano-banana-fast', label: 'Nano Banana Fast' },
-  { value: 'nano-banana-2', label: 'Nano Banana 2' },
-  { value: 'nano-banana-2-cl', label: 'Nano Banana 2 CL (2K)' },
-  { value: 'nano-banana-2-4k-cl', label: 'Nano Banana 2 4K CL' },
-  { value: 'nano-banana-pro', label: 'Nano Banana Pro' },
-  { value: 'nano-banana-pro-cl', label: 'Nano Banana Pro CL (2K)' },
-  { value: 'nano-banana-pro-vip', label: 'Nano Banana Pro VIP (2K)' },
-  { value: 'nano-banana-pro-4k-vip', label: 'Nano Banana Pro 4K VIP' },
-]
+import { IMAGE_MODEL_OPTIONS as MODEL_OPTIONS } from './imageModels'
 
 const ASPECT_RATIOS = [
   { value: '16:9', label: '16:9 横版' },

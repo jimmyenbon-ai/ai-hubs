@@ -20,6 +20,7 @@ import KnowledgePanel from './KnowledgePanel';
 import WorkflowHistoryPanel from './WorkflowHistoryPanel';
 import WorkflowListPanel from './WorkflowListPanel';
 import { Icon } from './components/Icons';
+import { IMAGE_MODEL_OPTIONS } from './imageModels';
 
 const NODE_TYPES_CONFIG = {
   input: { label: '用户输入', color: '#3b82f6' },
@@ -1591,9 +1592,8 @@ function TextGenerateFields({ selectedNode, updateNodeData }) {
 
 function ImageGenerateFields({ selectedNode, updateNodeData }) {
   const model = selectedNode.data.model || 'gpt-image-2-vip';
-  const isGptVip = model === 'gpt-image-2-vip';
-  const isNanoBanana = model.startsWith('nano-banana');
-  const supports4K = isGptVip || model === 'nano-banana-2-4k-cl' || model === 'nano-banana-pro-4k-vip';
+  const isHighResolutionGpt = ['gpt-image-2-vip', 'gpt-image-2.5-flare', 'gpt-image-2.5-sunburst'].includes(model);
+  const supports4K = isHighResolutionGpt || model === 'nano-banana-2-4k-cl' || model === 'nano-banana-pro-4k-vip';
   const supports2K = supports4K || model === 'nano-banana-2-cl' || model === 'nano-banana-pro-cl' ||
     model === 'nano-banana-pro-vip' || model === 'nano-banana-2' || model === 'nano-banana-pro';
 
@@ -1602,17 +1602,9 @@ function ImageGenerateFields({ selectedNode, updateNodeData }) {
       <div className="section-label" style={{ marginTop: 12 }}>模型</div>
       <select className="input-field" value={model}
         onChange={(e) => updateNodeData(selectedNode.id, { model: e.target.value })}>
-        <option value="gpt-image-2">GPT-Image 2</option>
-        <option value="gpt-image-2-vip">GPT-Image 2 VIP</option>
-        <option value="nano-banana">Nano Banana</option>
-        <option value="nano-banana-fast">Nano Banana Fast</option>
-        <option value="nano-banana-2">Nano Banana 2</option>
-        <option value="nano-banana-2-cl">Nano Banana 2 CL (2K)</option>
-        <option value="nano-banana-2-4k-cl">Nano Banana 2 4K CL</option>
-        <option value="nano-banana-pro">Nano Banana Pro</option>
-        <option value="nano-banana-pro-cl">Nano Banana Pro CL (2K)</option>
-        <option value="nano-banana-pro-vip">Nano Banana Pro VIP (2K)</option>
-        <option value="nano-banana-pro-4k-vip">Nano Banana Pro 4K VIP</option>
+        {IMAGE_MODEL_OPTIONS.map((item) => (
+          <option key={item.value} value={item.value}>{item.label}</option>
+        ))}
       </select>
 
       <div className="section-label" style={{ marginTop: 12 }}>分辨率</div>

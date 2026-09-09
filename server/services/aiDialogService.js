@@ -15,20 +15,7 @@ const { generateImage: generateGrsImage } = require('../utils/grsaiClient');
 const { deductPoints, confirmDeduct } = require('../utils/pointsService');
 const { Generation } = require('../models');
 const { v4: uuidv4 } = require('uuid');
-
-const MODEL_POINTS = {
-  'gpt-image-2': 2,
-  'gpt-image-2-vip': 5,
-  'nano-banana': 1,
-  'nano-banana-fast': 1,
-  'nano-banana-2': 2,
-  'nano-banana-2-cl': 2,
-  'nano-banana-2-4k-cl': 4,
-  'nano-banana-pro': 1,
-  'nano-banana-pro-cl': 2,
-  'nano-banana-pro-vip': 2,
-  'nano-banana-pro-4k-vip': 4,
-};
+const { IMAGE_MODEL_POINTS: MODEL_POINTS } = require('../config/imageModels');
 
 const GRSAI_MODELS = Object.keys(MODEL_POINTS);
 

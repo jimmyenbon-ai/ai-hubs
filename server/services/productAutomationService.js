@@ -8,20 +8,7 @@ const { urlToBase64 } = require('../utils/imageUtils');
 const { appConfig } = require('../utils/appConfig');
 const logger = require('../utils/logger');
 const { extractJsonFromLLMResponse } = require('./storyboardService');
-
-const MODEL_POINTS = {
-  'gpt-image-2': 2,
-  'gpt-image-2-vip': 5,
-  'nano-banana': 1,
-  'nano-banana-fast': 1,
-  'nano-banana-2': 2,
-  'nano-banana-2-cl': 2,
-  'nano-banana-2-4k-cl': 4,
-  'nano-banana-pro': 1,
-  'nano-banana-pro-cl': 2,
-  'nano-banana-pro-vip': 2,
-  'nano-banana-pro-4k-vip': 4,
-};
+const { IMAGE_MODEL_POINTS: MODEL_POINTS } = require('../config/imageModels');
 
 const STYLE_LABELS = {
   premium_minimal: '高级简约电商风：干净背景、克制配色、产品主体清晰、留白充足、适合独立站和高端详情页。',

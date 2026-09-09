@@ -1,24 +1,17 @@
 const axios = require('axios')
 const logger = require('./logger')
 const { appConfig } = require('./appConfig')
+const {
+  ALL_IMAGE_MODELS,
+  GPT_IMAGE_MODELS,
+  GPT_IMAGE_PIXEL_SIZE_MODELS,
+  SUPPORTED_NANO_MODELS,
+} = require('../config/imageModels')
 
 const GRSAI_TIMEOUT_MS = Number(process.env.GRSAI_TIMEOUT_MS || 10 * 60 * 1000)
 
 function getApiHost() { return appConfig.grsai_api_host || 'https://grsai.dakka.com.cn' }
 function getApiKey() { return appConfig.grsai_api_key || '' }
-
-// 支持的 Nano Banana 模型列表
-const SUPPORTED_NANO_MODELS = [
-  'nano-banana',
-  'nano-banana-fast',
-  'nano-banana-2',
-  'nano-banana-2-cl',
-  'nano-banana-2-4k-cl',
-  'nano-banana-pro',
-  'nano-banana-pro-cl',
-  'nano-banana-pro-vip',
-  'nano-banana-pro-4k-vip',
-]
 
 // GPT-Image2 模型
 const GPT_IMAGE_2_MODEL = 'gpt-image-2'
@@ -31,21 +24,21 @@ const VIP_SIZE_MAP = {
     '1:1': '1024x1024', '16:9': '1280x720', '9:16': '720x1280',
     '4:3': '1152x864', '3:4': '864x1152', '3:2': '1536x1024',
     '2:3': '1024x1536', '5:4': '1120x896', '4:5': '896x1120',
-    '21:9': '1456x624', '9:21': '624x1456', '1:3': '688x2048',
+    '21:9': '1456x624', '2.35:1': '1456x624', '9:21': '624x1456', '1:3': '688x2048',
     '3:1': '2048x688', '2:1': '1536x768', '1:2': '768x1536',
   },
   '2K': {
     '1:1': '2048x2048', '16:9': '2048x1152', '9:16': '1152x2048',
     '4:3': '2304x1728', '3:4': '1728x2304', '3:2': '2048x1360',
     '2:3': '1360x2048', '5:4': '2240x1792', '4:5': '1792x2240',
-    '21:9': '2912x1248', '9:21': '1248x2912', '1:3': '1280x3840',
+    '21:9': '2912x1248', '2.35:1': '2912x1248', '9:21': '1248x2912', '1:3': '1280x3840',
     '3:1': '3840x1280', '2:1': '3072x1536', '1:2': '1536x3072',
   },
   '4K': {
     '1:1': '2880x2880', '16:9': '3840x2160', '9:16': '2160x3840',
     '4:3': '3264x2448', '3:4': '2448x3264', '3:2': '3504x2336',
     '2:3': '2336x3504', '5:4': '3200x2560', '4:5': '2560x3200',
-    '21:9': '3840x1648', '9:21': '1648x3840', '1:3': '1280x3840',
+    '21:9': '3840x1648', '2.35:1': '3840x1648', '9:21': '1648x3840', '1:3': '1280x3840',
     '3:1': '3840x1280', '2:1': '3840x1920', '1:2': '1920x3840',
   },
 }
@@ -68,11 +61,11 @@ async function generateImage({
     throw err
   }
 
-  const isGptImage2 = model === GPT_IMAGE_2_MODEL || model === GPT_IMAGE_2_VIP_MODEL
+  const isGptImage = GPT_IMAGE_MODELS.includes(model)
   const isNanoBanana = SUPPORTED_NANO_MODELS.includes(model)
-  const isGptImage2Vip = model === GPT_IMAGE_2_VIP_MODEL
+  const usesPixelDimensions = GPT_IMAGE_PIXEL_SIZE_MODELS.includes(model)
 
-  if (!isGptImage2 && !isNanoBanana) {
+  if (!isGptImage && !isNanoBanana) {
     const err = new Error(`不支持的模型: ${model}`)
     err.status = 400
     throw err
@@ -86,12 +79,12 @@ async function generateImage({
   }
 
   // aspectRatio 处理
-  if (isGptImage2Vip) {
-    // gpt-image-2-vip：只接受像素值，不支持比例字符串
+  if (usesPixelDimensions) {
+    // VIP、2.5 Flare 与 2.5 Sunburst 只接受像素值，不支持比例字符串
     const sizeMap = VIP_SIZE_MAP[imageSize] || VIP_SIZE_MAP['1K']
     payload.aspectRatio = sizeMap[aspectRatio] || sizeMap['1:1']
-  } else if (isGptImage2) {
-    // gpt-image-2：支持比例字符串或像素值，直接传即可
+  } else if (isGptImage) {
+    // gpt-image-2 与 gpt-image-2.5 基础版支持比例字符串
     payload.aspectRatio = aspectRatio || '1:1'
   }
 
@@ -237,19 +230,7 @@ const GPT_ASPECT_RATIOS = [
 ]
 
 // 支持的模型列表（供前端展示）
-const ALL_MODELS = [
-  { value: 'gpt-image-2', label: 'GPT-Image 2', category: 'gpt' },
-  { value: 'gpt-image-2-vip', label: 'GPT-Image 2 VIP', category: 'gpt' },
-  { value: 'nano-banana', label: 'Nano Banana', category: 'nano' },
-  { value: 'nano-banana-fast', label: 'Nano Banana Fast', category: 'nano' },
-  { value: 'nano-banana-2', label: 'Nano Banana 2', category: 'nano' },
-  { value: 'nano-banana-2-cl', label: 'Nano Banana 2 CL (2K)', category: 'nano' },
-  { value: 'nano-banana-2-4k-cl', label: 'Nano Banana 2 4K CL', category: 'nano' },
-  { value: 'nano-banana-pro', label: 'Nano Banana Pro', category: 'nano' },
-  { value: 'nano-banana-pro-cl', label: 'Nano Banana Pro CL (2K)', category: 'nano' },
-  { value: 'nano-banana-pro-vip', label: 'Nano Banana Pro VIP (2K)', category: 'nano' },
-  { value: 'nano-banana-pro-4k-vip', label: 'Nano Banana Pro 4K VIP', category: 'nano' },
-]
+const ALL_MODELS = ALL_IMAGE_MODELS
 
 module.exports = {
   generateImage,

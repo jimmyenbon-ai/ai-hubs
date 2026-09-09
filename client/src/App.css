@@ -4001,6 +4001,235 @@ code {
   padding-top: 8px;
 }
 
+.settings-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  padding: 4px;
+  margin-bottom: 18px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--bg-card);
+}
+
+.settings-tabs button {
+  border: 0;
+  border-radius: 6px;
+  padding: 9px 12px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+}
+
+.settings-tabs button.active {
+  background: var(--primary-color);
+  color: #fff;
+}
+
+.api-profile-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.api-profile-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 18px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--bg-card);
+}
+
+.api-profile-toolbar h3 {
+  margin: 0 0 6px;
+  font-size: 16px;
+}
+
+.api-profile-toolbar p,
+.api-profile-card-head p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.api-profile-empty {
+  padding: 44px 20px;
+  text-align: center;
+  color: var(--text-secondary);
+  border: 1px dashed var(--border-color);
+  border-radius: 8px;
+  background: var(--bg-card);
+}
+
+.api-profile-list {
+  display: grid;
+  gap: 12px;
+}
+
+.api-profile-card {
+  padding: 18px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--bg-card);
+}
+
+.api-profile-card.active {
+  border-color: #10b981;
+  box-shadow: 0 0 0 1px rgba(16, 185, 129, 0.28);
+}
+
+.api-profile-card-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.api-profile-title-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.api-profile-title-row strong {
+  font-size: 15px;
+}
+
+.api-profile-title-row span,
+.api-profile-title-row small {
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+}
+
+.api-profile-title-row span {
+  background: rgba(16, 185, 129, 0.16);
+  color: #10b981;
+}
+
+.api-profile-title-row small {
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+}
+
+.api-profile-actions {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.api-profile-actions .btn-outline {
+  padding: 6px 10px;
+  font-size: 12px;
+}
+
+.btn-outline.danger {
+  color: #ef4444;
+}
+
+.api-profile-meta {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.api-profile-meta div {
+  min-width: 0;
+  padding: 10px;
+  border-radius: 8px;
+  background: var(--bg-secondary);
+}
+
+.api-profile-meta label {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.api-profile-meta span {
+  display: block;
+  overflow-wrap: anywhere;
+  color: var(--text-main);
+  font-size: 13px;
+}
+
+.api-profile-modal {
+  width: min(680px, calc(100vw - 28px));
+  max-height: min(760px, calc(100vh - 28px));
+  overflow-y: auto;
+}
+
+.api-profile-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px;
+}
+
+.api-profile-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.api-profile-form-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--bg-secondary);
+}
+
+.api-profile-form-section h4 {
+  margin: 0;
+  color: var(--primary-color);
+  font-size: 13px;
+}
+
+.api-profile-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.api-profile-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+@media (max-width: 720px) {
+  .api-profile-toolbar,
+  .api-profile-card-head {
+    flex-direction: column;
+  }
+
+  .api-profile-actions {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .api-profile-meta,
+  .api-profile-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* ========================
    AI 智能对话面板
    ======================== */

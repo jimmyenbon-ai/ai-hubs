@@ -1,6 +1,7 @@
 // 模板 API 控制器
 const { Template } = require('../models/templates');
 const { ensurePublicImageUrl } = require('../utils/imageUtils');
+const { IMAGE_MODEL_POINTS: MODEL_POINTS } = require('../config/imageModels');
 
 async function listTemplates(req, res, next) {
   try {
@@ -58,22 +59,6 @@ async function deleteTemplate(req, res, next) {
   } catch (err) {
     next(err);
   }
-}
-
-// 模板模型积分消耗映射（可按需配置）
-const MODEL_POINTS = {
-  'gpt-image-2': 2,
-  'gpt-image-2-vip': 5,
-  'nano-banana-pro': 1,
-  'nano-banana': 1,
-  'nano-banana-fast': 1,
-  'nano-banana-2': 2,
-  'nano-banana-2-cl': 2,
-  'nano-banana-2-4k-cl': 4,
-  'nano-banana-pro-vt': 2,
-  'nano-banana-pro-cl': 2,
-  'nano-banana-pro-vip': 2,
-  'nano-banana-pro-4k-vip': 4,
 }
 
 // 使用模板生成图片（复用 /api/generate 的逻辑，但替换提示词和参数）
@@ -171,7 +156,7 @@ async function generateFromTemplate(req, res, next) {
 
     // 调用生成
     const { generateImage } = require('../utils/grsaiClient');
-    const result = await generateImage({
+    const imageUrl = await generateImage({
       prompt: apiPrompt,
       model: template.model || 'gpt-image-2',
       imageSize: template.imageSize || '1K',
@@ -190,7 +175,7 @@ async function generateFromTemplate(req, res, next) {
       modelName: template.model || 'gpt-image-2',
       aspectRatio: template.aspectRatio,
       imageSize: template.imageSize,
-      resultImageUrl: result.imageUrl,
+      resultImageUrl: imageUrl,
       referenceImages: resolvedRefImages,
       templateId,
       templateName: template.name,
@@ -205,7 +190,8 @@ async function generateFromTemplate(req, res, next) {
       success: true,
       message: `生成成功，余额充足`,
       data: {
-        ...result,
+        imageUrl,
+        model: template.model || 'gpt-image-2',
         pointsCost,
       }
     });

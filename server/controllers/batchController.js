@@ -12,23 +12,9 @@ const { deductPoints, confirmDeduct } = require('../utils/pointsService');
 const { saveImage: saveImageLocal, localPathToUrl } = require('../utils/localStorage');
 const { uploadLocalImageToPublicUrl } = require('../utils/imageUtils');
 const logger = require('../utils/logger');
+const { IMAGE_MODEL_POINTS: MODEL_POINTS } = require('../config/imageModels');
 
 const uploadDir = process.env.UPLOAD_DIR || path.join(__dirname, '..', 'uploads');
-
-// 模型积分映射（与 generateController 保持一致）
-const MODEL_POINTS = {
-  'gpt-image-2': 2,
-  'gpt-image-2-vip': 5,
-  'nano-banana': 1,
-  'nano-banana-fast': 1,
-  'nano-banana-2': 2,
-  'nano-banana-2-cl': 2,
-  'nano-banana-2-4k-cl': 4,
-  'nano-banana-pro': 1,
-  'nano-banana-pro-cl': 2,
-  'nano-banana-pro-vip': 2,
-  'nano-banana-pro-4k-vip': 4,
-};
 
 // 活跃队列：jobId → { abort: boolean }
 const activeQueues = new Map();

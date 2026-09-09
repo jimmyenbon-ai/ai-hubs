@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { NANO_IMAGE_SIZES } from './ImageFreePanel'
 import { renderCanvas, downloadCanvas } from './components/CanvasRenderer'
 import { Icon } from './components/Icons'
+import { IMAGE_MODEL_OPTIONS, supportsImageSize } from './imageModels'
 
 // 占位符识别正则
 const VAR_REGEX = /\{([^}]+)\}/g
@@ -560,8 +561,9 @@ function TemplatePanel({ template, templates, onSave, onGenerate, onBack }) {
                     value={localTemplate.model}
                     onChange={(e) => setLocalTemplate((p) => ({ ...p, model: e.target.value }))}
                   >
-                    <option value="gpt-image-2">GPT-Image 2</option>
-                    <option value="nano-banana-pro">Nano Banana Pro</option>
+                    {IMAGE_MODEL_OPTIONS.map((model) => (
+                      <option key={model.value} value={model.value}>{model.label}</option>
+                    ))}
                   </select>
                 </div>
                 <div className="param-item">
@@ -575,7 +577,7 @@ function TemplatePanel({ template, templates, onSave, onGenerate, onBack }) {
                     ))}
                   </select>
                 </div>
-                {localTemplate.model !== 'gpt-image-2' && (
+                {supportsImageSize(localTemplate.model) && (
                   <div className="param-item">
                     <label>分辨率</label>
                     <select

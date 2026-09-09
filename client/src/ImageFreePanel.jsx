@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import PromptQuickLibrary from './components/PromptQuickLibrary'
 import HistoryFilterBar from './HistoryFilterBar'
 import { Icon } from './components/Icons'
+import { GPT_IMAGE_MODEL_OPTIONS, isGptImageModel, supportsImageSize } from './imageModels'
 
 export const NANO_IMAGE_SIZES = [
   { value: '1K', label: '1K' },
@@ -563,8 +564,8 @@ function ImageFreePanel({ injectedTemplate, onInjectedConsumed, userId, currentR
     }
   }, [])
 
-  const isGptImage2 = selectedModel === 'gpt-image-2' || selectedModel === 'gpt-image-2-vip'
-  const aspectRatios = isGptImage2 ? GPT_ASPECT_RATIOS : NANO_ASPECT_RATIOS
+  const isGptImage = isGptImageModel(selectedModel)
+  const aspectRatios = isGptImage ? GPT_ASPECT_RATIOS : NANO_ASPECT_RATIOS
 
   return (
     <>
@@ -578,12 +579,16 @@ function ImageFreePanel({ injectedTemplate, onInjectedConsumed, userId, currentR
 
         <div className="section-label">选择模型</div>
         <div className="model-grid">
-          <div className={`model-card ${selectedModel === 'gpt-image-2' ? 'active' : ''}`} onClick={() => { setSelectedModel('gpt-image-2'); setImageSize('1K'); }}>
-            GPT-Image 2<br /><span className="model-sub">支持比例</span>
-          </div>
-          <div className={`model-card ${selectedModel === 'gpt-image-2-vip' ? 'active' : ''}`} onClick={() => { setSelectedModel('gpt-image-2-vip'); setImageSize('1K'); }}>
-            GPT-Image 2 VIP<br /><span className="model-sub">支持 1K/2K/4K</span>
-          </div>
+          {GPT_IMAGE_MODEL_OPTIONS.map((model) => (
+            <div
+              key={model.value}
+              className={`model-card ${selectedModel === model.value ? 'active' : ''}`}
+              onClick={() => { setSelectedModel(model.value); setImageSize('1K') }}
+            >
+              {model.label}<br />
+              <span className="model-sub">{model.supportsImageSize ? '支持 1K/2K/4K' : '支持比例'}</span>
+            </div>
+          ))}
           <div className={`model-card ${selectedModel === 'nano-banana-pro' ? 'active' : ''}`} onClick={() => { setSelectedModel('nano-banana-pro'); setImageSize('1K'); }}>
             Nano Banana Pro<br /><span className="model-sub">基础绘图</span>
           </div>
@@ -715,7 +720,7 @@ function ImageFreePanel({ injectedTemplate, onInjectedConsumed, userId, currentR
 
         <div className="section-label">生成参数</div>
         <div className="controls-row">
-          {(selectedModel === 'gpt-image-2-vip' || selectedModel === 'nano-banana-pro' || selectedModel === 'nano-banana-2') && (
+          {(supportsImageSize(selectedModel) || selectedModel === 'nano-banana-pro' || selectedModel === 'nano-banana-2') && (
             <div className="control-group">
               <span className="control-label">分辨率</span>
               <select className="select-field" value={imageSize} onChange={(e) => setImageSize(e.target.value)}>
@@ -729,7 +734,7 @@ function ImageFreePanel({ injectedTemplate, onInjectedConsumed, userId, currentR
               {aspectRatios.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
             </select>
           </div>
-          {(selectedModel === 'gpt-image-2' || selectedModel === 'gpt-image-2-vip') && (
+          {isGptImage && (
             <div className="control-group">
               <span className="control-label">质量</span>
               <select className="select-field" value={quality} onChange={(e) => setQuality(e.target.value)}>

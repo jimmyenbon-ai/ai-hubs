@@ -13,21 +13,7 @@ const { deductPoints, confirmDeduct } = require('../utils/pointsService');
 const { saveImage: saveImageLocal, localPathToUrl } = require('../utils/localStorage');
 const { appConfig } = require('../utils/appConfig');
 const logger = require('../utils/logger');
-
-// 模型积分映射
-const MODEL_POINTS = {
-  'gpt-image-2': 2,
-  'gpt-image-2-vip': 5,
-  'nano-banana': 1,
-  'nano-banana-fast': 1,
-  'nano-banana-2': 2,
-  'nano-banana-2-cl': 2,
-  'nano-banana-2-4k-cl': 4,
-  'nano-banana-pro': 1,
-  'nano-banana-pro-cl': 2,
-  'nano-banana-pro-vip': 2,
-  'nano-banana-pro-4k-vip': 4,
-};
+const { IMAGE_MODEL_POINTS: MODEL_POINTS } = require('../config/imageModels');
 
 /**
  * 降级策略：用正则从 LLM 原始文本中提取分镜信息

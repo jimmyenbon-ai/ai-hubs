@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Icon } from './components/Icons'
+import { IMAGE_MODEL_OPTIONS as MODELS } from './imageModels'
 
 const EXPERT_ROLES = [
   { value: 'ecommerce', label: '电商视觉专家' },
@@ -27,7 +28,6 @@ const VISUAL_STYLES = [
 ]
 
 const IMAGE_TYPES = ['主图', '详情页', '场景图', '卖点图', '细节特写', '参数说明', '广告图', '独立站 Hero']
-const MODELS = ['gpt-image-2', 'gpt-image-2-vip', 'nano-banana', 'nano-banana-pro', 'nano-banana-pro-vip']
 const ASPECTS = ['1:1', '4:3', '3:4', '16:9', '9:16', '2.35:1']
 const IMAGE_SIZES = ['1K', '2K', '4K']
 
@@ -704,7 +704,7 @@ export default function ProductAutomationPanel({ onBack }) {
             </div>
             <Field label="模型">
               <select className="input-field" value={selectedModel} onChange={(e) => setSelectedModel(e.target.value)}>
-                {MODELS.map((model) => <option key={model} value={model}>{model}</option>)}
+                {MODELS.map((model) => <option key={model.value} value={model.value}>{model.label}</option>)}
               </select>
             </Field>
             <div className="product-form-grid">
