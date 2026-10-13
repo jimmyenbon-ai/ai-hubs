@@ -864,7 +864,7 @@ function VideoGenerate({ previzPackage = null }) {
   }
 
   return (
-    <div className="workspace">
+    <div className="workspace media-workspace video-workspace">
       <div className="config-panel">
         <div className="panel-title">
           <span style={{ cursor: 'pointer' }}>&larr;</span> 工具箱 - AI 视频生成

@@ -66,7 +66,7 @@ export default function StyleProfileManager({ onBack, onSelectProfile }) {
 
   if (editMode && selectedProfile) {
     return (
-      <div style={{ height: '100%', display: 'flex', flexDirection: 'column', padding: 20, overflowY: 'auto' }}>
+      <div className="surface-page surface-style-manager surface-editor" style={{ height: '100%', display: 'flex', flexDirection: 'column', padding: 20, overflowY: 'auto' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
           <button className="btn-outline" onClick={() => setEditMode(false)}>← 返回</button>
           <span style={{ fontWeight: 600, fontSize: 16 }}>编辑风格画像</span>
@@ -87,8 +87,8 @@ export default function StyleProfileManager({ onBack, onSelectProfile }) {
   }
 
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', borderBottom: '1px solid var(--border-color)', gap: 12 }}>
+    <div className="surface-page surface-style-manager" style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+      <div className="surface-toolbar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', borderBottom: '1px solid var(--border-color)', gap: 12 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           {onBack && <button className="btn-outline" onClick={onBack}>← 返回</button>}
           <span style={{ fontWeight: 600, fontSize: 16 }}>风格画像管理</span>
@@ -97,7 +97,7 @@ export default function StyleProfileManager({ onBack, onSelectProfile }) {
         <input className="input-field" style={{ width: 200 }} placeholder="搜索风格..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} />
       </div>
 
-      <div style={{ flex: 1, padding: 20, overflowY: 'auto' }}>
+      <div className="surface-content" style={{ flex: 1, padding: 20, overflowY: 'auto' }}>
         {loading ? (
           <div style={{ textAlign: 'center', padding: 60, color: 'var(--text-secondary)' }}>加载中...</div>
         ) : filtered.length === 0 ? (
@@ -105,9 +105,9 @@ export default function StyleProfileManager({ onBack, onSelectProfile }) {
             {searchQuery ? '没有匹配的风格画像' : '暂无风格画像，在自由创作中生成满意图片后可保存为风格'}
           </div>
         ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
+          <div className="surface-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
             {filtered.map(profile => (
-              <div key={profile.id} style={{
+              <div className="surface-card" key={profile.id} style={{
                 background: 'var(--bg-secondary)', borderRadius: 12, padding: 16,
                 border: '1px solid var(--border-color)',
               }}>

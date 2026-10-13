@@ -551,7 +551,7 @@ function MusicGenerate() {
   }
 
   return (
-    <div className="workspace">
+    <div className="workspace media-workspace music-workspace">
       <div className="config-panel">
         <div className="panel-title">
           <span style={{ cursor: 'pointer' }}>&larr;</span> 工具箱 - Suno AI音乐生成

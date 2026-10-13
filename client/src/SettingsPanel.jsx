@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Icon } from './components/Icons'
 
 const PROFILE_TEMPLATE = {
   name: '',
@@ -275,6 +276,7 @@ function SettingsPanel({ onBack }) {
     return (
       <div className="settings-panel">
         <div className="settings-gate">
+          <div className="settings-gate-symbol"><Icon.Settings size={26} /></div>
           <h2>系统设置</h2>
           <p className="batch-hint">请输入管理密码以访问配置</p>
           <form onSubmit={handleAuth} className="settings-auth-form">
@@ -330,7 +332,7 @@ function SettingsPanel({ onBack }) {
               <h3>API Key 配置档</h3>
               <p>保存公司/个人项目的 LLM 和 GRSai Key，按需切换当前生效配置。</p>
             </div>
-            <button type="button" className="generate-btn" onClick={openCreateProfile}>添加配置档</button>
+            <button type="button" className="generate-btn" onClick={openCreateProfile}><Icon.Plus size={14} /> 添加配置档</button>
           </div>
 
           {profileMsg && (

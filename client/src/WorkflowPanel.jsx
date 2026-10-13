@@ -1032,9 +1032,9 @@ export default function WorkflowPanel({ onBack, currentRole }) {
 
   // ========== 编辑器视图 ==========
   return (
-    <div style={{ display: 'flex', height: '100%', overflow: 'hidden' }}>
+    <div className="workflow-editor" style={{ display: 'flex', height: '100%', overflow: 'hidden' }}>
       {/* 左侧工具栏 */}
-      <div style={{
+      <div className="workflow-tools" style={{
         width: 56,
         background: 'var(--bg-secondary)',
         borderRight: '1px solid var(--border-color)',
@@ -1061,7 +1061,7 @@ export default function WorkflowPanel({ onBack, currentRole }) {
       </div>
 
       {/* 节点库面板 */}
-      <div style={{
+      <div className="workflow-node-library" style={{
         width: nodePanelCollapsed ? 0 : 180,
         background: 'var(--bg-secondary)',
         borderRight: '1px solid var(--border-color)',
@@ -1089,9 +1089,9 @@ export default function WorkflowPanel({ onBack, currentRole }) {
       </div>
 
       {/* 画布区域 */}
-      <div style={{ width: '1100px', minWidth: 0, position: 'relative', overflow: 'hidden' }}>
+      <div className="workflow-canvas-area" style={{ width: '1100px', minWidth: 0, position: 'relative', overflow: 'hidden' }}>
         {/* 想法输入区 */}
-        <div style={{
+        <div className="workflow-idea-panel" style={{
           position: 'absolute', top: 12, left: 12, right: (running || runResult) ? 352 : selectedNode ? 276 : 12,
           zIndex: 10, background: 'var(--bg-secondary)', borderRadius: 10, padding: 12,
           boxShadow: '0 4px 12px rgba(0,0,0,0.25)', transition: 'right 0.2s',

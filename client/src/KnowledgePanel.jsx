@@ -329,9 +329,9 @@ export default function KnowledgePanel({ onBack }) {
   });
 
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+    <div className="surface-page knowledge-page" style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       {/* 顶部栏 */}
-      <div style={{
+      <div className="surface-toolbar" style={{
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
@@ -349,7 +349,7 @@ export default function KnowledgePanel({ onBack }) {
           <h2 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}><Icon.Book size={18} /> 知识库</h2>
         </div>
 
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        <div className="surface-actions" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <input
             placeholder="搜索知识（含文件夹和文件名）..."
             value={searchQuery}
@@ -407,9 +407,9 @@ export default function KnowledgePanel({ onBack }) {
       )}
 
       {/* 主内容区 */}
-      <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+      <div className="knowledge-body" style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
         {/* 左侧文件夹导航 */}
-        <div style={{
+        <div className="knowledge-folders" style={{
           width: 200,
           borderRight: '1px solid var(--border-color)',
           padding: '12px 8px',
@@ -448,9 +448,10 @@ export default function KnowledgePanel({ onBack }) {
         </div>
 
         {/* 右侧知识列表 */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px' }}>
+        <div className="knowledge-content surface-content" style={{ flex: 1, overflowY: 'auto', padding: '16px 20px' }}>
           {/* 拖拽上传区域 */}
           <div
+            className="knowledge-upload-zone"
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
@@ -649,7 +650,7 @@ function KnowledgeItem({ item, selected, onToggleSelect, onEdit, onDelete }) {
   const folderTag = item.folder || item.category || '';
 
   return (
-    <div style={{
+    <div className="knowledge-item" style={{
       display: 'flex',
       alignItems: 'center',
       gap: 12,
@@ -721,12 +722,12 @@ function KnowledgeItem({ item, selected, onToggleSelect, onEdit, onDelete }) {
 
 function KnowledgeFormModal({ form, setForm, editingId, folders, onSubmit, onClose }) {
   return (
-    <div style={{
+    <div className="modal-backdrop knowledge-modal-backdrop" style={{
       position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
       zIndex: 100, background: 'rgba(0,0,0,0.5)',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
     }}>
-      <div style={{
+      <div className="modal-content knowledge-modal-content" style={{
         background: 'var(--bg-primary)', borderRadius: 12, padding: 24,
         width: 500, maxWidth: '90vw', maxHeight: '85vh', overflowY: 'auto',
         boxShadow: '0 8px 32px rgba(0,0,0,0.3)',

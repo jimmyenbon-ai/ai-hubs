@@ -31,8 +31,9 @@ export default function RoleSelector({ currentRole, onRoleChange }) {
   const current = roles.find(r => r.id === currentRole) || roles[0];
 
   return (
-    <div style={{ padding: '8px 10px', position: 'relative' }}>
+    <div className="role-selector" style={{ padding: '8px 10px', position: 'relative' }}>
       <div
+        className="role-selector-trigger"
         onClick={() => setOpen(!open)}
         style={{
           display: 'flex', alignItems: 'center', gap: 8,
@@ -60,11 +61,11 @@ export default function RoleSelector({ currentRole, onRoleChange }) {
             style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 98 }}
             onClick={() => setOpen(false)}
           />
-          <div style={{
+          <div className="role-selector-menu" style={{
             position: 'absolute', top: '100%', left: 10, right: 10, zIndex: 99,
-            background: '#1e1e2e', borderRadius: 8,
-            border: '1px solid rgba(255,255,255,0.1)',
-            boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
+            background: 'var(--bg-panel)', borderRadius: 8,
+            border: '1px solid var(--border-light)',
+            boxShadow: 'var(--shadow-lg)',
             overflow: 'hidden', marginTop: 4,
           }}>
             {roles.map(role => (
@@ -74,19 +75,19 @@ export default function RoleSelector({ currentRole, onRoleChange }) {
                 style={{
                   display: 'flex', alignItems: 'center', gap: 8,
                   padding: '10px 12px', cursor: 'pointer', fontSize: 13,
-                  color: '#e0e0e0',
-                  background: currentRole === role.id ? 'rgba(99,102,241,0.2)' : 'transparent',
-                  borderLeft: currentRole === role.id ? '2px solid #6366f1' : '2px solid transparent',
+                  color: 'var(--text-main)',
+                  background: currentRole === role.id ? 'var(--primary-glow)' : 'transparent',
+                  borderLeft: currentRole === role.id ? '2px solid var(--primary-color)' : '2px solid transparent',
                   transition: 'background 0.1s',
                 }}
-                onMouseEnter={e => { if (currentRole !== role.id) e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; }}
+                onMouseEnter={e => { if (currentRole !== role.id) e.currentTarget.style.background = 'var(--bg-hover)'; }}
                 onMouseLeave={e => { if (currentRole !== role.id) e.currentTarget.style.background = 'transparent'; }}
               >
                 <span style={{ fontSize: 16 }}>{getRoleIcon(role.icon, 16)}</span>
                 <div>
-                  <div style={{ fontWeight: 500, color: '#fff' }}>{role.name}</div>
+                  <div style={{ fontWeight: 500, color: 'var(--text-main)' }}>{role.name}</div>
                   {role.description && (
-                    <div style={{ fontSize: 11, color: '#999', lineHeight: 1.3 }}>{role.description}</div>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.3 }}>{role.description}</div>
                   )}
                 </div>
               </div>

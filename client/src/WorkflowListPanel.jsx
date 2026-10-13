@@ -86,9 +86,9 @@ export default function WorkflowListPanel({ onBack, onSelectWorkflow, onCreateWo
   const categories = [...new Set(templates.map(t => t.category).filter(Boolean))];
 
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+    <div className="surface-page workflow-list-page" style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       {/* 顶部栏 */}
-      <div style={{
+      <div className="surface-toolbar" style={{
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
@@ -105,7 +105,7 @@ export default function WorkflowListPanel({ onBack, onSelectWorkflow, onCreateWo
           </span>
         </div>
 
-        <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+        <div className="surface-actions" style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
           <input
             className="input-field"
             style={{ width: 180 }}
@@ -133,7 +133,7 @@ export default function WorkflowListPanel({ onBack, onSelectWorkflow, onCreateWo
       </div>
 
       {/* 工作流列表 */}
-      <div style={{ flex: 1, padding: 20, overflowY: 'auto' }}>
+      <div className="surface-content" style={{ flex: 1, padding: 20, overflowY: 'auto' }}>
         {loading ? (
           <div style={{ textAlign: 'center', padding: 60, color: 'var(--text-secondary)' }}>
             加载中...
@@ -149,9 +149,10 @@ export default function WorkflowListPanel({ onBack, onSelectWorkflow, onCreateWo
               : '暂无工作流，点击上方按钮创建'}
           </div>
         ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 16 }}>
+          <div className="surface-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 16 }}>
             {filteredTemplates.map(tpl => (
               <div
+                className="surface-card workflow-template-card"
                 key={tpl.id}
                 style={{
                   background: 'var(--bg-secondary)',

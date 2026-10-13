@@ -569,7 +569,8 @@ function ImageFreePanel({ injectedTemplate, onInjectedConsumed, userId, currentR
 
   return (
     <>
-      <div className="config-panel">
+      <div className="config-panel image-creation-panel">
+        <div className="creation-scroll">
         <div className="panel-title">AI 图片生成 · 自由创作</div>
 
         <div className="section-label">选择 API 提供商</div>
@@ -580,9 +581,11 @@ function ImageFreePanel({ injectedTemplate, onInjectedConsumed, userId, currentR
         <div className="section-label">选择模型</div>
         <div className="model-grid">
           {GPT_IMAGE_MODEL_OPTIONS.map((model) => (
-            <div
+            <button
+              type="button"
               key={model.value}
               className={`model-card ${model.isNew ? 'has-new-badge' : ''} ${selectedModel === model.value ? 'active' : ''}`}
+              aria-pressed={selectedModel === model.value}
               onClick={() => { setSelectedModel(model.value); setImageSize('1K') }}
             >
               {model.isNew && <span className="model-new-badge">NEW</span>}
@@ -591,14 +594,14 @@ function ImageFreePanel({ injectedTemplate, onInjectedConsumed, userId, currentR
               {model.tierLabel && (
                 <span className={`model-tier-badge ${model.tierTone}`}>{model.tierLabel}</span>
               )}
-            </div>
+            </button>
           ))}
-          <div className={`model-card ${selectedModel === 'nano-banana-pro' ? 'active' : ''}`} onClick={() => { setSelectedModel('nano-banana-pro'); setImageSize('1K'); }}>
+          <button type="button" aria-pressed={selectedModel === 'nano-banana-pro'} className={`model-card ${selectedModel === 'nano-banana-pro' ? 'active' : ''}`} onClick={() => { setSelectedModel('nano-banana-pro'); setImageSize('1K'); }}>
             Nano Banana Pro<br /><span className="model-sub">基础绘图</span>
-          </div>
-          <div className={`model-card ${selectedModel === 'nano-banana-2' ? 'active' : ''}`} onClick={() => { setSelectedModel('nano-banana-2'); setImageSize('1K'); }}>
+          </button>
+          <button type="button" aria-pressed={selectedModel === 'nano-banana-2'} className={`model-card ${selectedModel === 'nano-banana-2' ? 'active' : ''}`} onClick={() => { setSelectedModel('nano-banana-2'); setImageSize('1K'); }}>
             Nano Banana 2<br /><span className="model-sub">进阶绘图</span>
-          </div>
+          </button>
         </div>
 
         {styleProfiles.length > 0 && (
@@ -652,6 +655,7 @@ function ImageFreePanel({ injectedTemplate, onInjectedConsumed, userId, currentR
             onChange={handlePromptChange}
             onBlur={() => setMentionState((prev) => ({ ...prev, visible: false }))}
           />
+          <span className="prompt-character-count">{prompt.length} 字</span>
           {mentionState.visible && !!files.length && (
             <div className="mention-dropdown">
               {files.map((f) => (
@@ -701,7 +705,7 @@ function ImageFreePanel({ injectedTemplate, onInjectedConsumed, userId, currentR
             handleFilesUpload(dropped)
           }}
         >
-          点击或拖拽图片上传<br />
+          <Icon.ImagePlus size={16} /> 点击或拖拽图片上传
           <span className="upload-tip">支持 PNG、JPG，10MB 以内</span>
           {loadingUpload && <div className="upload-status">正在上传图片...</div>}
           <input ref={uploadInputRef} type="file" multiple accept="image/*" onChange={handleUploadChange} disabled={loadingUpload} style={{ display: 'none' }} />
@@ -751,11 +755,14 @@ function ImageFreePanel({ injectedTemplate, onInjectedConsumed, userId, currentR
           )}
         </div>
 
-        {error && <p className="error-text">{error}</p>}
-        <button className="generate-btn" onClick={handleGenerate} type="button"><Icon.Sparkle size={14} /> 立即生成 (消耗积分)</button>
+        </div>
+        <div className="creation-footer">
+          {error && <p className="error-text">{error}</p>}
+          <button className="generate-btn" onClick={handleGenerate} type="button"><Icon.Sparkle size={16} /> 立即生成 (消耗积分)</button>
+        </div>
       </div>
 
-      <div className="results-panel">
+      <div className="results-panel image-results-panel">
         <div className="tabs">
           <div className={activeTab === 'mine' ? 'tab active' : 'tab'} onClick={() => setActiveTab('mine')}>我的作品</div>
         </div>
@@ -777,7 +784,7 @@ function ImageFreePanel({ injectedTemplate, onInjectedConsumed, userId, currentR
               onPageSizeChange={(s) => { setHistoryPageSize(s); setHistoryPage(1); }}
               total={historyTotal}
             />
-            <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+            <div className="history-display-controls">
               <button
                 type="button"
                 className={`history-view-btn ${showFavoritesOnly ? 'active' : ''}`}
@@ -875,7 +882,7 @@ function ImageFreePanel({ injectedTemplate, onInjectedConsumed, userId, currentR
                   <span className="tag">{item.modelName || 'GRSai'}</span>
                   <div className="card-actions">
                     <button
-                      className="btn-outline"
+                      className="btn-outline icon-only"
                       type="button"
                       onClick={() => handleToggleFavorite(item.id)}
                       style={item.favorite ? { color: '#f97316', borderColor: '#f97316' } : {}}
@@ -884,12 +891,12 @@ function ImageFreePanel({ injectedTemplate, onInjectedConsumed, userId, currentR
                       {item.favorite ? <Icon.HeartFilled size={13} /> : <Icon.Heart size={13} />}
                     </button>
                     <button className="btn-outline" type="button" onClick={() => handleDownload(item.resultImageUrl)}><Icon.Download size={12} /> 下载</button>
-                    <button className="btn-outline" type="button" onClick={() => { setSelectedItem(item); setResultImage(item.resultImageUrl || '') }}>查看大图</button>
+                    <button className="btn-outline" type="button" onClick={() => { setSelectedItem(item); setResultImage(item.resultImageUrl || '') }}><Icon.Maximize size={12} /> 查看大图</button>
                     <button className="btn-outline" type="button" onClick={() => handleSaveAsStyle(item)} title="保存为风格画像"><Icon.Palette size={12} /> 存风格</button>
-                    <button className="btn-outline" type="button" onClick={() => handleFeedback(item.id, 'like')}
-                      style={item.feedback === 'like' ? { color: '#10b981', borderColor: '#10b981' } : {}}><Icon.ThumbsUp size={12} /></button>
-                    <button className="btn-outline" type="button" onClick={() => handleFeedback(item.id, 'dislike')}
-                      style={item.feedback === 'dislike' ? { color: '#ef4444', borderColor: '#ef4444' } : {}}><Icon.ThumbsDown size={12} /></button>
+                    <button className="btn-outline icon-only" type="button" onClick={() => handleFeedback(item.id, 'like')}
+                      title="喜欢" aria-label="喜欢" style={item.feedback === 'like' ? { color: '#10b981', borderColor: '#10b981' } : {}}><Icon.ThumbsUp size={12} /></button>
+                    <button className="btn-outline icon-only" type="button" onClick={() => handleFeedback(item.id, 'dislike')}
+                      title="不喜欢" aria-label="不喜欢" style={item.feedback === 'dislike' ? { color: '#ef4444', borderColor: '#ef4444' } : {}}><Icon.ThumbsDown size={12} /></button>
                     <button className="btn-outline" type="button" onClick={() => handleDeleteHistory(item.id)} style={{ color: '#ef4444', borderColor: '#ef4444' }}><Icon.Trash size={12} /> 删除</button>
                   </div>
                 </div>

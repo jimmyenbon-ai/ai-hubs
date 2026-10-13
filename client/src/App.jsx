@@ -1,5 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
 import './App.css'
+import './Workbench.css'
+import './WorkbenchSurfaces.css'
 import Sidebar from './Sidebar'
 import ImageFreePanel from './ImageFreePanel'
 import TemplatePanel from './TemplatePanel'
@@ -14,6 +16,7 @@ import AIDialogPanel from './AIDialogPanel'
 import StoryboardPanel from './StoryboardPanel'
 import ProductAutomationPanel from './ProductAutomationPanel'
 import { Icon, ICON_LIST } from './components/Icons'
+import BrandLogo from './components/BrandLogo'
 
 const VideoGenerate = lazy(() => import('./VideoGenerate'))
 const DirectorPreviz = lazy(() => import('./DirectorPreviz'))
@@ -128,13 +131,31 @@ function App() {
     return () => clearInterval(interval)
   }, [initUserId, theme])
 
-  function handleNavigate(group, mode) {
+  function closeWorkspaceViews() {
     setShowEnterprise(false)
+    setShowPreviz(false)
+    setShowProductAutomation(false)
+    setShowStoryboard(false)
+    setShowWorkflow(false)
+    setShowAIDialog(false)
+    setShowPromptLibrary(false)
+    setShowSettings(false)
+    setShowStyleManager(false)
+    setShowTemplateManage(false)
+  }
+
+  function handleWorkspaceBack() {
+    handleNavigate('image', 'free')
+  }
+
+  function handleNavigate(group, mode) {
+    closeWorkspaceViews()
     setCurrentGroup(group)
     setCurrentMode(mode)
   }
 
   function handleOpenEnterprise() {
+    closeWorkspaceViews()
     setCurrentGroup('enterprise')
     setShowEnterprise(true)
     setShowPreviz(false)
@@ -298,25 +319,38 @@ function App() {
     { id: 'blue', label: '蓝色', color: '#112240' },
   ]
 
+  const activeSection = showSettings ? 'settings' : showStyleManager ? 'styles'
+    : showEnterprise ? 'enterprise' : showPromptLibrary ? 'library' : showPreviz ? 'previz'
+    : showProductAutomation ? 'product-automation' : showStoryboard ? 'storyboard'
+    : showAIDialog ? 'ai-dialog' : showWorkflow ? 'workflow' : currentGroup
+  const pageTitle = {
+    settings: '系统设置', styles: '风格画像管理', enterprise: '企业 AI 工作台',
+    library: '提示词模板库', previz: '3D 预演导演', 'product-automation': '产品图自动化',
+    storyboard: 'AI 视频自动化', 'ai-dialog': 'AI 智能对话', workflow: 'AI 工作流',
+    video: 'AI 视频生成', music: 'Suno AI音乐生成',
+  }[activeSection] || (currentMode === 'batch' ? 'AI 图片生成 · 批量生成'
+    : currentMode.startsWith('tpl_') ? getCurrentTemplate()?.name || '模板生成' : 'AI 图片生成 · 自由创作')
+
   return (
-    <div className="app-shell">
+    <div className="app-shell workbench-shell">
       {/* 移动端遮罩 */}
       {sidebarOpen && (
         <div className="sidebar-overlay" onClick={handleSidebarClose} />
       )}
 
-      <div className={`sidebar ${sidebarOpen ? 'mobile-open' : ''}`}>
+      <div className={`sidebar-slot ${sidebarOpen ? 'mobile-open' : ''}`}>
         <Sidebar
-          currentGroup={currentGroup}
+          currentGroup={activeSection}
           currentMode={currentMode}
           currentRole={currentRole}
           onRoleChange={handleRoleChange}
           onOpenEnterprise={handleOpenEnterprise}
           templates={templates}
           onNavigate={(g, m) => { handleNavigate(g, m); setSidebarOpen(false) }}
-          onCreateTemplate={() => { setShowEnterprise(false); setCurrentGroup('image'); setShowTemplateCreate(true) }}
-          onManageTemplates={() => { setShowEnterprise(false); setCurrentGroup('image'); setShowTemplateManage(true); setSidebarOpen(false) }}
+          onCreateTemplate={() => { closeWorkspaceViews(); setCurrentGroup('image'); setShowTemplateCreate(true) }}
+          onManageTemplates={() => { closeWorkspaceViews(); setCurrentGroup('image'); setShowTemplateManage(true); setSidebarOpen(false) }}
           onOpenPromptLibrary={() => {
+            closeWorkspaceViews()
             setShowEnterprise(false)
             if (currentGroup === 'enterprise') setCurrentGroup('image')
             // 如果当前已在模板库，则关闭；否则打开
@@ -327,6 +361,7 @@ function App() {
             }
           }}
           onOpenWorkflow={() => {
+            closeWorkspaceViews()
             setShowEnterprise(false)
             setCurrentGroup('workflow')
             setShowWorkflow(true)
@@ -336,6 +371,7 @@ function App() {
             setSidebarOpen(false)
           }}
           onOpenAIDialog={() => {
+            closeWorkspaceViews()
             setShowEnterprise(false)
             setCurrentGroup('ai-dialog')
             setShowAIDialog(true)
@@ -346,6 +382,7 @@ function App() {
             setSidebarOpen(false)
           }}
           onOpenStoryboard={() => {
+            closeWorkspaceViews()
             setShowEnterprise(false)
             setCurrentGroup('storyboard')
             setShowStoryboard(true)
@@ -359,6 +396,7 @@ function App() {
             setSidebarOpen(false)
           }}
           onOpenProductAutomation={() => {
+            closeWorkspaceViews()
             setShowEnterprise(false)
             setCurrentGroup('product-automation')
             setShowProductAutomation(true)
@@ -372,6 +410,7 @@ function App() {
             setSidebarOpen(false)
           }}
           onOpenPreviz={() => {
+            closeWorkspaceViews()
             setShowEnterprise(false)
             setCurrentGroup('previz')
             setShowPreviz(true)
@@ -385,6 +424,7 @@ function App() {
             setSidebarOpen(false)
           }}
           onOpenStyleManager={() => {
+            closeWorkspaceViews()
             setShowEnterprise(false)
             setShowStyleManager(true)
             setShowWorkflow(false)
@@ -394,6 +434,7 @@ function App() {
             setSidebarOpen(false)
           }}
           onOpenSettings={() => {
+            closeWorkspaceViews()
             setShowEnterprise(false)
             if (showSettings) {
               setShowSettings(false)
@@ -414,6 +455,7 @@ function App() {
 
       <div className="main-wrapper">
         <header className="top-header">
+          <div className="header-brand" aria-label="Enbon"><BrandLogo /></div>
           <div className="top-header-left">
             {/* 移动端菜单按钮 */}
             <button
@@ -433,21 +475,8 @@ function App() {
                 <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
               </svg>
             </button>
-            <span className="header-title">
-              {showEnterprise && '企业 AI 工作台'}
-              {!showEnterprise && showPreviz && '3D 预演导演'}
-              {!showEnterprise && showProductAutomation && !showPreviz && '产品图自动化'}
-              {!showEnterprise && showStoryboard && !showPreviz && 'AI 视频自动化'}
-              {!showEnterprise && showWorkflow && !showStoryboard && !showProductAutomation && !showPreviz && 'AI 工作流'}
-              {!showEnterprise && showPromptLibrary && !showStoryboard && !showProductAutomation && '提示词模板库'}
-              {!showEnterprise && !showStoryboard && !showProductAutomation && !showWorkflow && !showPromptLibrary && currentGroup === 'image' && currentMode === 'free' && 'AI 图片生成 · 自由创作'}
-              {!showEnterprise && !showStoryboard && !showProductAutomation && !showWorkflow && !showPromptLibrary && currentGroup === 'image' && currentMode === 'batch' && 'AI 图片生成 · 批量生成'}
-              {!showEnterprise && showSettings && !showStoryboard && !showProductAutomation && '系统设置'}
-              {!showEnterprise && showAIDialog && !showStoryboard && !showProductAutomation && 'AI 智能对话'}
-              {!showEnterprise && !showStoryboard && !showProductAutomation && !showWorkflow && !showPromptLibrary && currentGroup === 'image' && currentMode.startsWith('tpl_') && (getCurrentTemplate()?.name || '模板生成')}
-              {!showEnterprise && !showStoryboard && !showProductAutomation && !showWorkflow && !showPromptLibrary && currentGroup === 'video' && 'AI 视频生成'}
-              {!showEnterprise && !showStoryboard && !showProductAutomation && !showWorkflow && !showPromptLibrary && currentGroup === 'music' && 'Suno AI音乐生成'}
-            </span>
+            <span className="header-platform"><Icon.Sparkles size={17} /> AI 综合创作平台</span>
+            <span className="header-title">{pageTitle}</span>
           </div>
           <div className="header-actions">
             {/* 主题切换 */}
@@ -463,7 +492,8 @@ function App() {
                 />
               ))}
             </div>
-            <button className="btn-outline" type="button" onClick={fetchPoints}>
+            <button className="btn-outline header-balance" type="button" onClick={fetchPoints} title="刷新积分余额">
+              <span className="header-avatar"><Icon.User size={16} /></span>
               {pointsError ? '积分: --' : `积分: ${pointsLabel}`}
               {/* 积分预警：低于10分时显示警告 */}
               {!pointsError && points !== null && points < 10 && (
@@ -510,7 +540,7 @@ function App() {
           {!showEnterprise && showPreviz && (
             <Suspense fallback={<WorkspaceLoading label="3D 预演导演" />}>
               <DirectorPreviz
-                onBack={() => setShowPreviz(false)}
+                onBack={handleWorkspaceBack}
                 onSendToVideo={(shotPackage) => {
                   setPrevizHandoff(shotPackage)
                   setShowPreviz(false)
@@ -520,9 +550,9 @@ function App() {
               />
             </Suspense>
           )}
-          {!showEnterprise && showProductAutomation && !showPreviz && <ProductAutomationPanel onBack={() => setShowProductAutomation(false)} />}
-          {!showEnterprise && showStoryboard && !showPreviz && <StoryboardPanel onBack={() => setShowStoryboard(false)} onNavigateToVideo={() => { setShowStoryboard(false); setCurrentGroup('video') }} />}
-          {!showEnterprise && showAIDialog && !showStoryboard && !showProductAutomation && !showPreviz && <AIDialogPanel onBack={() => setShowAIDialog(false)} />}
+          {!showEnterprise && showProductAutomation && !showPreviz && <ProductAutomationPanel onBack={handleWorkspaceBack} />}
+          {!showEnterprise && showStoryboard && !showPreviz && <StoryboardPanel onBack={handleWorkspaceBack} onNavigateToVideo={() => { setShowStoryboard(false); setCurrentGroup('video') }} />}
+          {!showEnterprise && showAIDialog && !showStoryboard && !showProductAutomation && !showPreviz && <AIDialogPanel onBack={handleWorkspaceBack} />}
           {!showEnterprise && !showPreviz && !showStoryboard && !showProductAutomation && !showAIDialog && !showWorkflow && !showPromptLibrary && currentGroup === 'image' && renderImageWorkspace()}
           {!showEnterprise && !showPreviz && !showStoryboard && !showProductAutomation && !showAIDialog && !showWorkflow && !showPromptLibrary && currentGroup === 'video' && (
             <Suspense fallback={<WorkspaceLoading label="AI 视频生成" />}>
@@ -530,9 +560,9 @@ function App() {
             </Suspense>
           )}
           {!showEnterprise && !showPreviz && !showStoryboard && !showProductAutomation && !showAIDialog && !showWorkflow && !showPromptLibrary && currentGroup === 'music' && <MusicGenerate />}
-          {!showEnterprise && showWorkflow && !showStoryboard && !showProductAutomation && !showPreviz && <WorkflowPanel onBack={() => setShowWorkflow(false)} currentRole={currentRole} />}
-          {!showEnterprise && showSettings && !showStoryboard && !showProductAutomation && !showPreviz && <SettingsPanel onBack={() => setShowSettings(false)} />}
-          {!showEnterprise && showStyleManager && <StyleProfileManager onBack={() => setShowStyleManager(false)} onSelectProfile={(profile) => { setShowStyleManager(false); setCurrentGroup('image'); setCurrentMode('free'); setInjectedTemplate({ prompt: profile.promptTemplate, model: profile.parameters?.model, aspectRatio: profile.parameters?.aspectRatio, imageSize: profile.parameters?.imageSize }); }} />}
+          {!showEnterprise && showWorkflow && !showStoryboard && !showProductAutomation && !showPreviz && <WorkflowPanel onBack={handleWorkspaceBack} currentRole={currentRole} />}
+          {!showEnterprise && showSettings && !showStoryboard && !showProductAutomation && !showPreviz && <SettingsPanel onBack={handleWorkspaceBack} />}
+          {!showEnterprise && showStyleManager && <StyleProfileManager onBack={handleWorkspaceBack} onSelectProfile={(profile) => { setShowStyleManager(false); setCurrentGroup('image'); setCurrentMode('free'); setInjectedTemplate({ prompt: profile.promptTemplate, model: profile.parameters?.model, aspectRatio: profile.parameters?.aspectRatio, imageSize: profile.parameters?.imageSize }); }} />}
         </div>
       </div>
 

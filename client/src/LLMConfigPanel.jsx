@@ -160,9 +160,9 @@ export default function LLMConfigPanel({ onBack }) {
   }
 
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+    <div className="surface-page llm-config-page" style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       {/* 顶部栏 */}
-      <div style={{
+      <div className="surface-toolbar" style={{
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
@@ -179,7 +179,7 @@ export default function LLMConfigPanel({ onBack }) {
       </div>
 
       {/* 配置列表 */}
-      <div style={{ flex: 1, padding: 20, overflowY: 'auto' }}>
+      <div className="surface-content" style={{ flex: 1, padding: 20, overflowY: 'auto' }}>
         {configs.length === 0 && (
           <div style={{
             textAlign: 'center',
@@ -193,6 +193,7 @@ export default function LLMConfigPanel({ onBack }) {
         <div style={{ display: 'grid', gap: 16 }}>
           {configs.map(config => (
             <div
+              className="surface-card"
               key={config.id}
               style={{
                 background: 'var(--bg-secondary)',

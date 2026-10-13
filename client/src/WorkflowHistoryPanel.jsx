@@ -108,9 +108,9 @@ export default function WorkflowHistoryPanel({ onBack }) {
   });
 
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+    <div className="surface-page workflow-history-page" style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       {/* 顶部栏 */}
-      <div style={{
+      <div className="surface-toolbar" style={{
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
@@ -152,7 +152,7 @@ export default function WorkflowHistoryPanel({ onBack }) {
 
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
         {/* 左侧：历史列表 */}
-        <div style={{
+        <div className="workflow-history-list" style={{
           width: 400,
           borderRight: '1px solid var(--border-color)',
           overflowY: 'auto',
