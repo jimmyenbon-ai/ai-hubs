@@ -21,6 +21,7 @@ import BrandLogo from './components/BrandLogo'
 const VideoGenerate = lazy(() => import('./VideoGenerate'))
 const DirectorPreviz = lazy(() => import('./DirectorPreviz'))
 const EnterpriseWorkspace = lazy(() => import('./EnterpriseWorkspace'))
+const LiteratureWorkspace = lazy(() => import('./LiteratureWorkspace'))
 
 function WorkspaceLoading({ label }) {
   return (
@@ -33,7 +34,7 @@ function WorkspaceLoading({ label }) {
 }
 
 function App() {
-  const [currentGroup, setCurrentGroup] = useState('image')
+  const [currentGroup, setCurrentGroup] = useState(() => window.location.pathname.startsWith('/literature') ? 'literature' : 'image')
   const [currentMode, setCurrentMode] = useState('free')
   const [currentRole, setCurrentRole] = useState(() => localStorage.getItem('aihub_current_role') || 'role-general')
   const [templates, setTemplates] = useState([])
@@ -132,6 +133,7 @@ function App() {
   }, [initUserId, theme])
 
   function closeWorkspaceViews() {
+    if (window.location.pathname.startsWith('/literature')) window.history.pushState({}, '', '/')
     setShowEnterprise(false)
     setShowPreviz(false)
     setShowProductAutomation(false)
@@ -153,6 +155,17 @@ function App() {
     setCurrentGroup(group)
     setCurrentMode(mode)
   }
+
+  useEffect(() => {
+    const handleRoute = () => {
+      setCurrentGroup(window.location.pathname.startsWith('/literature') ? 'literature' : 'image')
+      setShowEnterprise(false); setShowPreviz(false); setShowProductAutomation(false)
+      setShowStoryboard(false); setShowWorkflow(false); setShowAIDialog(false)
+      setShowPromptLibrary(false); setShowSettings(false); setShowStyleManager(false)
+    }
+    window.addEventListener('popstate', handleRoute)
+    return () => window.removeEventListener('popstate', handleRoute)
+  }, [])
 
   function handleOpenEnterprise() {
     closeWorkspaceViews()
@@ -327,7 +340,7 @@ function App() {
     settings: '系统设置', styles: '风格画像管理', enterprise: '企业 AI 工作台',
     library: '提示词模板库', previz: '3D 预演导演', 'product-automation': '产品图自动化',
     storyboard: 'AI 视频自动化', 'ai-dialog': 'AI 智能对话', workflow: 'AI 工作流',
-    video: 'AI 视频生成', music: 'Suno AI音乐生成',
+    video: 'AI 视频生成', music: 'Suno AI音乐生成', literature: '文学创作 · 小说工作区',
   }[activeSection] || (currentMode === 'batch' ? 'AI 图片生成 · 批量生成'
     : currentMode.startsWith('tpl_') ? getCurrentTemplate()?.name || '模板生成' : 'AI 图片生成 · 自由创作')
 
@@ -338,13 +351,20 @@ function App() {
         <div className="sidebar-overlay" onClick={handleSidebarClose} />
       )}
 
+      {activeSection === 'literature' && <nav className="lit-platform-rail" aria-label="平台导航">
+        <button type="button" title="展开平台菜单" aria-label="展开平台菜单" onClick={() => setSidebarOpen(true)}><Icon.Layout size={20} /></button>
+        <span className="lit-platform-current" title="文学创作"><Icon.Book size={20} /></span>
+      </nav>}
+
       <div className={`sidebar-slot ${sidebarOpen ? 'mobile-open' : ''}`}>
+        {activeSection === 'literature' && <button type="button" className="lit-platform-close" title="收起平台菜单" aria-label="收起平台菜单" onClick={handleSidebarClose}><Icon.X size={18} /></button>}
         <Sidebar
           currentGroup={activeSection}
           currentMode={currentMode}
           currentRole={currentRole}
           onRoleChange={handleRoleChange}
           onOpenEnterprise={handleOpenEnterprise}
+          onOpenLiterature={() => { closeWorkspaceViews(); window.history.pushState({}, '', '/literature'); setCurrentGroup('literature'); setSidebarOpen(false) }}
           templates={templates}
           onNavigate={(g, m) => { handleNavigate(g, m); setSidebarOpen(false) }}
           onCreateTemplate={() => { closeWorkspaceViews(); setCurrentGroup('image'); setShowTemplateCreate(true) }}
@@ -504,6 +524,9 @@ function App() {
         </header>
 
         <div className="workspace">
+          {currentGroup === 'literature' && !showSettings && !showStyleManager && !showPromptLibrary && (
+            <Suspense fallback={<WorkspaceLoading label="小说工作区" />}><LiteratureWorkspace /></Suspense>
+          )}
           {showEnterprise && (
             <Suspense fallback={<WorkspaceLoading label="企业 AI 工作台" />}>
               <EnterpriseWorkspace

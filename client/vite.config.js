@@ -9,15 +9,15 @@ export default defineConfig({
     port: 3005,
     proxy: {
       '/api': {
-        target: 'http://localhost:3007',
+        target: process.env.VITE_API_PROXY_TARGET || 'http://localhost:3007',
         changeOrigin: true,
       },
       '/uploads': {
-        target: 'http://localhost:3007',
+        target: process.env.VITE_API_PROXY_TARGET || 'http://localhost:3007',
         changeOrigin: true,
       },
       '/local_storage': {
-        target: 'http://localhost:3007',
+        target: process.env.VITE_API_PROXY_TARGET || 'http://localhost:3007',
         changeOrigin: true,
       },
       '/ws': {

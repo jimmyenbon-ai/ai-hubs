@@ -35,6 +35,7 @@ const storyboardRoutes = require('./routes/storyboardRoutes');
 const productAutomationRoutes = require('./routes/productAutomationRoutes');
 const previzRoutes = require('./routes/previzRoutes');
 const previzDirectorRoutes = require('./routes/previzDirectorRoutes');
+const { createLiteratureRouter } = require('./literature/routes');
 const errorHandler = require('./middleware/errorHandler');
 const { generalLimiter } = require('./middleware/rateLimiter');
 
@@ -91,6 +92,7 @@ app.use('/api/roles', roleRoutes);
 app.use('/api/style-profiles', styleProfileRoutes);
 app.use('/api/feedback', feedbackRoutes);
 app.use('/api/prefs', userPrefsRoutes);
+app.use('/api/literature', createLiteratureRouter().router);
 app.use('/api/ai-dialog', aiDialogRoutes);
 app.use('/api/storyboard', storyboardRoutes);
 app.use('/api/product-automation', productAutomationRoutes);

@@ -54,6 +54,11 @@ class LLMService {
         reject(new Error('LLM API 请求超时（120秒），请检查 API 地址和模型名是否正确'));
       });
       req.on('error', reject);
+      const signal = options.signal;
+      const abort = () => req.destroy(new Error('LLM 请求已取消'));
+      if (signal?.aborted) abort();
+      else if (signal) signal.addEventListener('abort', abort, { once: true });
+      req.on('close', () => signal?.removeEventListener('abort', abort));
       if (body) req.write(JSON.stringify(body));
       req.end();
     });
@@ -101,7 +106,7 @@ class LLMService {
     const fullUrl = config.api_url.replace(/\/$/, '') + endpoint;
 
     try {
-      const result = await this.request(fullUrl, { method: 'POST', headers }, requestBody);
+      const result = await this.request(fullUrl, { method: 'POST', headers, signal: context.signal }, requestBody);
 
       if (result.error) {
         throw new Error(result.error.message || result.error);
@@ -111,6 +116,7 @@ class LLMService {
         content: result.choices?.[0]?.message?.content || result.message?.content || '',
         usage: result.usage,
         model: result.model,
+        finishReason: result.choices?.[0]?.finish_reason || result.done_reason,
       };
     } catch (err) {
       console.error('[LLM] Request failed:', err);

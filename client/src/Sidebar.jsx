@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import RoleSelector from './RoleSelector'
+import { Icon } from './components/Icons'
 
 const CONTENT_TYPES = [
   { value: 'image', label: '图片' },
@@ -7,11 +8,12 @@ const CONTENT_TYPES = [
   { value: 'music', label: '音乐' },
 ]
 
-function Sidebar({ currentGroup, currentMode, currentRole, onRoleChange, templates = [], onNavigate, onCreateTemplate, onManageTemplates, showEnterpriseEntry = false, onOpenEnterprise, onOpenPromptLibrary, onOpenWorkflow, onOpenStoryboard, onOpenProductAutomation, onOpenPreviz, onOpenStyleManager, onOpenSettings, onOpenTutorial, onOpenAIDialog }) {
+function Sidebar({ currentGroup, currentMode, currentRole, onRoleChange, templates = [], onNavigate, onCreateTemplate, onManageTemplates, showEnterpriseEntry = false, onOpenEnterprise, onOpenLiterature, onOpenPromptLibrary, onOpenWorkflow, onOpenStoryboard, onOpenProductAutomation, onOpenPreviz, onOpenStyleManager, onOpenSettings, onOpenTutorial, onOpenAIDialog }) {
   const [expandedGroups, setExpandedGroups] = useState({
     image: true,
     video: false,
     music: false,
+    literature: window.location.pathname.startsWith('/literature'),
   })
 
   function toggleGroup(groupId) {
@@ -185,6 +187,14 @@ function Sidebar({ currentGroup, currentMode, currentRole, onRoleChange, templat
           )
         })}
       </nav>
+      <div className="nav-library-entry" style={{ padding: '8px 10px' }}>
+        <button type="button" className={`nav-group-header ${currentGroup === 'literature' ? 'active-group' : ''}`} onClick={() => toggleGroup('literature')} style={{ width: '100%', background: 'transparent', border: 0 }}>
+          <span className="nav-group-icon"><Icon.Book size={16} /></span>
+          <span className="nav-group-label">文学创作</span>
+          <span className={`nav-group-arrow ${expandedGroups.literature ? 'rotated' : ''}`}><Icon.ChevronDown size={12} /></span>
+        </button>
+        {expandedGroups.literature && <div className="nav-group-items"><button type="button" className={`nav-item ${currentGroup === 'literature' ? 'active' : ''}`} onClick={onOpenLiterature} style={{ width: '100%', border: 0, textAlign: 'left', background: currentGroup === 'literature' ? undefined : 'transparent' }}><span className="nav-item-dot" />小说工作区</button></div>}
+      </div>
       {/* AI 对话入口 */}
       <div className="nav-library-entry" style={{ padding: '8px 10px' }}>
         <div
