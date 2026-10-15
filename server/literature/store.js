@@ -61,6 +61,51 @@ CREATE TABLE IF NOT EXISTS audits (
   id TEXT PRIMARY KEY, book_id TEXT NOT NULL REFERENCES books(id) ON DELETE CASCADE,
   kind TEXT NOT NULL, detail TEXT NOT NULL, created_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS literature_imports (
+  id TEXT PRIMARY KEY, book_id TEXT NOT NULL REFERENCES books(id) ON DELETE CASCADE,
+  name TEXT NOT NULL, source_text TEXT NOT NULL, source_hash TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'preview', chunk_size INTEGER NOT NULL DEFAULT 6000,
+  request_id TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+  UNIQUE(book_id,request_id)
+);
+CREATE TABLE IF NOT EXISTS import_chapters (
+  id TEXT PRIMARY KEY, import_id TEXT NOT NULL REFERENCES literature_imports(id) ON DELETE CASCADE,
+  position INTEGER NOT NULL, title TEXT NOT NULL, content TEXT NOT NULL, volume TEXT NOT NULL DEFAULT '',
+  source_start INTEGER NOT NULL, source_end INTEGER NOT NULL, partial INTEGER NOT NULL DEFAULT 0,
+  action TEXT NOT NULL DEFAULT 'new', chapter_id TEXT REFERENCES chapters(id) ON DELETE SET NULL
+);
+CREATE TABLE IF NOT EXISTS chapter_sources (
+  chapter_id TEXT PRIMARY KEY REFERENCES chapters(id) ON DELETE CASCADE,
+  import_id TEXT NOT NULL REFERENCES literature_imports(id) ON DELETE CASCADE,
+  staged_id TEXT NOT NULL REFERENCES import_chapters(id) ON DELETE CASCADE,
+  source_revision INTEGER NOT NULL, source_hash TEXT NOT NULL, confirmed INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS import_units (
+  id TEXT PRIMARY KEY, import_id TEXT NOT NULL REFERENCES literature_imports(id) ON DELETE CASCADE,
+  chapter_id TEXT NOT NULL REFERENCES chapters(id) ON DELETE CASCADE, source_revision INTEGER NOT NULL,
+  position INTEGER NOT NULL, start_offset INTEGER NOT NULL, end_offset INTEGER NOT NULL,
+  content TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending', result TEXT NOT NULL DEFAULT '{}',
+  error TEXT NOT NULL DEFAULT '', attempts INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+  UNIQUE(import_id,chapter_id,source_revision,position)
+);
+CREATE INDEX IF NOT EXISTS import_units_queue ON import_units(import_id,status,chapter_id,position);
+CREATE INDEX IF NOT EXISTS import_units_chapter ON import_units(chapter_id,source_revision,status);
+CREATE TABLE IF NOT EXISTS import_evidence (
+  id TEXT PRIMARY KEY, book_id TEXT NOT NULL REFERENCES books(id) ON DELETE CASCADE,
+  unit_id TEXT NOT NULL REFERENCES import_units(id) ON DELETE CASCADE,
+  chapter_id TEXT NOT NULL REFERENCES chapters(id) ON DELETE CASCADE, source_revision INTEGER NOT NULL,
+  entry_id TEXT REFERENCES entries(id) ON DELETE CASCADE, fact_id TEXT REFERENCES facts(id) ON DELETE CASCADE,
+  quote TEXT NOT NULL, source_offset INTEGER NOT NULL, visibility TEXT NOT NULL,
+  known_by TEXT NOT NULL DEFAULT '[]', chronology TEXT NOT NULL DEFAULT 'current', story_time TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS import_evidence_book ON import_evidence(book_id,chapter_id);
+CREATE TABLE IF NOT EXISTS takeovers (
+  book_id TEXT PRIMARY KEY REFERENCES books(id) ON DELETE CASCADE,
+  cutoff_id TEXT REFERENCES chapters(id) ON DELETE CASCADE, cutoff_ordinal INTEGER NOT NULL,
+  target_id TEXT NOT NULL REFERENCES chapters(id) ON DELETE CASCADE, status TEXT NOT NULL,
+  manifest TEXT NOT NULL, created_at TEXT NOT NULL
+);
 `;
 
 function createStore(filename = process.env.LITERATURE_DB_PATH || path.join(__dirname, '..', 'cache', 'literature.sqlite')) {

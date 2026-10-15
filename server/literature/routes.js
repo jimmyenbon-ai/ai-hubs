@@ -4,14 +4,19 @@ const { createStore } = require('./store');
 const { createAuth, originGuard } = require('./auth');
 const { buildContext } = require('./context');
 const { TYPES, contextData, createRunner } = require('./jobs');
+const { createImportRunner, importBusy, assertTakeover } = require('./imports');
+const { registerImportRoutes } = require('./importRoutes');
 const { KINDS, now, id, fail, text, object, parse, chapterRow, entryRow, jobRow, owned, revision, touch, invalidate, validatePlan, validateParent, saveChapter, validateFacts } = require('./domain');
 
 const AI_ACCEPTED = "EXISTS (SELECT 1 FROM jobs j WHERE j.chapter_id=c.id AND j.type IN ('write','rewrite') AND j.status='applied' AND j.chapter_revision<c.accepted_revision)";
+const IMPORT_ACCEPTED = "EXISTS (SELECT 1 FROM chapter_sources s WHERE s.chapter_id=c.id AND s.confirmed=1 AND s.source_revision<=c.accepted_revision)";
+const FORMAL_ACCEPTED = `(${AI_ACCEPTED} OR ${IMPORT_ACCEPTED})`;
 
 function createLiteratureRouter({ store = createStore(), invoke } = {}) {
   const router = express.Router();
   const auth = createAuth(store);
   const runner = createRunner(store, invoke);
+  const importRunner = createImportRunner(store, invoke);
   const wrap = fn => async (req, res, next) => { try { await fn(req, res); } catch (error) { next(error); } };
   const ok = (res, data) => res.json({ success: true, data });
   const read = (req, fn) => store.read(async sql => fn(sql, await owned(sql, req.literatureUser.id, req.params.bookId)));
@@ -34,6 +39,7 @@ function createLiteratureRouter({ store = createStore(), invoke } = {}) {
   router.use(auth.requireUser);
   router.post('/auth/logout', wrap(auth.logout));
   router.post('/users', wrap(auth.createUser));
+  registerImportRoutes(router, { store, importRunner, wrap, ok });
   router.get('/models', wrap(async (req, res) => {
     const { LLMConfig } = require('../models/workflowModel');
     const configs = await LLMConfig.findAll({});
@@ -51,6 +57,7 @@ function createLiteratureRouter({ store = createStore(), invoke } = {}) {
     entries: (await sql.all('SELECT * FROM entries WHERE book_id=? ORDER BY kind,title', [book.id])).map(entryRow),
     chapters: (await sql.all(`SELECT c.id,c.book_id,c.ordinal,c.title,c.revision,c.status,c.accepted_revision,c.needs_review,c.updated_at,
       ${AI_ACCEPTED} AS accepted_ai_generated,
+      ${IMPORT_ACCEPTED} AS accepted_imported,
       (SELECT v.title FROM versions v WHERE v.chapter_id=c.id AND v.revision=c.accepted_revision) AS accepted_title
       FROM chapters c WHERE c.book_id=? ORDER BY c.ordinal`, [book.id])),
     facts: (await sql.all('SELECT * FROM facts WHERE book_id=? ORDER BY ordinal DESC,created_at DESC LIMIT 200', [book.id])).map(row => ({ ...row, known_by: parse(row.known_by) })),
@@ -69,6 +76,7 @@ function createLiteratureRouter({ store = createStore(), invoke } = {}) {
   router.delete('/books/:bookId', wrap(async (req, res) => ok(res, await write(req, async (sql, book) => {
     revision(book.revision, req.body.revision);
     if (await sql.get("SELECT id FROM jobs WHERE book_id=? AND status IN ('queued','running')", [book.id])) fail('请先取消作品中正在运行的任务', 409);
+    if (await importBusy(sql, book.id)) fail('请先暂停导入分析', 409);
     await sql.run('DELETE FROM books WHERE id=?', [book.id]);
     return true;
   }))));
@@ -129,11 +137,11 @@ function createLiteratureRouter({ store = createStore(), invoke } = {}) {
   }))));
   router.get('/books/:bookId/chapters/:chapterId', wrap(async (req, res) => ok(res, await read(req, sql => chapter(sql, req)))));
   router.get('/books/:bookId/chapters/:chapterId/formal', wrap(async (req, res) => ok(res, await read(req, async (sql, book) => {
-    const item = await sql.get(`SELECT c.*,v.title AS formal_title,v.content AS formal_content,v.plan AS formal_plan
+    const item = await sql.get(`SELECT c.*,v.title AS formal_title,v.content AS formal_content,v.plan AS formal_plan,${AI_ACCEPTED} AS formal_ai
       FROM chapters c JOIN versions v ON v.chapter_id=c.id AND v.revision=c.accepted_revision
-      WHERE c.id=? AND c.book_id=? AND ${AI_ACCEPTED}`, [req.params.chapterId, book.id]);
-    if (!item) fail('当前计划还没有已确认的 AI 正式正文', 404);
-    return { ...chapterRow(item), title: item.formal_title, content: item.formal_content, plan: parse(item.formal_plan), revision: item.accepted_revision, status: 'accepted', formal: true };
+      WHERE c.id=? AND c.book_id=? AND ${FORMAL_ACCEPTED}`, [req.params.chapterId, book.id]);
+    if (!item) fail('当前计划还没有已确认的正式正文', 404);
+    return { ...chapterRow(item), title: item.formal_title, content: item.formal_content, plan: parse(item.formal_plan), revision: item.accepted_revision, status: 'accepted', formal: true, source: item.formal_ai ? 'ai' : 'import' };
   }))));
   router.put('/books/:bookId/chapters/:chapterId', wrap(async (req, res) => ok(res, await write(req, async sql => saveChapter(sql, await chapter(sql, req), req.body)))));
   router.get('/books/:bookId/chapters/:chapterId/versions', wrap(async (req, res) => ok(res, await read(req, async sql => {
@@ -178,6 +186,8 @@ function createLiteratureRouter({ store = createStore(), invoke } = {}) {
       if (['review', 'memory', 'rewrite'].includes(req.body.type) && !item.content.trim()) fail('当前章节还没有正文');
       const busy = await sql.get("SELECT id FROM jobs WHERE book_id=? AND status IN ('queued','running') LIMIT 1", [book.id]);
       if (busy) fail('本作品已有任务正在运行，请等待或取消后重试', 409);
+      if (await importBusy(sql, book.id)) fail('请先暂停或完成导入分析', 409);
+      if (['plan', 'write', 'rewrite'].includes(req.body.type)) await assertTakeover(sql, book.id, item);
       const input = { instruction: text(req.body.instruction || '', 6000), targetWords: Math.max(500, Math.min(6000, Number(req.body.targetWords) || 2500)), requestId };
       const record = { id: id(), book_id: book.id, chapter_id: item?.id || null, type: req.body.type, status: 'queued', stage: 'queued', book_revision: book.revision, chapter_revision: item?.revision || null, input: JSON.stringify(input), context: '{}', result: '{}', error: '', created_at: now(), updated_at: now() };
       await sql.run('INSERT INTO jobs VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)', Object.values(record));
@@ -212,12 +222,12 @@ function createLiteratureRouter({ store = createStore(), invoke } = {}) {
     return saveChapter(sql, item, { revision: item.revision, ...(task.type === 'plan' ? { plan } : { content: task.result.content }) });
   }))));
   router.get('/books/:bookId/export', wrap(async (req, res) => {
-    const data = await read(req, async (sql, book) => ({ schemaVersion: 1, exportedAt: now(), book, entries: (await sql.all('SELECT * FROM entries WHERE book_id=?', [book.id])).map(entryRow), chapters: (await sql.all('SELECT * FROM chapters WHERE book_id=? ORDER BY ordinal', [book.id])).map(chapterRow), facts: await sql.all('SELECT * FROM facts WHERE book_id=?', [book.id]), versions: await sql.all('SELECT v.* FROM versions v JOIN chapters c ON c.id=v.chapter_id WHERE c.book_id=?', [book.id]), audits: await sql.all('SELECT * FROM audits WHERE book_id=?', [book.id]) }));
+    const data = req.query.format === 'txt' ? null : await read(req, async (sql, book) => ({ schemaVersion: 2, exportedAt: now(), book, entries: (await sql.all('SELECT * FROM entries WHERE book_id=?', [book.id])).map(entryRow), chapters: (await sql.all('SELECT * FROM chapters WHERE book_id=? ORDER BY ordinal', [book.id])).map(chapterRow), facts: await sql.all('SELECT * FROM facts WHERE book_id=?', [book.id]), versions: await sql.all('SELECT v.* FROM versions v JOIN chapters c ON c.id=v.chapter_id WHERE c.book_id=?', [book.id]), audits: await sql.all('SELECT * FROM audits WHERE book_id=?', [book.id]), imports: await sql.all('SELECT * FROM literature_imports WHERE book_id=?', [book.id]), sources: await sql.all('SELECT s.* FROM chapter_sources s JOIN chapters c ON c.id=s.chapter_id WHERE c.book_id=?', [book.id]), importUnits: await sql.all('SELECT u.* FROM import_units u JOIN literature_imports i ON i.id=u.import_id WHERE i.book_id=?', [book.id]), evidence: await sql.all('SELECT * FROM import_evidence WHERE book_id=?', [book.id]), takeover: await sql.get('SELECT * FROM takeovers WHERE book_id=?', [book.id]) }));
     if (req.query.format === 'txt') {
-      const formal = await read(req, (sql, book) => sql.all(`SELECT c.ordinal,v.title,v.content FROM chapters c
+      const output = await read(req, async (sql, book) => ({ title: book.title, chapters: await sql.all(`SELECT c.ordinal,v.title,v.content FROM chapters c
         JOIN versions v ON v.chapter_id=c.id AND v.revision=c.accepted_revision
-        WHERE c.book_id=? AND ${AI_ACCEPTED} ORDER BY c.ordinal`, [book.id]));
-      res.type('text/plain').send(`${data.book.title}\n\n${formal.map(item => `${item.ordinal}. ${item.title}\n\n${item.content}`).join('\n\n')}`);
+        WHERE c.book_id=? AND ${FORMAL_ACCEPTED} ORDER BY c.ordinal`, [book.id]) }));
+      res.type('text/plain').send(`${output.title}\n\n${output.chapters.map(item => `${item.ordinal}. ${item.title}\n\n${item.content}`).join('\n\n')}`);
     }
     else ok(res, data);
   }));
@@ -227,6 +237,6 @@ function createLiteratureRouter({ store = createStore(), invoke } = {}) {
     if (status === 500) console.error('[literature]', error);
     res.status(status).json({ success: false, error: status === 500 ? '小说工作区服务异常，请稍后重试' : error.code === 'SQLITE_CONSTRAINT' ? '名称或记录已存在' : error.message });
   });
-  return { router, store, runner };
+  return { router, store, runner, importRunner };
 }
 module.exports = { createLiteratureRouter };

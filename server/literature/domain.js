@@ -33,9 +33,12 @@ async function touch(sql, bookId, kind, detail) {
 async function invalidate(sql, bookId, ordinal = 0) {
   await sql.run('UPDATE chapters SET needs_review=1 WHERE book_id=? AND ordinal>?', [bookId, ordinal]);
   await sql.run('UPDATE facts SET status=\'stale\' WHERE book_id=? AND ordinal>=?', [bookId, ordinal]);
+  await sql.run("UPDATE import_units SET status='stale',error='前文或设定已修改，需要重新分析',updated_at=? WHERE chapter_id IN (SELECT id FROM chapters WHERE book_id=? AND ordinal>=?) AND status IN ('accepted','ready')", [now(), bookId, ordinal]);
+  await sql.run("UPDATE takeovers SET status='stale' WHERE book_id=? AND cutoff_ordinal>=?", [bookId, ordinal]);
 }
 async function validatePlan(sql, bookId, input) {
   const plan = object(input);
+  if (plan.importContinuation !== undefined && typeof plan.importContinuation !== 'boolean') fail('原稿续写标记不正确');
   for (const key of ['goal', 'beats', 'mustInclude', 'forbidden', 'povEntityId', 'volumeId', 'storyTime']) if (plan[key] !== undefined) text(plan[key], 6000);
   const entries = await sql.all('SELECT id FROM entries WHERE book_id=?', [bookId]);
   const entityIds = new Set(entries.map(entry => entry.id));

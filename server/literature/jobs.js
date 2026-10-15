@@ -28,9 +28,10 @@ async function defaultInvoke(book, system, prompt, signal) {
 
 async function contextData(sql, book, chapter) {
   const entries = (await sql.all('SELECT * FROM entries WHERE book_id=? ORDER BY updated_at DESC', [book.id])).map(entryRow);
-  const facts = (await sql.all(`SELECT f.* FROM facts f JOIN chapters c ON c.id=f.chapter_id
-    WHERE f.book_id=? AND f.status='active' AND c.accepted_revision=f.source_revision AND c.needs_review=0 ORDER BY f.ordinal DESC`, [book.id])).map(row => ({ ...row, known_by: parse(row.known_by) }));
-  const summaries = facts.filter(fact => fact.key === '__summary').map(fact => ({ chapterId: fact.chapter_id, ordinal: fact.ordinal, revision: fact.source_revision, summary: fact.value }));
+  const facts = (await sql.all(`SELECT f.*,e.source_offset,e.chronology,e.story_time FROM facts f JOIN chapters c ON c.id=f.chapter_id
+    LEFT JOIN import_evidence e ON e.fact_id=f.id
+    WHERE f.book_id=? AND f.status='active' AND c.accepted_revision=f.source_revision AND c.needs_review=0 ORDER BY f.ordinal DESC,e.source_offset DESC`, [book.id])).map(row => ({ ...row, known_by: parse(row.known_by) }));
+  const summaries = facts.filter(fact => fact.key === '__summary').map(fact => ({ chapterId: fact.chapter_id, ordinal: fact.ordinal, revision: fact.source_revision, summary: fact.value, knownBy: fact.known_by }));
   return { book, chapter, entries, facts: facts.filter(fact => fact.key !== '__summary'), summaries };
 }
 
@@ -83,7 +84,10 @@ function createRunner(store, invoke = defaultInvoke) {
         await stage('planning');
         const scenePlan = await ask('先列出本章的场景推进顺序、冲突、人物动机、文风注意点及可能存在的设定冲突。不要写正文。');
         await stage('drafting');
-        const content = await ask(`${job.type === 'rewrite' ? '依据作者要求改写当前草稿' : '依据本章计划撰写小说正文'}。单章目标 ${job.input.targetWords || 2500} 字。不要输出解释、标题、设定档案或审校说明。遵循以下场景计划：\n${scenePlan}`);
+        const continuing = job.type === 'write' && chapter.plan.importContinuation && chapter.content;
+        const generated = await ask(`${job.type === 'rewrite' ? '依据作者要求改写当前草稿' : continuing ? '接续当前未完原稿，仅输出新增的后续正文，不重复或改写已有片段' : '依据本章计划撰写小说正文'}。单章目标 ${job.input.targetWords || 2500} 字。不要输出解释、标题、设定档案或审校说明。遵循以下场景计划：\n${scenePlan}`);
+        const content = continuing ? `${chapter.content}\n\n${generated}` : generated;
+        if (continuing) notices.push('导入的未完片段已保留在前，新增正文接在其后。');
         if (content.length > 120000) fail('模型返回正文过长', 502);
         result = { content, scenePlan, notices };
       } else if (job.type === 'review') {
@@ -115,4 +119,4 @@ function createRunner(store, invoke = defaultInvoke) {
   }
   return { initialized, launch, cancel, controllers };
 }
-module.exports = { TYPES, contextData, createRunner };
+module.exports = { TYPES, contextData, createRunner, defaultInvoke, jsonOutput };
