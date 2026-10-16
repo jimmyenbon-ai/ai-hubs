@@ -492,7 +492,7 @@ function intelligentSearch(knowledgeList, options = {}) {
   console.log(`[知识库搜索] 扩展关键词: [${expandedKeywords.join(', ')}]`);
 
   // 2. 过滤和评分
-  let candidates = [...knowledgeList];
+  let candidates = knowledgeList.filter(item => !['draft', 'disabled'].includes(item.metadata?.status) && item.metadata?.allowExternal !== false);
 
   // 按文件夹过滤（支持层级匹配）
   if (folder || (Array.isArray(folders) && folders.length > 0)) {
@@ -639,6 +639,7 @@ function intelligentSearch(knowledgeList, options = {}) {
 }
 
 module.exports = {
+  scoreItem,
   intelligentSearch,
   extractKeywords,
   expandKeywords,

@@ -1098,7 +1098,7 @@ async function handleKnowledgeQuery(node, inputs, context) {
 
   if (!combinedQuery || !combinedQuery.trim()) {
     try {
-      const allKnowledge = await KnowledgeBase.findAll({ limit: 100 });
+      const allKnowledge = await KnowledgeBase.findForRetrieval();
       const results = intelligentSearch(allKnowledge, {
         query: '',
         folders: llmFolders,
@@ -1113,7 +1113,7 @@ async function handleKnowledgeQuery(node, inputs, context) {
   }
 
   try {
-    const allKnowledge = await KnowledgeBase.findAll({ limit: 1000 });
+    const allKnowledge = await KnowledgeBase.findForRetrieval();
 
     const results = intelligentSearch(allKnowledge, {
       query: combinedQuery,
@@ -1202,6 +1202,8 @@ function buildKnowledgeResult(results) {
   const CONTENT_FOLDERS = ['product', 'brand', 'logo', '产品', '品牌', 'company', '公司'];
 
   function getReferenceRole(item) {
+    if (item.metadata?.assetRole === 'style') return 'style';
+    if (['product', 'logo', 'brand'].includes(item.metadata?.assetRole)) return 'content';
     const folder = ((item.folder || item.category || '')).toLowerCase();
     const folderParts = folder.split('/').filter(Boolean);
     // 检查是否匹配风格类文件夹

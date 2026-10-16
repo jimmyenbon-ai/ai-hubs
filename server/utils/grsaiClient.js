@@ -53,6 +53,7 @@ async function generateImage({
   imageSize = '1K',
   aspectRatio = '1:1',
   referenceImages,
+  signal,
 }) {
   const apiKey = getApiKey()
   if (!apiKey) {
@@ -106,12 +107,13 @@ async function generateImage({
     Authorization: `Bearer ${apiKey}`,
   }
 
-  logger.info('请求 GRSai API 生成图片', { url: `${getApiHost()}/v1/api/generate`, model, payload })
+  logger.info('请求 GRSai API 生成图片', { url: `${getApiHost()}/v1/api/generate`, model, aspectRatio: payload.aspectRatio, referenceCount: referenceImages?.length || 0 })
 
   try {
     const resp = await axios.post(`${getApiHost()}/v1/api/generate`, payload, {
       headers,
       timeout: GRSAI_TIMEOUT_MS,
+      signal,
     })
 
     const result = resp.data

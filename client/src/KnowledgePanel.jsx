@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { Icon } from './components/Icons';
 
 const DEFAULT_FOLDERS = [
@@ -18,6 +18,7 @@ export default function KnowledgePanel({ onBack }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [folders, setFolders] = useState([]);
   const [selectedItems, setSelectedItems] = useState(new Set());
+  const [analyzing, setAnalyzing] = useState(false);
   const [form, setForm] = useState({
     category: 'product',
     folder: '',
@@ -27,6 +28,7 @@ export default function KnowledgePanel({ onBack }) {
     fileUrl: '',
     type: 'text',
     metadata: '',
+    productName: '', aliases: '', assetRole: 'general', imageView: 'any', description: '', status: 'approved', allowExternal: true, version: '',
   });
 
   // 文件上传相关
@@ -90,7 +92,7 @@ export default function KnowledgePanel({ onBack }) {
   const totalAll = items.length;
 
   function resetForm() {
-    setForm({ category: 'product', folder: '', title: '', originalName: '', content: '', fileUrl: '', type: 'text', metadata: '' });
+    setForm({ category: 'product', folder: '', title: '', originalName: '', content: '', fileUrl: '', type: 'text', metadata: '', productName: '', aliases: '', assetRole: 'general', imageView: 'any', description: '', status: 'approved', allowExternal: true, version: '' });
     setEditingId(null);
   }
 
@@ -104,7 +106,9 @@ export default function KnowledgePanel({ onBack }) {
       let metadata = {};
       try {
         if (form.metadata.trim()) metadata = JSON.parse(form.metadata);
-      } catch { metadata = {}; }
+      } catch { alert('附加信息 JSON 格式无效'); return; }
+      if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) { alert('附加信息必须是 JSON 对象'); return; }
+      Object.assign(metadata, { productName: form.productName.trim(), aliases: form.aliases.split(/[,，\n]/).map(v => v.trim()).filter(Boolean), assetRole: form.assetRole, imageView: form.imageView, description: form.description.trim(), status: form.status, allowExternal: form.allowExternal, version: form.version.trim() });
 
       const body = {
         category: form.category,
@@ -150,9 +154,28 @@ export default function KnowledgePanel({ onBack }) {
       fileUrl: item.fileUrl || '',
       type: item.type || 'text',
       metadata: item.metadata ? JSON.stringify(item.metadata, null, 2) : '',
+      productName: item.metadata?.productName || '', aliases: (Array.isArray(item.metadata?.aliases) ? item.metadata.aliases : []).join(', '),
+      assetRole: item.metadata?.assetRole || (/logo|标识/i.test(item.title) ? 'logo' : /design|设计|模板/.test(item.folder || '') ? 'style' : /brand|品牌/.test(item.folder || '') ? 'brand' : /product|产品/.test(item.folder || item.category || '') ? 'product' : 'general'),
+      imageView: item.metadata?.imageView || 'any', description: item.metadata?.description || '', status: item.metadata?.status || 'approved', allowExternal: item.metadata?.allowExternal !== false, version: item.metadata?.version || '',
     });
     setEditingId(item.id);
     setShowForm(true);
+  }
+
+  async function analyzeImage() {
+    if (!editingId || analyzing || !window.confirm('使用默认图片理解模型识别该图片？可能产生模型调用费用，结果将作为待审核建议保存。')) return;
+    setAnalyzing(true);
+    try {
+      const response = await fetch(`/api/knowledge/${editingId}/analyze`, { method: 'POST', headers: { 'Content-Type': 'application/json' } });
+      const result = await response.json();
+      if (!result.success) throw new Error(result.message);
+      setForm(value => {
+        let current = {}; try { current = JSON.parse(value.metadata || '{}'); } catch { /* keep typed material fields */ }
+        return { ...value, metadata: JSON.stringify({ ...current, analysis: result.data.metadata.analysis }, null, 2) };
+      });
+      fetchItems();
+    } catch (error) { alert(error.message); }
+    finally { setAnalyzing(false); }
   }
 
   async function handleDelete(id) {
@@ -161,7 +184,7 @@ export default function KnowledgePanel({ onBack }) {
       await fetch(`/api/knowledge/${id}`, { method: 'DELETE' });
       fetchItems();
       fetchFolders();
-    } catch (err) {
+    } catch {
       alert('删除失败');
     }
   }
@@ -268,23 +291,15 @@ export default function KnowledgePanel({ onBack }) {
           // 单文件：预填表单以便编辑
           const result = results[0];
           setPendingFiles([]);
-          setEditingId(result.id);
-          setForm({
-            category: result.folder?.split('/')[0] || 'product',
-            folder: result.folder || (filterFolder !== 'all' ? filterFolder : ''),
-            title: result.title || '',
-            originalName: result.originalName || '',
-            content: result.content || '',
-            fileUrl: result.fileUrl || '',
-            type: result.type || 'text',
-            metadata: '',
-          });
-          setUploadProgress('上传成功，请确认内容后保存');
-          setShowForm(true);
+          handleEdit(result);
+          setUploadProgress(result.parseWarning || '上传成功，请确认内容后保存');
+          fetchItems();
+          fetchFolders();
         } else {
           // 批量：全部自动保存，刷新列表
           setPendingFiles([]);
-          setUploadProgress(`成功上传 ${results.length} 个文件`);
+          const failed = results.filter(result => result.parseStatus === 'failed').length;
+          setUploadProgress(`成功上传 ${results.length} 个文件${failed ? `，其中 ${failed} 份待处理解析问题` : ''}`);
           fetchItems();
           fetchFolders();
         }
@@ -592,6 +607,8 @@ export default function KnowledgePanel({ onBack }) {
           folders={folderList}
           onSubmit={handleSubmit}
           onClose={() => { setShowForm(false); resetForm(); }}
+          analyzing={analyzing}
+          onAnalyze={analyzeImage}
         />
       )}
     </div>
@@ -720,7 +737,10 @@ function KnowledgeItem({ item, selected, onToggleSelect, onEdit, onDelete }) {
   );
 }
 
-function KnowledgeFormModal({ form, setForm, editingId, folders, onSubmit, onClose }) {
+function KnowledgeFormModal({ form, setForm, editingId, folders, onSubmit, onClose, analyzing, onAnalyze }) {
+  let analysis, parseWarning;
+  try { const metadata = JSON.parse(form.metadata || '{}'); analysis = metadata.analysis; parseWarning = metadata.parseWarning; } catch { /* invalid JSON is reported on save */ }
+  const candidate = analysis?.status === 'candidate' ? analysis.candidate : null;
   return (
     <div className="modal-backdrop knowledge-modal-backdrop" style={{
       position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
@@ -729,7 +749,7 @@ function KnowledgeFormModal({ form, setForm, editingId, folders, onSubmit, onClo
     }}>
       <div className="modal-content knowledge-modal-content" style={{
         background: 'var(--bg-primary)', borderRadius: 12, padding: 24,
-        width: 500, maxWidth: '90vw', maxHeight: '85vh', overflowY: 'auto',
+        width: 620, maxWidth: '90vw', maxHeight: '85vh', overflowY: 'auto',
         boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
       }}>
         <h3 style={{ margin: '0 0 20px', fontSize: 16 }}>
@@ -737,6 +757,7 @@ function KnowledgeFormModal({ form, setForm, editingId, folders, onSubmit, onClo
         </h3>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          {parseWarning && <p role="status" style={{ color: '#b88239', fontSize: 12 }}>{parseWarning}</p>}
           {/* 文件夹 */}
           <div>
             <label style={labelStyle}>文件夹</label>
@@ -786,6 +807,18 @@ function KnowledgeFormModal({ form, setForm, editingId, folders, onSubmit, onClo
           </div>
 
           {/* 内容 */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 12 }}>
+            <label style={labelStyle}>所属产品型号<input aria-label="所属产品型号" style={inputStyle} value={form.productName} onChange={event => setForm(value => ({ ...value, productName: event.target.value }))} /></label>
+            <label style={labelStyle}>物料用途<select aria-label="物料用途" style={inputStyle} value={form.assetRole} onChange={event => setForm(value => ({ ...value, assetRole: event.target.value }))}>{[['product', '产品资料 / 产品图'], ['logo', 'Logo'], ['style', '风格案例'], ['brand', '品牌规范'], ['general', '通用资料']].map(([key, name]) => <option value={key} key={key}>{name}</option>)}</select></label>
+            <label style={labelStyle}>图片视角<select aria-label="图片视角" style={inputStyle} value={form.imageView} onChange={event => setForm(value => ({ ...value, imageView: event.target.value }))}>{[['any', '不限'], ['front', '正面'], ['back', '背面'], ['detail', '细节'], ['scene', '场景']].map(([key, name]) => <option value={key} key={key}>{name}</option>)}</select></label>
+            <label style={labelStyle}>状态<select aria-label="物料状态" style={inputStyle} value={form.status} onChange={event => setForm(value => ({ ...value, status: event.target.value }))}><option value="approved">已确认，可检索</option><option value="draft">待审核，不检索</option><option value="disabled">已停用</option></select></label>
+          </div>
+          <label style={labelStyle}>产品别名<input aria-label="产品别名" style={inputStyle} value={form.aliases} onChange={event => setForm(value => ({ ...value, aliases: event.target.value }))} /></label>
+          <label style={labelStyle}>物料版本<input aria-label="物料版本" style={inputStyle} value={form.version} onChange={event => setForm(value => ({ ...value, version: event.target.value }))} /></label>
+          <label style={{ ...labelStyle, display: 'flex', gap: 8, alignItems: 'center' }}><input type="checkbox" checked={form.allowExternal} onChange={event => setForm(value => ({ ...value, allowExternal: event.target.checked }))} />允许发送至外部 AI 模型</label>
+          <label style={labelStyle}>已确认的物料说明 / 视觉描述<textarea aria-label="已确认的物料说明 / 视觉描述" style={inputStyle} rows={3} value={form.description} onChange={event => setForm(value => ({ ...value, description: event.target.value }))} /></label>
+          {editingId && form.type === 'image' && <button type="button" onClick={onAnalyze} disabled={analyzing || !form.allowExternal} style={cancelBtnStyle}><Icon.Brain size={14} />{analyzing ? '识别中…' : 'AI 识别物料'}</button>}
+          {candidate && <section style={{ borderLeft: '2px solid var(--primary-color)', paddingLeft: 12 }}><strong style={{ fontSize: 13 }}>待审核的识别建议</strong><p style={{ fontSize: 12, whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>{candidate.description}</p><p style={{ fontSize: 12 }}>{candidate.productName || '型号未确认'} · {candidate.assetRole} · {candidate.imageView}</p><button type="button" style={cancelBtnStyle} onClick={() => setForm(value => { const metadata = JSON.parse(value.metadata || '{}'); return { ...value, ...candidate, productName: candidate.productName || value.productName, metadata: JSON.stringify({ ...metadata, analysis: { ...metadata.analysis, status: 'reviewed' } }, null, 2) }; })}><Icon.Check size={13} />采用建议</button></section>}
           <div>
             <label style={labelStyle}>内容 *</label>
             <textarea
@@ -798,7 +831,7 @@ function KnowledgeFormModal({ form, setForm, editingId, folders, onSubmit, onClo
           </div>
 
           {/* 图片预览 */}
-          {form.fileUrl && (
+          {form.fileUrl && form.type === 'image' && (
             <div>
               <label style={labelStyle}>图片预览</label>
               <img
@@ -824,8 +857,8 @@ function KnowledgeFormModal({ form, setForm, editingId, folders, onSubmit, onClo
 
         {/* 按钮 */}
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 20 }}>
-          <button onClick={onClose} style={cancelBtnStyle}>取消</button>
-          <button onClick={onSubmit} style={submitBtnStyle}>
+          <button onClick={onClose} disabled={analyzing} style={cancelBtnStyle}>取消</button>
+          <button onClick={onSubmit} disabled={analyzing} style={submitBtnStyle}>
             {editingId ? '保存修改' : '确认保存'}
           </button>
         </div>

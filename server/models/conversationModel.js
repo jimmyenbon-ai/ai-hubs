@@ -2,7 +2,7 @@ const fs = require('fs/promises');
 const path = require('path');
 const { v4: uuidv4 } = require('uuid');
 
-const CACHE_DIR = path.join(__dirname, '..', 'cache');
+const CACHE_DIR = process.env.AI_DIALOG_CACHE_DIR || path.join(__dirname, '..', 'cache');
 const CONVERSATIONS_FILE = path.join(CACHE_DIR, 'ai_dialog_conversations.json');
 
 const memoryStore = { conversations: [] };
@@ -34,7 +34,8 @@ async function ensureLoaded() {
 async function persistToDisk() {
   await ensureLoaded();
   await ensureCacheDir();
-  await fs.writeFile(CONVERSATIONS_FILE, JSON.stringify(memoryStore.conversations, null, 2));
+  await fs.writeFile(`${CONVERSATIONS_FILE}.tmp`, JSON.stringify(memoryStore.conversations, null, 2));
+  await fs.rename(`${CONVERSATIONS_FILE}.tmp`, CONVERSATIONS_FILE);
 }
 
 function enqueuePersist() {
@@ -106,6 +107,7 @@ const Conversation = {
 
 // 消息存储：每个会话一个 JSON 文件
 function getMessagesFile(conversationId) {
+  if (typeof conversationId !== 'string' || !/^[a-zA-Z0-9-]{1,80}$/.test(conversationId)) throw new Error('对话标识无效');
   return path.join(CACHE_DIR, `ai_dialog_messages_${conversationId}.json`);
 }
 
@@ -121,16 +123,20 @@ const Message = {
   },
 
   async create(conversationId, attrs) {
+    await ensureCacheDir();
     const messages = await this.findAll(conversationId);
     const record = {
       id: uuidv4(),
       role: attrs.role,
       content: attrs.content,
       attachments: attrs.attachments || [],
+      metadata: attrs.metadata || null,
       created_at: new Date().toISOString(),
     };
     messages.push(record);
-    await fs.writeFile(getMessagesFile(conversationId), JSON.stringify(messages, null, 2));
+    const filename = getMessagesFile(conversationId);
+    await fs.writeFile(`${filename}.tmp`, JSON.stringify(messages, null, 2));
+    await fs.rename(`${filename}.tmp`, filename);
     return record;
   },
 

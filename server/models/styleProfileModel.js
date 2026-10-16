@@ -2,7 +2,7 @@ const fs = require('fs/promises');
 const path = require('path');
 const { v4: uuidv4 } = require('uuid');
 
-const CACHE_DIR = path.join(__dirname, '..', 'cache');
+const CACHE_DIR = process.env.STYLE_PROFILE_CACHE_DIR || path.join(__dirname, '..', 'cache');
 const CACHE_FILE = path.join(CACHE_DIR, 'style_profiles.json');
 
 const memoryStore = [];
@@ -96,6 +96,7 @@ const StyleProfile = {
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
+    if (record.parameters.dialogDefault === true) memoryStore.forEach(item => { item.parameters = { ...item.parameters, dialogDefault: false }; });
     memoryStore.push(record);
     await enqueuePersist();
     return record;
@@ -105,7 +106,10 @@ const StyleProfile = {
     await ensureLoaded();
     const item = memoryStore.find((s) => s.id === id);
     if (!item) return null;
-    Object.assign(item, patch, { updatedAt: new Date().toISOString() });
+    const allowed = ['name', 'description', 'promptTemplate', 'parameters', 'referenceImageUrl', 'tags'];
+    if (patch.parameters?.dialogDefault === true) memoryStore.forEach(other => { if (other.id !== id) other.parameters = { ...other.parameters, dialogDefault: false }; });
+    for (const key of allowed) if (patch[key] !== undefined) item[key] = patch[key];
+    item.updatedAt = new Date().toISOString();
     await enqueuePersist();
     return item;
   },

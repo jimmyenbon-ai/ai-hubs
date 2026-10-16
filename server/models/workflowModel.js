@@ -2,7 +2,7 @@ const fs = require('fs/promises');
 const path = require('path');
 const { v4: uuidv4 } = require('uuid');
 
-const CACHE_DIR = path.join(__dirname, '..', 'cache');
+const CACHE_DIR = process.env.WORKFLOW_CACHE_DIR || path.join(__dirname, '..', 'cache');
 const WORKFLOW_CACHE_FILE = path.join(CACHE_DIR, 'workflows.json');
 const WORKFLOW_RUNS_CACHE_FILE = path.join(CACHE_DIR, 'workflow_runs.json');
 const LLM_CONFIG_CACHE_FILE = path.join(CACHE_DIR, 'llm_configs.json');
@@ -272,6 +272,10 @@ const LLMConfig = {
 
 // ============ Knowledge Base ============
 const KnowledgeBase = {
+  async findForRetrieval() {
+    await ensureLoaded();
+    return [...memoryStore.knowledge];
+  },
   async findAll({ where, limit } = {}) {
     await ensureLoaded();
     let list = [...memoryStore.knowledge];
@@ -350,6 +354,7 @@ const KnowledgeBase = {
       type: attrs.type || 'text',
       metadata: attrs.metadata || {},
       created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
     };
     memoryStore.knowledge.push(record);
     await enqueuePersist();
@@ -366,6 +371,7 @@ const KnowledgeBase = {
         memoryStore.knowledge[index][key] = attrs[key];
       }
     }
+    memoryStore.knowledge[index].updated_at = new Date().toISOString();
     await enqueuePersist();
     return memoryStore.knowledge[index];
   },

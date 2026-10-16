@@ -1,0 +1,53 @@
+.aidp-root { min-width: 0; }
+.aidp-chat { min-width: 0; }
+.aidp-header { min-height: 48px; height: auto; }
+.aidp-history-open { display: flex; flex-direction: column; width: 100%; padding: 0 16px 0 0; text-align: left; background: none; border: 0; color: inherit; cursor: pointer; min-width: 0; }
+.aidp-history-open .aidp-history-title { width: 100%; }
+.aidp-history-open .aidp-history-time { position: static; }
+.aidp-composer { flex-shrink: 0; border-top: 1px solid var(--border-color); padding: 12px 20px 16px; }
+.aidp-composer .aidp-input-area { padding: 0; border: 0; }
+.aidp-root .aidp-textarea { min-width: 0; width: 0; flex: 1 1 0; }
+.aidp-root .aidp-msg-bubble--assistant { width: 100%; max-width: 900px; min-width: 0; }
+.aidp-root .aidp-msg-images { grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); }
+.aidp-root .aidp-img { object-fit: contain; }
+.aidp-task-options { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 10px; }
+.aidp-task-options label { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-secondary); min-width: 0; }
+.aidp-task-options select { width: 190px; max-width: 100%; min-width: 0; padding: 6px 8px; border: 1px solid var(--border-color); border-radius: 6px; background: var(--bg-secondary); color: var(--text-primary); font: inherit; }
+.aidp-task { border-left: 2px solid var(--primary-color); padding: 8px 16px; margin: 12px 0 20px; max-width: 900px; }
+.aidp-task-heading { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 13px; }
+.aidp-task-heading > span { margin-left: auto; color: var(--text-secondary); font-size: 11px; }
+.aidp-run-steps { margin: 12px 0; padding-left: 20px; font-size: 12px; color: var(--text-secondary); line-height: 1.9; overflow-wrap: anywhere; }
+.aidp-run-steps .has-error { color: #dc5c64; }
+.aidp-result-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+.aidp-result-tags > span { display: inline-flex; align-items: center; gap: 4px; padding: 3px 7px; background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 4px; font-size: 11px; overflow-wrap: anywhere; }
+.aidp-task-warning { font-size: 12px; line-height: 1.6; color: #b88239; margin: 8px 0; overflow-wrap: anywhere; }
+.aidp-evidence details { margin-top: 12px; border-top: 1px solid var(--border-color); padding-top: 10px; }
+.aidp-evidence summary { cursor: pointer; color: var(--text-secondary); font-size: 12px; }
+.aidp-evidence summary svg { vertical-align: -3px; margin-right: 5px; }
+.aidp-sources { display: grid; gap: 10px; margin-top: 12px; }
+.aidp-source { display: flex; gap: 10px; min-width: 0; padding-bottom: 10px; border-bottom: 1px solid var(--border-color); }
+.aidp-source > img { width: 56px; height: 56px; object-fit: contain; background: #f1f3f5; border-radius: 4px; flex-shrink: 0; }
+.aidp-source > div { min-width: 0; }
+.aidp-source strong { font-size: 12px; overflow-wrap: anywhere; }
+.aidp-source small { display: block; color: var(--text-secondary); font-size: 11px; margin-top: 3px; }
+.aidp-source p { white-space: pre-wrap; font-size: 12px; color: var(--text-secondary); max-height: 180px; overflow: auto; line-height: 1.65; margin: 6px 0 0; overflow-wrap: anywhere; }
+.aidp-msg-text, .aidp-live-text-content { overflow-wrap: anywhere; white-space: pre-wrap; }
+.aidp-msg-images:empty { display: none; }
+.aidp-msg-images .aidp-img-wrap { display: block; min-width: 0; }
+.aidp-send-btn.aidp-stop { background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border-color); }
+.aidp-history-backdrop { display: none; }
+@media (max-width: 760px) {
+  .aidp-body { position: relative; }
+  .aidp-root .aidp-sidebar.open { position: absolute; top: 0; bottom: 0; z-index: 5; width: min(260px, 85%); background: var(--bg-primary); box-shadow: 5px 0 20px #0003; }
+  .aidp-root .aidp-sidebar-inner { width: 100%; }
+  .aidp-history-backdrop { display: block; position: absolute; inset: 0; z-index: 4; background: #0004; border: 0; }
+  .aidp-root { position: relative; }
+  .aidp-composer { padding: 10px 12px 12px; }
+  .aidp-task-options { gap: 8px; }
+  .aidp-task-options label { flex: 1 1 130px; flex-direction: column; align-items: stretch; gap: 4px; }
+  .aidp-task-options select { width: 100%; }
+  .aidp-conv-name { display: none; }
+  .aidp-messages { padding: 14px 12px; }
+  .aidp-header { padding: 8px; gap: 4px; }
+  .aidp-task { padding: 8px 10px; }
+}

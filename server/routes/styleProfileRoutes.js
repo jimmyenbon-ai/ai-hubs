@@ -3,6 +3,14 @@ const router = express.Router();
 const { StyleProfile } = require('../models/styleProfileModel');
 const { Generation } = require('../models');
 const { extractStyleIntent, matchStyleProfile, buildStyleAwarePrompt } = require('../services/styleMatcher');
+const { ALL_IMAGE_MODELS } = require('../config/imageModels');
+
+function validateParameters(parameters) {
+  if (!parameters || typeof parameters !== 'object' || Array.isArray(parameters)) throw Object.assign(new Error('风格参数无效'), { status: 400 });
+  if (parameters.model && !ALL_IMAGE_MODELS.some(model => model.value === parameters.model)) throw Object.assign(new Error('默认生图模型无效'), { status: 400 });
+  if ('dialogDefault' in parameters && typeof parameters.dialogDefault !== 'boolean') throw Object.assign(new Error('默认风格标记无效'), { status: 400 });
+  return { ...parameters, brandRules: String(parameters.brandRules || '').slice(0, 4000), negativePrompt: String(parameters.negativePrompt || '').slice(0, 2000) };
+}
 
 // 获取所有风格画像
 router.get('/', async (req, res) => {
@@ -57,25 +65,26 @@ router.post('/', async (req, res) => {
       description: description || '',
       sourceHistoryId: sourceId,
       promptTemplate: prompt,
-      parameters: params,
+      parameters: validateParameters(params),
       referenceImageUrl: refUrl,
       tags: tags || [],
     });
 
     res.json({ success: true, data: profile });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    res.status(err.status || 500).json({ success: false, message: err.message });
   }
 });
 
 // 更新风格画像
 router.put('/:id', async (req, res) => {
   try {
+    if (req.body.parameters !== undefined) req.body.parameters = validateParameters(req.body.parameters);
     const profile = await StyleProfile.update(req.params.id, req.body);
     if (!profile) return res.status(404).json({ success: false, message: 'Style profile not found' });
     res.json({ success: true, data: profile });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    res.status(err.status || 500).json({ success: false, message: err.message });
   }
 });
 

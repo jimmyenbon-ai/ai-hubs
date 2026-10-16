@@ -11,15 +11,25 @@ export default function StyleProfileManager({ onBack, onSelectProfile }) {
   const [editDesc, setEditDesc] = useState('');
   const [editTags, setEditTags] = useState('');
   const [editPrompt, setEditPrompt] = useState('');
+  const [editRules, setEditRules] = useState('');
+  const [editNegative, setEditNegative] = useState('');
+  const [editModel, setEditModel] = useState('gpt-image-2.5');
+  const [editDefault, setEditDefault] = useState(false);
+  const [models, setModels] = useState([]);
+  const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
 
-  useEffect(() => { fetchProfiles(); }, []);
+  useEffect(() => {
+    fetchProfiles();
+    fetch('/api/ai-dialog/options').then(response => response.json()).then(result => { if (result.success) setModels(result.data.models); }).catch(() => {});
+  }, []);
 
   async function fetchProfiles() {
     try {
       const resp = await fetch('/api/style-profiles');
       const data = await resp.json();
       if (data.success) setProfiles(data.data);
-    } catch (_) {} finally { setLoading(false); }
+    } catch (failure) { setError(failure.message); } finally { setLoading(false); }
   }
 
   async function handleDelete(id) {
@@ -30,15 +40,19 @@ export default function StyleProfileManager({ onBack, onSelectProfile }) {
   }
 
   async function handleSaveEdit() {
-    if (!selectedProfile) return;
-    const resp = await fetch(`/api/style-profiles/${selectedProfile.id}`, {
-      method: 'PUT',
+    if (!selectedProfile || saving) return;
+    if (!editName.trim()) { setError('请输入风格名称'); return; }
+    setSaving(true); setError('');
+    try {
+    const resp = await fetch(selectedProfile.id ? `/api/style-profiles/${selectedProfile.id}` : '/api/style-profiles', {
+      method: selectedProfile.id ? 'PUT' : 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         name: editName,
         description: editDesc,
         tags: editTags.split(',').map(t => t.trim()).filter(Boolean),
         promptTemplate: editPrompt,
+        parameters: { ...selectedProfile.parameters, model: editModel, brandRules: editRules, negativePrompt: editNegative, dialogDefault: editDefault },
       }),
     });
     const data = await resp.json();
@@ -46,7 +60,11 @@ export default function StyleProfileManager({ onBack, onSelectProfile }) {
       setProfiles(prev => prev.map(p => p.id === selectedProfile.id ? data.data : p));
       setSelectedProfile(data.data);
       setEditMode(false);
+      await fetchProfiles();
     }
+    else throw new Error(data.message || '保存失败');
+    } catch (failure) { setError(failure.message); }
+    finally { setSaving(false); }
   }
 
   function openEdit(profile) {
@@ -55,6 +73,11 @@ export default function StyleProfileManager({ onBack, onSelectProfile }) {
     setEditDesc(profile.description || '');
     setEditTags((profile.tags || []).join(', '));
     setEditPrompt(profile.promptTemplate || '');
+    setEditRules(profile.parameters?.brandRules || '');
+    setEditNegative(profile.parameters?.negativePrompt || '');
+    setEditModel(profile.parameters?.model || 'gpt-image-2.5');
+    setEditDefault(profile.parameters?.dialogDefault === true);
+    setError('');
     setEditMode(true);
   }
 
@@ -69,7 +92,7 @@ export default function StyleProfileManager({ onBack, onSelectProfile }) {
       <div className="surface-page surface-style-manager surface-editor" style={{ height: '100%', display: 'flex', flexDirection: 'column', padding: 20, overflowY: 'auto' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
           <button className="btn-outline" onClick={() => setEditMode(false)}>← 返回</button>
-          <span style={{ fontWeight: 600, fontSize: 16 }}>编辑风格画像</span>
+          <span style={{ fontWeight: 600, fontSize: 16 }}>{selectedProfile.id ? '编辑风格画像' : '新建品牌风格'}</span>
         </div>
         <div className="section-label">名称</div>
         <input className="input-field" value={editName} onChange={e => setEditName(e.target.value)} />
@@ -79,8 +102,16 @@ export default function StyleProfileManager({ onBack, onSelectProfile }) {
         <input className="input-field" value={editTags} onChange={e => setEditTags(e.target.value)} placeholder="海报, 电商, 春季" />
         <div className="section-label" style={{ marginTop: 12 }}>Prompt 模板</div>
         <textarea className="input-field" style={{ minHeight: 120 }} value={editPrompt} onChange={e => setEditPrompt(e.target.value)} />
+        <label className="section-label" htmlFor="style-brand-rules" style={{ marginTop: 12 }}>品牌硬约束</label>
+        <textarea id="style-brand-rules" className="input-field" style={{ minHeight: 100 }} value={editRules} onChange={e => setEditRules(e.target.value)} maxLength={4000} />
+        <label className="section-label" htmlFor="style-negative" style={{ marginTop: 12 }}>禁止事项</label>
+        <textarea id="style-negative" className="input-field" style={{ minHeight: 60 }} value={editNegative} onChange={e => setEditNegative(e.target.value)} maxLength={2000} />
+        <label className="section-label" htmlFor="style-image-model" style={{ marginTop: 12 }}>默认生图模型</label>
+        <select id="style-image-model" className="input-field" value={editModel} onChange={event => setEditModel(event.target.value)}>{models.map(model => <option key={model.value} value={model.value}>{model.label}</option>)}</select>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 16, fontSize: 13 }}><input type="checkbox" checked={editDefault} onChange={event => setEditDefault(event.target.checked)} />智能对话默认品牌风格</label>
+        {error && <p role="alert" style={{ color: '#dc5c64', fontSize: 13 }}>{error}</p>}
         <div style={{ marginTop: 16 }}>
-          <button className="generate-btn" onClick={handleSaveEdit}>保存</button>
+          <button className="generate-btn" disabled={saving} onClick={handleSaveEdit}>{saving ? '保存中…' : '保存'}</button>
         </div>
       </div>
     );
@@ -94,7 +125,7 @@ export default function StyleProfileManager({ onBack, onSelectProfile }) {
           <span style={{ fontWeight: 600, fontSize: 16 }}>风格画像管理</span>
           <span style={{ color: 'var(--text-secondary)', fontSize: 13 }}>({filtered.length})</span>
         </div>
-        <input className="input-field" style={{ width: 200 }} placeholder="搜索风格..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} />
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}><input className="input-field" style={{ width: 180 }} placeholder="搜索风格..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} /><button className="btn-outline" onClick={() => openEdit({ name: '', parameters: {} })}><Icon.Plus size={14} />新建风格</button></div>
       </div>
 
       <div className="surface-content" style={{ flex: 1, padding: 20, overflowY: 'auto' }}>
@@ -108,11 +139,11 @@ export default function StyleProfileManager({ onBack, onSelectProfile }) {
           <div className="surface-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
             {filtered.map(profile => (
               <div className="surface-card" key={profile.id} style={{
-                background: 'var(--bg-secondary)', borderRadius: 12, padding: 16,
+                background: 'var(--bg-secondary)', borderRadius: 8, padding: 16,
                 border: '1px solid var(--border-color)',
               }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
-                  <div style={{ fontWeight: 600, fontSize: 15 }}>{profile.name}</div>
+                  <div style={{ fontWeight: 600, fontSize: 15 }}>{profile.name}{profile.parameters?.dialogDefault && <small style={{ marginLeft: 8, color: 'var(--primary-color)' }}>默认</small>}</div>
                   <div style={{ display: 'flex', gap: 4 }}>
                     <button className="btn-outline" style={{ padding: '2px 8px', fontSize: 11 }} onClick={() => openEdit(profile)}><Icon.Edit size={12} /></button>
                     <button className="btn-outline" style={{ padding: '2px 8px', fontSize: 11, color: '#ef4444' }} onClick={() => handleDelete(profile.id)}><Icon.Trash size={12} /></button>

@@ -34,7 +34,7 @@ function WorkspaceLoading({ label }) {
 }
 
 function App() {
-  const [currentGroup, setCurrentGroup] = useState(() => window.location.pathname.startsWith('/literature') ? 'literature' : 'image')
+  const [currentGroup, setCurrentGroup] = useState(() => window.location.pathname.startsWith('/literature') ? 'literature' : window.location.pathname.startsWith('/ai-dialog') ? 'ai-dialog' : 'image')
   const [currentMode, setCurrentMode] = useState('free')
   const [currentRole, setCurrentRole] = useState(() => localStorage.getItem('aihub_current_role') || 'role-general')
   const [templates, setTemplates] = useState([])
@@ -52,7 +52,7 @@ function App() {
   const [showWorkflow, setShowWorkflow] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
   const [showStyleManager, setShowStyleManager] = useState(false)
-  const [showAIDialog, setShowAIDialog] = useState(false)
+  const [showAIDialog, setShowAIDialog] = useState(() => window.location.pathname.startsWith('/ai-dialog'))
   const [showStoryboard, setShowStoryboard] = useState(false)
   const [showProductAutomation, setShowProductAutomation] = useState(false)
   const [showPreviz, setShowPreviz] = useState(false)
@@ -133,7 +133,7 @@ function App() {
   }, [initUserId, theme])
 
   function closeWorkspaceViews() {
-    if (window.location.pathname.startsWith('/literature')) window.history.pushState({}, '', '/')
+    if (/^\/(literature|ai-dialog)(\/|$)/.test(window.location.pathname)) window.history.pushState({}, '', '/')
     setShowEnterprise(false)
     setShowPreviz(false)
     setShowProductAutomation(false)
@@ -158,9 +158,10 @@ function App() {
 
   useEffect(() => {
     const handleRoute = () => {
-      setCurrentGroup(window.location.pathname.startsWith('/literature') ? 'literature' : 'image')
+      const dialog = window.location.pathname.startsWith('/ai-dialog')
+      setCurrentGroup(window.location.pathname.startsWith('/literature') ? 'literature' : dialog ? 'ai-dialog' : 'image')
       setShowEnterprise(false); setShowPreviz(false); setShowProductAutomation(false)
-      setShowStoryboard(false); setShowWorkflow(false); setShowAIDialog(false)
+      setShowStoryboard(false); setShowWorkflow(false); setShowAIDialog(dialog)
       setShowPromptLibrary(false); setShowSettings(false); setShowStyleManager(false)
     }
     window.addEventListener('popstate', handleRoute)
@@ -214,6 +215,7 @@ function App() {
       return
     }
     if (tool === 'ai-dialog') {
+      window.history.pushState({}, '', '/ai-dialog')
       setCurrentGroup('ai-dialog')
       setShowAIDialog(true)
       return
@@ -392,6 +394,7 @@ function App() {
           }}
           onOpenAIDialog={() => {
             closeWorkspaceViews()
+            window.history.pushState({}, '', '/ai-dialog')
             setShowEnterprise(false)
             setCurrentGroup('ai-dialog')
             setShowAIDialog(true)
